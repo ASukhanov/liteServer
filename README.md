@@ -9,21 +9,15 @@ User responsibility is to provide private methods for connecting process variabl
 
 ## Motivation
 Provide control for devices connected to non-linux machines. 
-The simplicity of the protocol makes it possible to implemented it in FPGA on a cpu-less device.
+The simplicity of the protocol makes it possible to implemente it in FPGA on a cpu-less device.
 
 The server is running on the remote machine. Device parameters can be 
-manipulated using liteAccess.py. A bridge monitor
-liteAdoMon.py running on linux will provide ADO-access to the device.
+manipulated using liteAccess.py.
 
 The liteAccess.py is the base class for accessing the server parameters.
-It has similar functionality as adoIf, adoIfA and adoMetaData combined.
 
 ## Status
-Heavily developed right now.
-
-The servers are running on 
-- acnlinec
-- 130.199.85.188 # Windows machine at He3 Polarimeter setup
+Released
 
 ### Examples
 - liteScalerMan.py # server for 10 scalers with individual increments
