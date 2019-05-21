@@ -1,0 +1,13 @@
+# pvview configuration file
+"basic:item",basic:item
+"dev1:increments",dev1:increments
+"dev1:frequency",dev1:frequency
+"dev1:reset",dev1:reset
+"dev1:counters",dev1:counters
+"dev1:reset",dev1:reset
+"dev2:increments",dev2:increments
+"dev2:frequency",dev2:frequency
+"dev2:reset",dev2:reset
+"dev2:counters",dev2:counters
+"dev2:reset",dev2:reset
+
