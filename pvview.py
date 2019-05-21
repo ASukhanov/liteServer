@@ -28,6 +28,7 @@ class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
         QtGui.QWidget.__init__(self)
         self.table = QtGui.QTableWidget(rows, columns, self)
+        '''
         for column in range(columns):
             for row in range(rows):
                 item = QtGui.QTableWidgetItem('Text%d' % row)
@@ -36,6 +37,22 @@ class Window(QtGui.QWidget):
                                   QtCore.Qt.ItemIsEnabled)
                     item.setCheckState(QtCore.Qt.Unchecked)
                 self.table.setItem(row, column, item)
+        '''
+        for column in range(columns):
+            for row in range(rows):
+                obj = pvTable.pos2obj[(row,column)]
+                try:
+                    item = QtGui.QTableWidgetItem(obj.title())
+                except Exception as e:
+                    printw('could not define Table[%i,%i]'%(row,column))
+                    print(str(e))
+                    continue
+                #if isinstance(obj,str):
+                #    item = QtGui.QTableWidgetItem(obj)
+                #else:
+                #    item = QtGui.QTableWidgetItem(obj)
+                self.table.setItem(row, column, item)
+                
         self.table.itemClicked.connect(self.handleItemClicked)
         layout = QtGui.QVBoxLayout(self)
         layout.addWidget(self.table)
@@ -58,18 +75,30 @@ class Window(QtGui.QWidget):
             
     def update(self,a):
         print('mainWidget update',a)
-        tableItem = self.table.item(0,2)
-        tableItem.setText(str(a[0]))
+        tableItem = self.table.item(2,1)
+        try:
+            tableItem.setText(str(a[0]))
+        except Exception as e:
+            printw('in tableItem.setText:'+str(e))
         
 #`````````````````````````````````````````````````````````````````````````````
 def MySlot(a):
     """Global redirector of the SignalSourceDataReady"""
     #print('MySlot received event:'+str(a))
-    if mainWidget:
-        mainWidget.update(a)
-    else:
+    if mainWidget is None:
         printe('mainWidget not defined yet')
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+        return
+    rows,cols = pvTable.shape
+    for row in range(rows):
+        for col in range(cols):
+            pv = pvTable.pos2obj[(row,col)]
+            if isinstance(pv,str):
+                continue
+            try:
+                window.table.item(row,col).setText(str(pv.v)[1:-1])
+            except Exception as e:
+                printw('updating [%i,%i]:'%(row,col)+str(e))
+ #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
 class PVMonitor(QtCore.QThread): 
     # inheritance from QtCore.QThread is needed for qt signals
@@ -87,10 +116,10 @@ class PVMonitor(QtCore.QThread):
         print('>thread_proc')
         while not EventExit.isSet():
             EventExit.wait(1)
-            self.eventNumber += 1
-            a = self.eventNumber,self.eventNumber**2
+            #self.eventNumber += 1
+            #a = self.eventNumber,self.eventNumber**2
             #print('proc',EventExit.isSet(),self.eventNumber,a)
-            self.callback(a)
+            self.callback(None)
         print('<thread_proc')
 
     def callback(self,*args):
@@ -99,14 +128,19 @@ class PVMonitor(QtCore.QThread):
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class PV():
     """Process Variable object, provides getter and setter"""
-    def __init__(self,name):
+    def __init__(self,name,access):
         self._v = None
         self.name = name
+        self.access = access
+        
+    def title(self): return self.name
         
     @property
     def v(self):
-        print("getter of v called")
-        return self._v
+        # return just values, ignore key and timestamp
+        #print('getter of %s called'%self.name)
+        r = self.access.get(self.name)
+        return list(r.values())[0][1:]
         
     @v.setter
     def v(self, value):
@@ -120,7 +154,7 @@ class PV():
     
 class PVTable():
     """PV table maps: parameter to (row,col) and (row,col) to object"""
-    def __init__(self,fileName):
+    def __init__(self,fileName,access):
         self.par2pos = OD()
         self.pos2obj = OD()
         maxcol = 0
@@ -136,14 +170,32 @@ class PVTable():
                     if txt[0] in ('"',"'"):
                         obj = txt[1:-1]
                     else:
-                        obj = PV(txt)
-                        self.par2pos[obj] = row,col
+                        obj = PV(txt[:-1],access)
+                        self.par2pos[obj.name] = row,col
                     self.pos2obj[(row,col)] = obj                
                 row += 1
-        self.shape = row,maxcol
+        self.shape = row-1,maxcol
         #print('par2pos',self.par2pos)
         #print('pos2obj',self.pos2obj)
         print('table:',self.shape)
+        
+    def print_PV_at(self,row,col):
+        try:
+            pv = self.pos2obj[row,col]
+            v = pv.v
+            print('pv',pv.name,len(v))
+            txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
+            print('Table[%i,%i]:'%(row,col)+pv.name+' = '+txt)
+        except Exception as e:
+            printw('in print_PV:'+str(e))
+            
+    def print_loc_of_PV(self,pvName):
+        try:
+            row,col = self.par2pos[pvName]
+            print('Parameter '+pvName+' is located at Table[%i,%i]:'%(row,col))
+        except Exception as e:
+            printw('in print_loc:'+str(e))
+             
 #`````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
     global mainWidget
@@ -153,22 +205,30 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(
       description = 'Process Variable viewer')
+    parser.add_argument('-d','--dbg', action='store_true', help='debugging')
     parser.add_argument('-p','--port',type=int,default=9999,
       help='Port number')
     parser.add_argument('-H','--host',default=ip_address(),nargs='?',
       help='Hostname')
+    parser.add_argument('-t','--timeout',type=float,default=0.1,
+      help='timeout of the receiving socket')
     parser.add_argument('pvfile', default='pvview.pvv', nargs='?', 
       help='PV list description file')
     pargs = parser.parse_args()
     print('Monitoring of PVs at '+pargs.host+':%i'%pargs.port)
 
+    import liteAccess
+    liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
+    ,pargs.dbg, pargs.timeout)
+
     # read config file
-    pvTable = PVTable(pargs.pvfile)
-    print(pvTable.pos2obj[10,1].name)
-    print(pvTable.pos2obj[4,1].v)
+    pvTable = PVTable(pargs.pvfile,liteAccess)
+    pvTable.print_PV_at(10,1)
+    pvTable.print_PV_at(4,1)
+    pvTable.print_loc_of_PV('dev1:reset')
     
     app = QtGui.QApplication(sys.argv)
-    window = Window(6, 3)
+    window = Window(*pvTable.shape)
     window.resize(350, 300)
     window.show()
     mainWidget = window
