@@ -9,7 +9,8 @@
 #__version__ = 'v07 2019-01-04'# -t timeout argument
 #__version__ = 'v08 2019-01-06'# more detailed printing on timeout
 #__version__ = 'v09 2019-01-17'# socket size set to UDP max (64k), timeout 0.1,
-__version__ = 'v10 2019-02-04'# bug fixed in main
+#__version__ = 'v10 2019-02-04'# bug fixed in main
+__version__ = 'v11 2019-05-21'# abridged printing
 
 import sys, time, socket, traceback
 Python3 = sys.version_info.major == 3
@@ -129,7 +130,7 @@ if __name__ == "__main__":
         for item,val in d.items():
             l = len(val)
             suffix = '} length='+str(l)
-            if l > 20: l = 20
-            print(prefix+'{'+item+':'+str(val[:l])+suffix)
+            txt = str(val) if l <= 20 else str(val[:20])[:-1]+',...]'
+            print(prefix+'{'+item+':'+txt+suffix)
     print('Execution time: %.4f'%(timer()- ts))
 
