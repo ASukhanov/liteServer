@@ -19,10 +19,13 @@ Dependecies: py-ubjson, very simple and efficient data serialization protocol
 Performance: liteServer is fastest possible python access to parameters over ethernet.
 
 Example usage:
-- start server on acnlinec:
-  python3 liteScalerMan.py
+- start liteServer for scalers:
+ssh acnlin23 'liteScaler.py'
 - get variables and metadata from another computer:
-  python3 liteAccess.py # get/set several PVs on the server
+liteAccess.py # get/set several PVs on the server
+- start liteServer to ADO bridge for liteScaler:
+ssh acnlinf4 'liteServerMan.py'
+adoPet liteServer.0
 """
 #__version__ = 'v01 2018-12-14' # Created
 #__version__ = 'v02 2018-12-15' # Simplified greatly using ubjson
@@ -31,7 +34,11 @@ Example usage:
 #__version__ = 'v05 2018-12-17'# more pythonic, using getattr,setattr
 #__version__ = 'v06 2018-12-17'# get/set/info works, TODO: conserve type for set
 #__version__ = 'v07 2018-12-21'# python2 compatibility, Device is method-less.
-__version__ = 'v08 2018-12-26'# python2 not supported, 
+#__version__ = 'v08 2018-12-26'# python2 not supported, 
+#__version__ = 'v09 2018-12-28'# PV.__init__ accepts parent, 
+#Server.__init__ accepts host, port. No arguments in Server.loop().
+#__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
+__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list. 
 
 import sys
 import socket
@@ -69,24 +76,30 @@ class Device():
     """
     def __init__(self,name='?',pars=None):
         self._name = name
-        printd('pars '+str(pars))
+        #print('pars '+str(pars))
         for p,v in pars.items():
-            printd('setting '+p+' to '+str(v))
+            #print('setting '+p+' to '+str(v))
+            #print('values type:',type(v.values))
+            if not isinstance(v.values,list):
+                printe('parameter "'+p+'" should be a list')
+                sys.exit(1)
             setattr(self,p,v)
         
 class PV():
     """Base class for Process Variables. Standard properties:
-    values, count, timestamp, features, decription. 
+    values, count, timestamp, features, decription.
+    values should be iterable! It simplifies internal logic.
     The type and count is determined from default values.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW',desc='',values=[0]):#, name=''):
+    def __init__(self,features='RW',desc='',values=[0],parent=None):#, name=''):
         #self.name = name
         self.values = values
         self.count = len(self.values)
         self.features = features
         self.desc = desc
         self.timestamp = 0.
+        self.parent = parent
 
     def get_prop(self,prop):
         return getattr(self,prop)
@@ -105,6 +118,11 @@ class PV():
 
     def set(self,vals,prop='values'):
         if self.is_writable():
+            # the vals should be iterable, if not, make it so
+            try: # pythonic way for testing if object is iterable
+                test = vals[0]
+            except:
+                vals = [vals]
             setattr(self,prop,vals)
             return {}
         else:
@@ -117,7 +135,7 @@ class PV():
         r = [i for i in vars(self) if not i.startswith('_')]
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-#````````````````````````````Request broker```````````````````````````````````
+#````````````````````````````The Request broker```````````````````````````````
 class PV_UDPHandler(SocketServer.BaseRequestHandler):
 
     def _reply(self,items):
@@ -135,6 +153,7 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
                 else:
                     v = pv.get_prop(pp[1])
                     r[devParName] = v
+                printd('get_value():'+str(r))
         elif action == 'set':
             dev,par = tostr(items[1]).split(':')
             pv = getattr(DevDict[dev],par)
@@ -172,12 +191,12 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
             r = 'ERR. Exception: '+repr(e)
         reply = ubjson.dumpb(r)
         host,port = self.client_address# the port here is temporary
-        printd('sending back: "'+str(reply)+'" to '+str((host,PORT)))
-        socket.sendto(reply, (host,PORT))
+        printd('sending back %d '%len(reply)+'bytes:\n"'+str(r)+'" to '+str((host,port)))
+        socket.sendto(reply, (host,port))
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class Server():
-    def __init__(self,devices,dbg=False):
+    def __init__(self,devices,host=None,port=PORT,dbg=False):
         global DevDict, Dbg
         Dbg = dbg
         # create global dictionary of all devices
@@ -186,11 +205,14 @@ class Server():
             print('DevDict',DevDict)
             for d,i in DevDict.items():
                 print('device '+str(d)+':'+str(i.info()))
+        self.host = host if host else ip_address()
+        self.port = port
+        self.server = SocketServer.UDPServer((self.host, self.port),
+          PV_UDPHandler)
     
     def loop(self):
-        host = ip_address()
-        server = SocketServer.UDPServer((host, PORT), PV_UDPHandler)
-        print(__version__+'. Waiting for messages at '+host+':'+str(PORT))
-        server.serve_forever()
+        print(__version__\
+          +'. Waiting for messages at '+self.host+':'+str(self.port))
+        self.server.serve_forever()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # see liteScalerMan.py liteAccess.py
