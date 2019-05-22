@@ -67,8 +67,9 @@ class LiteAccess():
             try:
                 r = self._recvfrom()
             except:
-                msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
-                  +traceback.format_exc()
+                #msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
+                #  +traceback.format_exc()
+                msg = 'ERROR: no response for '+str(cmd)+'in %f'%sleepTime+' s.'
                 print(msg)
                 return msg 
             print('WARNING: timeout %f'%self.timeout+' too small')

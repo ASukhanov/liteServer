@@ -7,7 +7,8 @@
 #__version__ = 'v05 2019-01-02'# feature 'R' for monitored parameters
 #__version__ = 'v06 2019-01-02'# action parameter is OK
 #__version__ = 'v07 2019-01-08'# super() corrected for python2
-__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
+#__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
+__version__ = 'v08 2019-05-21'# version, instead of basic
 
 import sys, threading
 Python3 = sys.version_info.major == 3
@@ -75,7 +76,9 @@ parser.add_argument('-n','--nCounters', type=int, default=1100,
 pargs = parser.parse_args()
 
 devices = (
-  Device('basic',{'item': PV('RW','Basic parameter',[0.])}),
+  Device('server',{'version': PV('RW'\
+  ,'__Two %i'%pargs.nCounters+'-channel scalers with individual increments '\
+  ,[__version__])}),
   Scaler('dev1'),
   Scaler('dev2'),
 )
