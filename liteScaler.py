@@ -8,7 +8,7 @@
 #__version__ = 'v06 2019-01-02'# action parameter is OK
 #__version__ = 'v07 2019-01-08'# super() corrected for python2
 #__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
-__version__ = 'v08 2019-05-21'# version, instead of basic
+__version__ = 'v09 2019-05-21'# version parameter, includes description
 
 import sys, threading
 Python3 = sys.version_info.major == 3
@@ -33,7 +33,7 @@ class Scaler(Device):
           'counters':   PV('RW','Scalers',initials),
           'increments': PV('W','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
           'frequency':  PV('W','Update frequency of all scalers',[1.]), 
-          'reset':      PV('WB','Action parameter',[0]),
+          'reset':      PV('WB','Action parameter',[False]),
           #TODO:'pause':      PV('WD','Discrete parameter',['On','Off']),
         }
         #print('n,p',name,pars)

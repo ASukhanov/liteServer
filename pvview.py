@@ -3,12 +3,14 @@
 
 #__version__ = 'v00 2019-05-06' # it is just sceleton, pvview.pvv is not processed
 #__version__ = 'v01 2019-05-06' # using pg.TableWidget()
-#__version__ = 'v02 2019-05-06' # using QTableWidget, with checkboxes
-__version__ = 'v03 2019-05-06' # PVTable,
+#__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
+#__version__ = 'v03 2019-05-21' # PVTable,
+__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
 
 import threading, socket
-import pyqtgraph as pg
+#import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
+#from PyQt5 import QtCore, QtGui
 import numpy as np
 from collections import OrderedDict as OD
 
@@ -31,15 +33,27 @@ class Window(QtGui.QWidget):
         for row in range(rows):
             for column in range(columns):
                 #print('row,col',(row,column))
-                try: obj = pvTable.pos2obj[(row,column)]
-                except: continue
+                try: pv = pvTable.pos2obj[(row,column)]
+                except Exception as e:
+                    #print('Exception',str(e))
+                    continue
                 try:
-                    item = QtGui.QTableWidgetItem(obj.title())
+                    item = QtGui.QTableWidgetItem(pv.title())
                 except Exception as e:
                     printw('could not define Table[%i,%i]'%(row,column))
                     print(str(e))
                     continue
                 #print('ok')
+                try:
+                    if pv.is_bool():
+                        print('bool',pv.title())
+                        item.setFlags(QtCore.Qt.ItemIsUserCheckable |
+                                      QtCore.Qt.ItemIsEnabled)
+                        state = QtCore.Qt.Checked if pv.v else QtCore.Qt.Unchecked
+                        item.setCheckState(state)
+                except Exception as e:
+                    #printw('in is_bool '+pv.title()+':'+str(e))
+                    pass
                 self.table.setItem(row, column, item)
 
         self.table.itemClicked.connect(self.handleItemClicked)
@@ -54,19 +68,27 @@ class Window(QtGui.QWidget):
         EventExit.set()
 
     def handleItemClicked(self, item):
-        if item.checkState() == QtCore.Qt.Checked:
-            print('"%s" Checked' % item.text())
-            self._list.append(item.row())
-            print(self._list)
-        else:
-            d = QtGui.QDialog(self)
-            d.setWindowTitle("Info")
-            pname = pvTable.pos2obj[item.row(),item.column()].title()
-            ql = QtGui.QLabel(pname,d)
-            qte = QtGui.QTextEdit(item.text(),d)
-            qte.move(0,20)
-            #d.setWindowModality(Qt.ApplicationModal)
-            d.show()
+        pv = pvTable.pos2obj[item.row(),item.column()]
+        if isinstance(pv,str):
+            return
+        try:
+            if pv.is_bool():
+                print('bool clicked',item.row(),item.column())
+                #item.checkState() == QtCore.Qt.Checked:
+                #print('"%s" Checked' % item.text())
+                #self._list.append(item.row())
+                #print(self._list)
+            else:
+                d = QtGui.QDialog(self)
+                d.setWindowTitle("Info")
+                pname = pv.title()
+                ql = QtGui.QLabel(pname,d)
+                qte = QtGui.QTextEdit(item.text(),d)
+                qte.move(0,20)
+                #d.setWindowModality(Qt.ApplicationModal)
+                d.show()
+        except Exception as e:
+            printe('in handleItemClicked',e)
 
     def update(self,a):
         print('mainWidget update',a)
@@ -90,9 +112,20 @@ def MySlot(a):
             print('txt')
             continue
         try:
-            #print('pv',pv.name)
-            #txt = pv.v if isinstance(pv.v,str) else str(pv.v)[1:-1]
-            window.table.item(*rowCol).setText(str(pv.v)[1:-1]) #remove brackets
+            #print('pv',str(rowCol),pv.name)
+            #print(len(pv.v),type(pv.v))
+            if isinstance(pv.v,list):
+                if pv.is_bool():
+                    #print('item at '+str(rowCol)+' is bool')
+                    continue
+                txt = str(pv.v[1:])[1:-1] #avoid timestamp and brackets
+            elif isinstance(pv.v,str):
+                #print('item at '+str(rowCol)+' is text')
+                #txt = pv.v
+                continue
+            else:
+                txt = 'Unknown type of '+pv.name+'='+str(type(pv.v))
+            window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
  #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -126,18 +159,27 @@ class PVMonitor(QtCore.QThread):
 class PV():
     """Process Variable object, provides getter and setter"""
     def __init__(self,name,access):
-        self._v = None
         self.name = name
         self.access = access
+        self._v = self.v # use getter to store initial value
 
     def title(self): return self.name
+    
+    def is_bool(self):
+        #print('>is_bool',self.name)
+        if isinstance(self._v,list):
+            if len(self._v) == 2: # the first one is timestamp
+                #print('pv.v',pv.v)
+                if isinstance(self._v[1],bool):
+                    return True
+        return False
 
     @property
     def v(self):
         # return just values, ignore key and timestamp
         #print('getter of %s called'%self.name)
-        r = self.access.get(self.name)
-        return list(r.values())[0][1:]
+        r = self.access.get(self.name)# +'.values')
+        return list(r.values())[0]
 
     @v.setter
     def v(self, value):
@@ -167,13 +209,14 @@ class PVTable():
                 maxcol = max(maxcol,len(cols))
                 for col,txt in enumerate(cols):
                     if len(txt) == 0:
-                        obj = ''
+                        pv = ''
                     elif txt[0] in ('"',"'"):
-                        obj = txt[1:-1]
+                        pv = txt[1:-1]
                     else:
-                        obj = PV(txt,access)
-                        self.par2pos[obj] = row,col
-                    self.pos2obj[(row,col)] = obj
+                        pv = PV(txt,access)
+                        self.par2pos[pv] = row,col
+                    self.pos2obj[(row,col)] = pv
+                    #print(row,col,type(pv))
                 row += 1
         self.shape = row,maxcol
         print('table:',self.shape)
@@ -232,6 +275,9 @@ if __name__ == '__main__':
     # define GUI
     app = QtGui.QApplication(sys.argv)
     window = Window(*pvTable.shape)
+    title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
+    print(title)
+    window.setWindowTitle(title)
     window.resize(350, 300)
     window.show()
     mainWidget = window

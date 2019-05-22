@@ -1,11 +1,11 @@
 # pvview configuration file
 'Server description:',server:version.desc,'version:',server:version
 
-'Scaler1:frequency:',dev1:frequency,'Reset:',dev1:reset
-'increments:',dev1:increments
+'Scaler1:frequency:',dev1:frequency,dev1:reset
+,dev1:increments,':increments'
 'counters',dev1:counters
 
-'Scaler2:frequency:',dev2:frequency,'Reset:',dev2:reset
-'increments:',dev2:increments
+'Scaler2:frequency:',dev2:frequency,dev2:reset
+,dev2:increments,':increments'
 'counters',dev2:counters
 
