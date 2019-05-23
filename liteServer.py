@@ -38,7 +38,8 @@ adoPet liteServer.0
 #__version__ = 'v09 2018-12-28'# PV.__init__ accepts parent, 
 #Server.__init__ accepts host, port. No arguments in Server.loop().
 #__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
-__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list. 
+#__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
+__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
 
 import sys
 import socket
@@ -92,14 +93,16 @@ class PV():
     The type and count is determined from default values.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW',desc='',values=[0],parent=None):#, name=''):
-        #self.name = name
+    def __init__(self,features='RW', desc='', values=[0], setter=None,
+      parent=None):#, name=''):
+        #self.name = name # name is not needed, it is keyed in the dictionary 
         self.values = values
         self.count = len(self.values)
         self.features = features
         self.desc = desc
         self.timestamp = 0.
         self.parent = parent
+        self.setter = setter
 
     def get_prop(self,prop):
         return getattr(self,prop)
@@ -115,21 +118,41 @@ class PV():
         return self._get_values()
 
     def is_writable(self): return 'W' in self.features
+    def is_readable(self): return 'R' in self.features
 
     def set(self,vals,prop='values'):
-        if self.is_writable():
-            # the vals should be iterable, if not, make it so
-            try: # pythonic way for testing if object is iterable
-                test = vals[0]
-            except:
-                vals = [vals]
-            setattr(self,prop,vals)
-            return {}
-        else:
-            return {'ERR':'Not Writable'}
+        if not self.is_writable():
+            raise PermissionError('PV is not writable')
+        try: # pythonic way for testing if object is iterable
+            test = vals[0]
+        except:
+            vals = [vals]
+
+        # Special treatment of the boolean an action parameters
+        print('set',len(self.values),type(self.values[0]))
+        if len(self.values) == 1 and isinstance(self.values[0],bool):
+            print('Boolean treatment')
+            # the action parameter is the boolean one but not reabable
+            # it always is False
+            if not self.is_readable():
+                print('Action treatment')
+                vals = [False]
+                if self.setter is not None:
+                    # call PV setting method
+                    self.setter(self)
+            else: # make it boolean 
+                vals = [True] if vals[0] else [False] 
+
+        if type(vals[0]) is not type(self.values[0]):
+            printe('Cannot assign '+str(type(vals[0]))+' to '\
+            + str(type(self.values[0])))
+            raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
+            + str(type(self.values[0])))
+
+        self.values = vals
         
     def monitor(self,callback):
-        printe('monitor() not yet implemented for '+name+':'+par)   
+        raise NotImplementedError('PV Monitor() is not implemented yet')
 
     def info(self):
         r = [i for i in vars(self) if not i.startswith('_')]

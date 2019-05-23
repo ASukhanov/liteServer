@@ -31,10 +31,10 @@ class Scaler(Device):
         print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
         pars = {
           'counters':   PV('RW','Scalers',initials),
-          'increments': PV('W','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
-          'frequency':  PV('W','Update frequency of all scalers',[1.]), 
-          'reset':      PV('WB','Action parameter',[False]),
-          #TODO:'pause':      PV('WD','Discrete parameter',['On','Off']),
+          'increments': PV('RW','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
+          'frequency':  PV('RW','Update frequency of all scalers',[1.]),
+          'pause':      PV('RW','Pause counting, boolean',[False]), 
+          'reset':      PV('W','Reset action',[False],setter=self.reset),
         }
         #print('n,p',name,pars)
         if Python3:
@@ -44,6 +44,9 @@ class Scaler(Device):
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = True
         thread.start()
+        
+    def reset(self,*args):
+        print('reset called for'+str(args))
         
     def _state_machine(self):
         self._cycle = 0

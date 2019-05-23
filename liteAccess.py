@@ -71,7 +71,8 @@ class LiteAccess():
                 #  +traceback.format_exc()
                 msg = 'ERROR: no response for '+str(cmd)+'in %f'%sleepTime+' s.'
                 print(msg)
-                return msg 
+                #raise BrokenPipeError(msg)
+                return
             print('WARNING: timeout %f'%self.timeout+' too small')
         isText = isinstance(r,str) if Python3 else isinstance(r,unicode)
         if isText:

@@ -19,6 +19,9 @@ EventExit = threading.Event()
 #````````````````````````````Helper functions`````````````````````````````````
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
+def printd(msg): 
+    if pargs.dbg:
+        print('DBG:'+str(msg))
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -44,12 +47,13 @@ class Window(QtGui.QWidget):
                     print(str(e))
                     continue
                 #print('ok')
+                printd('pvTable [%i,%i] is '%(row,column)+pv.title())
                 try:
                     if pv.is_bool():
-                        print('bool',pv.title())
+                        printd('it is boolean:'+str(pv.v))
                         item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                       QtCore.Qt.ItemIsEnabled)
-                        state = QtCore.Qt.Checked if pv.v else QtCore.Qt.Unchecked
+                        state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
                         item.setCheckState(state)
                 except Exception as e:
                     #printw('in is_bool '+pv.title()+':'+str(e))
@@ -73,11 +77,9 @@ class Window(QtGui.QWidget):
             return
         try:
             if pv.is_bool():
-                print('bool clicked',item.row(),item.column())
-                #item.checkState() == QtCore.Qt.Checked:
-                #print('"%s" Checked' % item.text())
-                #self._list.append(item.row())
-                #print(self._list)
+                checked = item.checkState() == QtCore.Qt.Checked
+                print('bool clicked '+pv.name+':'+str(checked))
+                pv.v = checked # change server's pv
             else:
                 d = QtGui.QDialog(self)
                 d.setWindowTitle("Info")
@@ -88,7 +90,7 @@ class Window(QtGui.QWidget):
                 #d.setWindowModality(Qt.ApplicationModal)
                 d.show()
         except Exception as e:
-            printe('in handleItemClicked',e)
+            printe('exception in handleItemClicked: '+str(e))
 
     def update(self,a):
         print('mainWidget update',a)
@@ -106,21 +108,23 @@ def MySlot(a):
         printe('mainWidget not defined yet')
         return
     for pv,rowCol in pvTable.par2pos.items():
-        #pv = pvTable.pos2obj[(row,col)]
-        #print('rowCol',rowCol)
+        printd('updating PV '+pv.name)
         if isinstance(pv,str):
-            print('txt')
+            printw('logic error')
             continue
         try:
             #print('pv',str(rowCol),pv.name)
             #print(len(pv.v),type(pv.v))
             if isinstance(pv.v,list):
                 if pv.is_bool():
-                    #print('item at '+str(rowCol)+' is bool')
+                    printd('PV '+pv.name+' is bool = '+str(pv.v))
+                    window.table.item(*rowCol).setCheckState(pv.v[0])
                     continue
-                txt = str(pv.v[1:])[1:-1] #avoid timestamp and brackets
+                printd('PV '+pv.name+' is list[%i] of '%len(pv.v)\
+                +str(type(pv.v[0])))
+                txt = str(pv.v)[1:-1] #avoid brackets
             elif isinstance(pv.v,str):
-                #print('item at '+str(rowCol)+' is text')
+                printd('PV '+pv.name+' is text')
                 #txt = pv.v
                 continue
             else:
@@ -162,15 +166,16 @@ class PV():
         self.name = name
         self.access = access
         self._v = self.v # use getter to store initial value
+        self.t = 0.
 
     def title(self): return self.name
     
     def is_bool(self):
         #print('>is_bool',self.name)
         if isinstance(self._v,list):
-            if len(self._v) == 2: # the first one is timestamp
+            if len(self._v) == 1: # the first one is timestamp
                 #print('pv.v',pv.v)
-                if isinstance(self._v[1],bool):
+                if isinstance(self._v[0],bool):
                     return True
         return False
 
@@ -179,12 +184,15 @@ class PV():
         # return just values, ignore key and timestamp
         #print('getter of %s called'%self.name)
         r = self.access.get(self.name)# +'.values')
-        return list(r.values())[0]
+        t = list(r.values())[0][0] # first item is timestamp
+        return list(r.values())[0][1:] # the rest are data
 
     @v.setter
     def v(self, value):
-        print("setter of v called")
-        self._v = value
+        print('setter of %s'%self.name+' called to change PV to '+str(value))
+        r = self.access.set(self.name,value)
+        if r:
+            printw('could not set %s'%self.name+' to '+str(value))
 
     @v.deleter
     def v(self):
@@ -261,7 +269,7 @@ if __name__ == '__main__':
 
     import liteAccess
     liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
-    ,pargs.dbg, pargs.timeout)
+    ,dbg=False, timeout=pargs.timeout)
 
     # read config file
     pvTable = PVTable(pargs.pvfile,liteAccess)
