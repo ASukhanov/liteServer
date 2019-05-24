@@ -5,7 +5,8 @@
 #__version__ = 'v01 2019-05-06' # using pg.TableWidget()
 #__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
 #__version__ = 'v03 2019-05-21' # PVTable,
-__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
+#__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
+__version__ = 'v05 2019-05-24' # spinboxes in table, not communicating yet 
 
 import threading, socket
 #import pyqtgraph as pg
@@ -47,7 +48,8 @@ class Window(QtGui.QWidget):
                     print(str(e))
                     continue
                 #print('ok')
-                printd('pvTable [%i,%i] is '%(row,column)+pv.title())
+                printd('pvTable [%i,%i] is %s %s'%(row,column,pv.title()\
+                ,type(pv)))
                 try:
                     if pv.is_bool():
                         printd('it is boolean:'+str(pv.v))
@@ -55,6 +57,12 @@ class Window(QtGui.QWidget):
                                       QtCore.Qt.ItemIsEnabled)
                         state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
                         item.setCheckState(state)
+                    elif pv.is_spinbox():
+                        printd('it is spinbox:'+str(pv.v))
+                        spinbox = QtGui.QDoubleSpinBox()
+                        spinbox.setValue(float(pv.v[0]))
+                        self.table.setCellWidget(row, column, spinbox)
+                        continue
                 except Exception as e:
                     #printw('in is_bool '+pv.title()+':'+str(e))
                     pass
@@ -120,13 +128,17 @@ def MySlot(a):
                     printd('PV '+pv.name+' is bool = '+str(pv.v))
                     window.table.item(*rowCol).setCheckState(pv.v[0])
                     continue
+                elif pv.is_spinbox():
+                    print('TODO: update spinbox at ',rowCol)
+                    #window.table.item(*rowCol).setValue((pv.v[0]))
+                    continue
                 printd('PV '+pv.name+' is list[%i] of '%len(pv.v)\
                 +str(type(pv.v[0])))
                 txt = str(pv.v)[1:-1] #avoid brackets
             elif isinstance(pv.v,str):
                 printd('PV '+pv.name+' is text')
-                #txt = pv.v
-                continue
+                txt = pv.v
+                #continue
             else:
                 txt = 'Unknown type of '+pv.name+'='+str(type(pv.v))
             window.table.item(*rowCol).setText(txt)
@@ -178,6 +190,14 @@ class PV():
                 if isinstance(self._v[0],bool):
                     return True
         return False
+        
+    def is_spinbox(self):
+        try:        
+            if len(self._v) == 1:
+                if type(self._v[0]) in (float,int):
+                    return True
+        except: pass
+        return False
 
     @property
     def v(self):
@@ -186,8 +206,10 @@ class PV():
         r = self.access.get(self.name)# +'.values')
         if r is None:
             return
-        t = list(r.values())[0][0] # first item is timestamp
-        return list(r.values())[0][1:] # the rest are data
+        ret = list(r.values())[0]
+        if not isinstance(ret,str):
+            self.t,ret = ret[0], ret[1:]# first item is timestamp
+        return ret # the rest are data
 
     @v.setter
     def v(self, value):

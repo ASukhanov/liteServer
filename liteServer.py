@@ -39,7 +39,8 @@ adoPet liteServer.0
 #Server.__init__ accepts host, port. No arguments in Server.loop().
 #__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
 #__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
-__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
+#__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
+__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
 
 import sys
 import socket
@@ -95,7 +96,7 @@ class PV():
     More properties can be added in derived classes"""
     def __init__(self,features='RW', desc='', values=[0], setter=None,
       parent=None):#, name=''):
-        #self.name = name # name is not needed, it is keyed in the dictionary 
+        #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
         self.count = len(self.values)
         self.features = features
@@ -113,8 +114,13 @@ class PV():
     def _get_values(self):
         t = self.timestamp
         if t == 0.: t = time.time()
-        printd('prop:'+str(getattr(self,'values')))
-        return [t] + getattr(self,'values')
+        ret = [t] + getattr(self,'values')
+        #/*Tuple
+        #if 'W' not in self.features:
+        #    #print('_get_values: converting to tuple')
+        #    ret = tuple(ret)#*/
+        printd('_get_values:'+str(ret))
+        return ret
         
     def get_values(self):
         """Overridable getter"""
@@ -176,6 +182,8 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
                 pv = getattr(DevDict[dev],pp[0])
                 if len(pp) == 1:
                     r[devParName] = pv.get_values()
+                    printd('repl %s:'%devParName\
+                    +str((len(r[devParName]),type(r[devParName]))))
                 else:
                     v = pv.get_prop(pp[1])
                     r[devParName] = v

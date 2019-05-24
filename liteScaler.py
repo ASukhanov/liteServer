@@ -20,6 +20,12 @@ Device = liteServer.Device
 EventExit = liteServer.EventExit
 printd = liteServer.printd
 
+#````````````````````````````Helper functions`````````````````````````````````
+def printw(msg): print('WARNING: '+msg)
+def printe(msg): print('ERROR: '+msg)
+def printd(msg): 
+    if pargs.dbg:
+        print('DBG:'+str(msg))
 #````````````````````````````Process Variables````````````````````````````````
 # We create two instances of a Scalers device and one instance of 'passive'
 class Scaler(Device):
@@ -30,7 +36,7 @@ class Scaler(Device):
         initials = list((np.random.rand(pargs.nCounters)*1000).round())
         print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
         pars = {
-          'counters':   PV('RW','Scalers',initials),
+          'counters':   PV('R','Scalers',initials),
           'increments': PV('RW','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all scalers',[1.]),
           'pause':      PV('RW','Pause counting, boolean',[False]), 
@@ -77,7 +83,7 @@ pargs = parser.parse_args()
 
 devices = (
   Device('server',{'version': PV('RW'\
-  ,'__Two %i'%pargs.nCounters+'-channel scalers with individual increments '\
+  ,'Two %i'%pargs.nCounters+'-channel scalers with individual increments'\
   ,[__version__])}),
   Scaler('dev1'),
   Scaler('dev2'),
