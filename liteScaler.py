@@ -36,17 +36,19 @@ class Scaler(Device):
           'pause':      PV('RW','Pause counting, boolean',[False]), 
           'reset':      PV('W','Reset action',[False],setter=self.reset),
         }
-        #print('n,p',name,pars)
         if Python3:
             super().__init__(name,pars)
         else:
             Device.__init__(self,name,pars)
+        print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = True
         thread.start()
         
-    def reset(self,*args):
-        print('reset called for'+str(args))
+    def reset(self,pv):
+        print('resetting scalers of %s'%self._name)
+        for i in range(len(self.counters.values)):
+            self.counters.values[i] = 0
         
     def _state_machine(self):
         self._cycle = 0
@@ -59,11 +61,6 @@ class Scaler(Device):
             for i,increment in enumerate(self.increments.values[:ns]):
                 #print(instance+': c,i='+str((self.counters.values[i],increment)))
                 self.counters.values[i] += increment
-            if self.reset.values[0]:
-                print('Scaler reset: '+self._name)
-                self.reset.values[0] = 0
-                for i in range(len(self.counters.values)):
-                    self.counters.values[i] = 0
             self._cycle += 1
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

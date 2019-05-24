@@ -103,6 +103,9 @@ class PV():
         self.timestamp = 0.
         self.parent = parent
         self.setter = setter
+        
+    def __str__(self):
+        print('PV object desc: %s at %s'%(self.desc,id(self)))
 
     def get_prop(self,prop):
         return getattr(self,prop)

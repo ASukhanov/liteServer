@@ -184,6 +184,8 @@ class PV():
         # return just values, ignore key and timestamp
         #print('getter of %s called'%self.name)
         r = self.access.get(self.name)# +'.values')
+        if r is None:
+            return
         t = list(r.values())[0][0] # first item is timestamp
         return list(r.values())[0][1:] # the rest are data
 
