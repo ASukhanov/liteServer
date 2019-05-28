@@ -3,9 +3,9 @@
 
 'Dev1',dev1:frequency,':Frequency'
 ,dev1:increments,':increments'
-'Counters:',dev1:counters,dev1:reset
+'Counters:',dev1:counters,dev1:reset,'xterm';launch:xterm
 
-'Dev2',dev2:frequency,':Frequency'
+'Dev2',dev2:frequency,':Frequency','xclock';launch:xclock
 ,dev2:increments,':increments'
 'Counters:',dev2:counters,dev2:reset
 

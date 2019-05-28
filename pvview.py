@@ -8,7 +8,7 @@
 #__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
 __version__ = 'v05 2019-05-24' # spinboxes in table, not communicating yet 
 
-import threading, socket
+import threading, socket, subprocess
 #import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 #from PyQt5 import QtCore, QtGui
@@ -29,6 +29,15 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
+    def __init__(self,pv):
+        super().__init__()
+        self.pv = pv
+        self.valueChanged.connect(self.handle_value_changed)
+        
+    def handle_value_changed(self):
+        #print('handle_value_changed')
+        print('changing %s to '%pv.title()+str(self.value()))
 
 class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
@@ -37,10 +46,27 @@ class Window(QtGui.QWidget):
         for row in range(rows):
             for column in range(columns):
                 #print('row,col',(row,column))
-                try: pv = pvTable.pos2obj[(row,column)]
+                try: obj = pvTable.pos2obj[(row,column)]
                 except Exception as e:
-                    #print('Exception',str(e))
+                    print('Exception',str(e))
                     continue
+
+                # check if not a PV object
+                print('obj[%i,%i]'%(row,column),type(obj))
+                if not isinstance(obj,PV):
+                    if isinstance(obj,str):
+                        item = QtGui.QTableWidgetItem(obj.title())
+                        self.table.setItem(row, column, item)
+                    else:
+                    #elif isinstance(obj,QtGui.QPushButton):
+                        print('pb',row, column)
+                        #obj.clicked.connect(self.pb_clicked,(row, column)) 
+                        self.table.setCellWidget(row, column, obj)
+                    continue
+
+                # the object is PV
+                pv = obj
+                pvTable.par2pos[pv] = row,column    
                 try:
                     item = QtGui.QTableWidgetItem(pv.title())
                 except Exception as e:
@@ -58,8 +84,11 @@ class Window(QtGui.QWidget):
                         state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
                         item.setCheckState(state)
                     elif pv.is_spinbox():
-                        printd('it is spinbox:'+str(pv.v))
-                        spinbox = QtGui.QDoubleSpinBox()
+                        print('it is spinbox:'+pv.title())
+                        #spinbox = QtGui.QDoubleSpinBox()
+                        #spinbox.setValue(float(pv.v[0]))
+                        #spinbox.valueChanged.connect(self.value_changed)
+                        spinbox = QDoubleSpinBoxPV(pv)
                         spinbox.setValue(float(pv.v[0]))
                         self.table.setCellWidget(row, column, spinbox)
                         continue
@@ -69,17 +98,27 @@ class Window(QtGui.QWidget):
                 self.table.setItem(row, column, item)
 
         self.table.itemClicked.connect(self.handleItemClicked)
+        self.table.itemPressed.connect(self.handleItemPressed)
         layout = QtGui.QVBoxLayout(self)
         layout.addWidget(self.table)
         self._list = []
         monitor = PVMonitor()
+
+    #def value_changed(self,*args):
+    #    print('value changed',args)
+    #    print('sender',self.sender())
+    #    #print(self.sender().name)
 
     def closeEvent(self,*args):
         # Called when the window is closed
         print('>closeEvent')
         EventExit.set()
 
+    def handleItemPressed(self, item):
+        print('pressed[%i,%i]'%(item.row(),item.column()))
+
     def handleItemClicked(self, item):
+        print('clicked[%i,%i]'%(item.row(),item.column()))
         pv = pvTable.pos2obj[item.row(),item.column()]
         if isinstance(pv,str):
             return
@@ -129,7 +168,7 @@ def MySlot(a):
                     window.table.item(*rowCol).setCheckState(pv.v[0])
                     continue
                 elif pv.is_spinbox():
-                    print('TODO: update spinbox at ',rowCol)
+                    #print('TODO: update spinbox at ',rowCol)
                     #window.table.item(*rowCol).setValue((pv.v[0]))
                     continue
                 printd('PV '+pv.name+' is list[%i] of '%len(pv.v)\
@@ -223,6 +262,19 @@ class PV():
         print("deleter of v called")
         del self._v
 
+class QPushButtonCmd(QtGui.QPushButton):
+    def __init__(self,text,cmd):
+        self.cmd = cmd
+        super().__init__(text)
+        self.clicked.connect(self.handleClicked)
+        
+    def handleClicked(self):
+        #print('clicked',self.cmd)
+        p = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, shell=True)
+
+#def launch(cmd):
+#    print('launching',cmd)
+
 class PVTable():
     """PV table maps: parameter to (row,col) and (row,col) to object"""
     def __init__(self,fileName,access):
@@ -239,16 +291,28 @@ class PVTable():
                 cols = line.split(',')
                 #print('cols',cols)
                 maxcol = max(maxcol,len(cols))
-                for col,txt in enumerate(cols):
-                    if len(txt) == 0:
-                        pv = ''
-                    elif txt[0] in ('"',"'"):
-                        pv = txt[1:-1]
-                    else:
-                        pv = PV(txt,access)
-                        self.par2pos[pv] = row,col
-                    self.pos2obj[(row,col)] = pv
-                    #print(row,col,type(pv))
+                for col,token in enumerate(cols):
+                    if len(token) == 0:
+                        obj = ''
+                    elif token[0] in ('"',"'"):
+                        blank,txt,attributeString = token.split(token[0],2)
+                        print('bta',blank,txt,attributeString)
+                        if len(attributeString) == 0:
+                            obj = txt
+                        else: # the cell is text with attributes
+                            action,cmd = attributeString.split(':',1)
+                            action = action[1:]
+                            print('ac',action,cmd)
+                            if action == 'launch':
+                                print('cmd:%s'%cmd)
+                                #does not work in dynamic
+                                #obj = QtGui.QPushButton(txt)
+                                #obj.clicked.connect(lambda: launch(cmd))
+                                obj = QPushButtonCmd(txt,cmd)
+                    else: # the cell is PV
+                        obj = PV(token,access)
+                    self.pos2obj[(row,col)] = obj
+                    #print(row,col,type(obj))
                 row += 1
         self.shape = row,maxcol
         print('table:',self.shape)
@@ -295,6 +359,8 @@ if __name__ == '__main__':
     liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
     ,dbg=False, timeout=pargs.timeout)
 
+    app = QtGui.QApplication(sys.argv)
+
     # read config file
     pvTable = PVTable(pargs.pvfile,liteAccess)
 	
@@ -305,7 +371,6 @@ if __name__ == '__main__':
     pvTable.print_loc_of_PV(pv)
 
     # define GUI
-    app = QtGui.QApplication(sys.argv)
     window = Window(*pvTable.shape)
     title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
     print(title)
