@@ -35,8 +35,15 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
     def __init__(self,pv):
         super().__init__()
         self.pv = pv
+        opl = self.pv.opLimits
+        if opl is not None:
+            self.setRange(*opl)
+            ss = (opl[1]-opl[0])/100.
+            #ss = round(ss,12)# trying to fix deficite 1e-14, not working
+            print('ss',ss)
+            self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
-        #print('instantiated',self.pv.title())
+        print('instantiated',self.pv.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
@@ -225,6 +232,15 @@ class PV():
         self.access = access
         self._v = self.v # use getter to store initial value
         self.t = 0.
+        try:
+            #print('get opl for '+self.name)
+            r = self.access.get(self.name+'.opLimits')
+            #print('opLimit',r)
+            #print(r.values())
+            self.opLimits = list(r.values())[0]
+        except:
+            #print('opLimit = None for '+self.name)
+            self.opLimits = None
 
     def title(self): return self.name
     

@@ -97,7 +97,7 @@ class PV():
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
     def __init__(self,features='RW', desc='', values=[0], setter=None\
-    ,opLimits=(math.inf,math.inf)):#parent=None):#, name=''):
+    ,opLimits=None):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
         self.count = len(self.values)
@@ -107,6 +107,9 @@ class PV():
         #self.parent = parent
         self.setter = setter
         self.opLimits = opLimits
+        if self.opLimits is not None:
+            if not isinstance(self.values[0],(int,float)):
+                raise TypeError('opLimits for non-number')
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
@@ -161,9 +164,9 @@ class PV():
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
             + str(type(self.values[0])))
             
-        if isinstance(vals[0],(int,float)):
-            printd('setting number')
-            if vals[0] < self.opLimits[0] or vals[0] > self.opLimits[1]:
+        if self.opLimits is not None:
+            #print('checking for opLimits')
+            if vals[0] <= self.opLimits[0] or vals[0] >= self.opLimits[1]:
                 raise ValueError('out of opLimits '+str(self.opLimits)+': '\
                 + str(vals[0]))
 

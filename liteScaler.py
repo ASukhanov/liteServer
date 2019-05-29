@@ -39,7 +39,7 @@ class Scaler(Device):
           'counters':   PV('R','Scalers',initials),
           'increments': PV('RW','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all scalers',[1.]\
-          ,opLimits=(1.e-6,100)),
+          ,opLimits=(0,10)),
           'pause':      PV('RW','Pause counting, boolean',[False]), 
           'reset':      PV('W','Reset action',[False],setter=self.reset),
         }
