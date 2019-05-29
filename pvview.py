@@ -6,7 +6,7 @@
 #__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
 #__version__ = 'v03 2019-05-21' # PVTable,
 #__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
-__version__ = 'v05 2019-05-24' # spinboxes in table, not communicating yet 
+__version__ = 'v05 2019-05-24' # spinboxes in table
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -34,10 +34,11 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
         super().__init__()
         self.pv = pv
         self.valueChanged.connect(self.handle_value_changed)
+        print('instantiated',self.pv.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
-        print('changing %s to '%pv.title()+str(self.value()))
+        print('changing %s to '%self.pv.title()+str(self.value()))
 
 class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
