@@ -6,7 +6,8 @@
 #__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
 #__version__ = 'v03 2019-05-21' # PVTable,
 #__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
-__version__ = 'v05 2019-05-24' # spinboxes in table
+#__version__ = 'v05 2019-05-29' # spinboxes in table
+__version__ = 'r06 2019-05-29' # first release
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -30,73 +31,78 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
+    """Spinbox, which stores associated PV""" 
     def __init__(self,pv):
         super().__init__()
         self.pv = pv
         self.valueChanged.connect(self.handle_value_changed)
-        print('instantiated',self.pv.title())
+        #print('instantiated',self.pv.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
         print('changing %s to '%self.pv.title()+str(self.value()))
+        try:
+            self.pv.v = self.value()
+        except Exception as e:
+            print(e)
 
 class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
         QtGui.QWidget.__init__(self)
         self.table = QtGui.QTableWidget(rows, columns, self)
         for row in range(rows):
-            for column in range(columns):
-                #print('row,col',(row,column))
-                try: obj = pvTable.pos2obj[(row,column)]
-                except Exception as e:
-                    print('Exception',str(e))
-                    continue
+          for column in range(columns):
+            #print('row,col',(row,column))
+            try: obj = pvTable.pos2obj[(row,column)]
+            except Exception as e:
+                printd('Not an object:'+str(e))
+                continue
 
-                # check if not a PV object
-                print('obj[%i,%i]'%(row,column),type(obj))
-                if not isinstance(obj,PV):
-                    if isinstance(obj,str):
-                        item = QtGui.QTableWidgetItem(obj.title())
-                        self.table.setItem(row, column, item)
-                    else:
-                    #elif isinstance(obj,QtGui.QPushButton):
-                        print('pb',row, column)
-                        #obj.clicked.connect(self.pb_clicked,(row, column)) 
-                        self.table.setCellWidget(row, column, obj)
-                    continue
+            # check if not a PV object
+            printd('obj[%i,%i]:'%(row,column)+str(type(obj)))
+            if not isinstance(obj,PV):
+                if isinstance(obj,str):
+                    item = QtGui.QTableWidgetItem(obj.title())
+                    self.table.setItem(row, column, item)
+                elif isinstance(obj,QPushButtonCmd):
+                    printd('pushButton at [%i,%i]'%(row, column))
+                    self.table.setCellWidget(row, column, obj)
+                continue
 
-                # the object is PV
-                pv = obj
-                pvTable.par2pos[pv] = row,column    
-                try:
-                    item = QtGui.QTableWidgetItem(pv.title())
-                except Exception as e:
-                    printw('could not define Table[%i,%i]'%(row,column))
-                    print(str(e))
+            # the object is PV
+            pv = obj
+            pvTable.par2pos[pv] = row,column    
+            try:
+                item = QtGui.QTableWidgetItem(pv.title())
+            except Exception as e:
+                printw('could not define Table[%i,%i]'%(row,column))
+                print(str(e))
+                continue
+            #print('ok')
+            printd('pvTable [%i,%i] is %s %s'%(row,column,pv.title()\
+            ,type(pv)))
+            try:
+                if pv.is_bool():
+                    printd('it is boolean:'+str(pv.v))
+                    item.setFlags(QtCore.Qt.ItemIsUserCheckable |
+                                  QtCore.Qt.ItemIsEnabled)
+                    state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
+                    item.setCheckState(state)
+                elif pv.is_spinbox():
+                    printd('it is spinbox:'+pv.title())
+                    spinbox = QDoubleSpinBoxPV(pv)
+                    # using other ways is more complicated as it is not trivial
+                    # to transfer argument to the method
+                    #spinbox = QtGui.QDoubleSpinBox(self\
+                    #,valueChanged=self.value_changed)
+                    
+                    spinbox.setValue(float(pv.v[0]))
+                    self.table.setCellWidget(row, column, spinbox)
                     continue
-                #print('ok')
-                printd('pvTable [%i,%i] is %s %s'%(row,column,pv.title()\
-                ,type(pv)))
-                try:
-                    if pv.is_bool():
-                        printd('it is boolean:'+str(pv.v))
-                        item.setFlags(QtCore.Qt.ItemIsUserCheckable |
-                                      QtCore.Qt.ItemIsEnabled)
-                        state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
-                        item.setCheckState(state)
-                    elif pv.is_spinbox():
-                        print('it is spinbox:'+pv.title())
-                        #spinbox = QtGui.QDoubleSpinBox()
-                        #spinbox.setValue(float(pv.v[0]))
-                        #spinbox.valueChanged.connect(self.value_changed)
-                        spinbox = QDoubleSpinBoxPV(pv)
-                        spinbox.setValue(float(pv.v[0]))
-                        self.table.setCellWidget(row, column, spinbox)
-                        continue
-                except Exception as e:
-                    #printw('in is_bool '+pv.title()+':'+str(e))
-                    pass
-                self.table.setItem(row, column, item)
+            except Exception as e:
+                #printw('in is_bool '+pv.title()+':'+str(e))
+                pass
+            self.table.setItem(row, column, item)
 
         self.table.itemClicked.connect(self.handleItemClicked)
         self.table.itemPressed.connect(self.handleItemPressed)
@@ -199,7 +205,7 @@ class PVMonitor(QtCore.QThread):
         self.SignalSourceDataReady.connect(MySlot)
 
     def thread_proc(self):
-        print('>thread_proc')
+        printd('>thread_proc')
         while not EventExit.isSet():
             EventExit.wait(1)
             #self.eventNumber += 1
@@ -253,7 +259,7 @@ class PV():
 
     @v.setter
     def v(self, value):
-        print('setter of %s'%self.name+' called to change PV to '+str(value))
+        printd('setter of %s'%self.name+' called to change PV to '+str(value))
         r = self.access.set(self.name,value)
         if r:
             printw('could not set %s'%self.name+' to '+str(value))
@@ -297,15 +303,13 @@ class PVTable():
                         obj = ''
                     elif token[0] in ('"',"'"):
                         blank,txt,attributeString = token.split(token[0],2)
-                        print('bta',blank,txt,attributeString)
                         if len(attributeString) == 0:
                             obj = txt
                         else: # the cell is text with attributes
                             action,cmd = attributeString.split(':',1)
                             action = action[1:]
-                            print('ac',action,cmd)
                             if action == 'launch':
-                                print('cmd:%s'%cmd)
+                                print('pushButton created with cmd:%s'%cmd)
                                 #does not work in dynamic
                                 #obj = QtGui.QPushButton(txt)
                                 #obj.clicked.connect(lambda: launch(cmd))
@@ -316,13 +320,12 @@ class PVTable():
                     #print(row,col,type(obj))
                 row += 1
         self.shape = row,maxcol
-        print('table:',self.shape)
+        print('table created, shape: '+str(self.shape))
 
     def print_PV_at(self,row,col):
         try:
             pv = self.pos2obj[row,col]
             v = pv.v
-            print('pv',pv.name,len(v))
             txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
             print('Table[%i,%i]:'%(row,col)+pv.name+' = '+txt)
         except Exception as e:
@@ -354,7 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('pvfile', default='pvview.pvv', nargs='?', 
       help='PV list description file')
     pargs = parser.parse_args()
-    print('Monitoring of PVs at '+pargs.host+':%i'%pargs.port)
+    printd('Monitoring of PVs at '+pargs.host+':%i'%pargs.port)
 
     import liteAccess
     liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
@@ -364,21 +367,22 @@ if __name__ == '__main__':
 
     # read config file
     pvTable = PVTable(pargs.pvfile,liteAccess)
+
+    # define GUI
+    window = Window(*pvTable.shape)
+    title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
+    #print(title)
+    window.setWindowTitle(title)
+    window.resize(350, 300)
+    window.show()
+    mainWidget = window
 	
     # test some fields
     pvTable.print_PV_at(6,1)
     pvTable.print_PV_at(4,1)
     pv = pvTable.pos2obj[2,1]
+    printd('pv21:'+pv.title())
     pvTable.print_loc_of_PV(pv)
-
-    # define GUI
-    window = Window(*pvTable.shape)
-    title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
-    print(title)
-    window.setWindowTitle(title)
-    window.resize(350, 300)
-    window.show()
-    mainWidget = window
 
     # arrange keyboard interrupt to kill the program
     import signal

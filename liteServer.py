@@ -40,7 +40,8 @@ adoPet liteServer.0
 #__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
 #__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
 #__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
-__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
+#__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
+__version__ = 'v14 2019-05-23'# opLimits
 
 import sys
 import socket
@@ -50,6 +51,7 @@ import time
 #from collections import OrderedDict as OD
 import ubjson
 import threading
+import math
 
 PORT = 9999# Communication port number
 DevDict = None # forward declaration
@@ -94,16 +96,17 @@ class PV():
     The type and count is determined from default values.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW', desc='', values=[0], setter=None,
-      parent=None):#, name=''):
+    def __init__(self,features='RW', desc='', values=[0], setter=None\
+    ,opLimits=(math.inf,math.inf)):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
         self.count = len(self.values)
         self.features = features
         self.desc = desc
         self.timestamp = 0.
-        self.parent = parent
+        #self.parent = parent
         self.setter = setter
+        self.opLimits = opLimits
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
@@ -138,7 +141,7 @@ class PV():
             vals = [vals]
 
         # Special treatment of the boolean an action parameters
-        print('set',len(self.values),type(self.values[0]))
+        #print('set',len(self.values),type(self.values[0]))
         if len(self.values) == 1 and isinstance(self.values[0],bool):
             print('Boolean treatment')
             # the action parameter is the boolean one but not reabable
@@ -157,6 +160,12 @@ class PV():
             + str(type(self.values[0])))
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
             + str(type(self.values[0])))
+            
+        if isinstance(vals[0],(int,float)):
+            printd('setting number')
+            if vals[0] < self.opLimits[0] or vals[0] > self.opLimits[1]:
+                raise ValueError('out of opLimits '+str(self.opLimits)+': '\
+                + str(vals[0]))
 
         self.values = vals
         
