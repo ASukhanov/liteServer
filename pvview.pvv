@@ -1,11 +1,14 @@
 # pvview configuration file
+'[Test of the table view of a Process Variable server',,,']'
 'Server description:',server:version.desc,'version:',server:version
-
-'Dev1',dev1:frequency,':Frequency'
-,dev1:increments,':increments'
+!Blank
+'First set of',dev1:counters.count,'[counters',']'
+,dev1:frequency,'[:Update frequency [Hz]',']'
+,dev1:increments,'[:Individual increments',']'
 'Counters:',dev1:counters,dev1:reset,'xterm';launch:xterm
-
-'Dev2',dev2:frequency,':Frequency','xclock';launch:xclock
+!Blank
+'Second set of',dev1:counters.count,'[counters',']'
+,dev2:frequency,':Frequency','xclock';launch:xclock
 ,dev2:increments,':increments'
 'Counters:',dev2:counters,dev2:reset
 

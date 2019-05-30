@@ -7,7 +7,8 @@
 #__version__ = 'v03 2019-05-21' # PVTable,
 #__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
 #__version__ = 'v05 2019-05-29' # spinboxes in table
-__version__ = 'r06 2019-05-29' # first release
+#__version__ = 'r06 2019-05-29' # first release
+__version__ = 'r07 2019-05-30' # cell spanning is OK
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -39,8 +40,8 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
         if opl is not None:
             self.setRange(*opl)
             ss = (opl[1]-opl[0])/100.
-            #ss = round(ss,12)# trying to fix deficite 1e-14, not working
-            print('ss',ss)
+            #ss = round(ss,12)# trying to fix deficit 1e-14, not working
+            #print('ss',ss)
             self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
         print('instantiated',self.pv.title())
@@ -58,6 +59,9 @@ class Window(QtGui.QWidget):
         QtGui.QWidget.__init__(self)
         self.table = QtGui.QTableWidget(rows, columns, self)
         for row in range(rows):
+          spanStart = None
+          if pvTable.pos2obj[(row,0)] is None:
+            continue
           for column in range(columns):
             #print('row,col',(row,column))
             try: obj = pvTable.pos2obj[(row,column)]
@@ -66,10 +70,20 @@ class Window(QtGui.QWidget):
                 continue
 
             # check if not a PV object
-            printd('obj[%i,%i]:'%(row,column)+str(type(obj)))
+            #print('obj[%i,%i]:'%(row,column)+str(type(obj)))
             if not isinstance(obj,PV):
                 if isinstance(obj,str):
-                    item = QtGui.QTableWidgetItem(obj.title())
+                    if len(obj) == 0: continue
+                    if obj[0] == '[':
+                        spanStart = column
+                        obj = obj[1:]
+                        #print('span start at [%i,%i]:%s'%(row, column, obj))
+                    elif obj[0] == ']':
+                        #print('span end at [%i,%i]'%(row, column))
+                        self.table.setSpan(row,spanStart,1,column-spanStart+1)
+                        continue
+                    item = QtGui.QTableWidgetItem(str(obj))
+                    item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
                     self.table.setItem(row, column, item)
                 elif isinstance(obj,QPushButtonCmd):
                     printd('pushButton at [%i,%i]'%(row, column))
@@ -113,6 +127,7 @@ class Window(QtGui.QWidget):
 
         self.table.itemClicked.connect(self.handleItemClicked)
         self.table.itemPressed.connect(self.handleItemPressed)
+        
         layout = QtGui.QVBoxLayout(self)
         layout.addWidget(self.table)
         self._list = []
@@ -174,8 +189,8 @@ def MySlot(a):
             printw('logic error')
             continue
         try:
-            #print('pv',str(rowCol),pv.name)
-            #print(len(pv.v),type(pv.v))
+            print('pv',str(rowCol),pv.name)
+            print(len(pv.v),type(pv.v))
             if isinstance(pv.v,list):
                 if pv.is_bool():
                     printd('PV '+pv.name+' is bool = '+str(pv.v))
@@ -185,7 +200,7 @@ def MySlot(a):
                     #print('TODO: update spinbox at ',rowCol)
                     #window.table.item(*rowCol).setValue((pv.v[0]))
                     continue
-                printd('PV '+pv.name+' is list[%i] of '%len(pv.v)\
+                print('PV '+pv.name+' is list[%i] of '%len(pv.v)\
                 +str(type(pv.v[0])))
                 txt = str(pv.v)[1:-1] #avoid brackets
             elif isinstance(pv.v,str):
@@ -307,18 +322,27 @@ class PVTable():
         with open('pvview.pvv','r') as infile:
             row = 0
             for line in infile:
-                line = line[:-1]# remove eol
+                #line = line[:-1]# remove eol
+                line = line.rstrip()
                 if len(line) == 0:  continue
                 if line[0] == '#':  continue
+                if line[0] == '!':
+                    self.pos2obj[(row,0)] = None
+                    row += 1  
+                    continue
                 #print('%3i:'%row+line)
                 cols = line.split(',')
                 #print('cols',cols)
-                maxcol = max(maxcol,len(cols))
+                nCols = len(cols)
                 for col,token in enumerate(cols):
                     if len(token) == 0:
                         obj = ''
                     elif token[0] in ('"',"'"):
+                        if token == ']': nCols -= 1 # end of span
+                        #print('['+token+']')
                         blank,txt,attributeString = token.split(token[0],2)
+                        #print('bta',blank,',',txt,',',attributeString,',')
+                        #print(len(attributeString))
                         if len(attributeString) == 0:
                             obj = txt
                         else: # the cell is text with attributes
@@ -334,6 +358,7 @@ class PVTable():
                         obj = PV(token,access)
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
+                maxcol = max(maxcol,nCols)
                 row += 1
         self.shape = row,maxcol
         print('table created, shape: '+str(self.shape))
@@ -396,8 +421,8 @@ if __name__ == '__main__':
     # test some fields
     pvTable.print_PV_at(6,1)
     pvTable.print_PV_at(4,1)
-    pv = pvTable.pos2obj[2,1]
-    printd('pv21:'+pv.title())
+    pv = pvTable.pos2obj[3,1]
+    printd('pv31:'+pv.title())
     pvTable.print_loc_of_PV(pv)
 
     # arrange keyboard interrupt to kill the program

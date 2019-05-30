@@ -100,10 +100,10 @@ class PV():
     ,opLimits=None):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
-        self.count = len(self.values)
+        self.count = [0,len(self.values)]
         self.features = features
         self.desc = desc
-        self.timestamp = 0.
+        #self.timestamp = [0.]
         #self.parent = parent
         self.setter = setter
         self.opLimits = opLimits
@@ -118,8 +118,9 @@ class PV():
         return getattr(self,prop)
     
     def _get_values(self):
-        t = self.timestamp
-        if t == 0.: t = time.time()
+        #t = self.timestamp
+        #if t == 0.: t = time.time()
+        t = time.time()
         ret = [t] + getattr(self,'values')
         #/*Tuple
         #if 'W' not in self.features:
