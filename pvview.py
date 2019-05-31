@@ -8,7 +8,8 @@
 #__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
 #__version__ = 'v05 2019-05-29' # spinboxes in table
 #__version__ = 'r06 2019-05-29' # first release
-__version__ = 'r07 2019-05-30' # cell spanning is OK
+#__version__ = 'r07 2019-05-30' # cell spanning is OK
+__version__ = 'r08 2019-05-31' # release 08
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -58,53 +59,66 @@ class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
         QtGui.QWidget.__init__(self)
         self.table = QtGui.QTableWidget(rows, columns, self)
+        self.table.setShowGrid(False)
         for row in range(rows):
-          spanStart = None
+          spanStart,spanFilled = None, False
+          self.table.setRowHeight(row,20)
           if pvTable.pos2obj[(row,0)] is None:
             continue
-          for column in range(columns):
-            #print('row,col',(row,column))
-            try: obj = pvTable.pos2obj[(row,column)]
+          colSkip = 0
+          for col in range(columns):
+            #print('row,col',(row,col))
+            try: obj = pvTable.pos2obj[(row,col)]
             except Exception as e:
                 printd('Not an object:'+str(e))
                 continue
+            colOut = col - colSkip
 
             # check if not a PV object
-            #print('obj[%i,%i]:'%(row,column)+str(type(obj)))
+            #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
             if not isinstance(obj,PV):
                 if isinstance(obj,str):
                     if len(obj) == 0: continue
                     if obj[0] == '[':
-                        spanStart = column
-                        obj = obj[1:]
-                        #print('span start at [%i,%i]:%s'%(row, column, obj))
-                    elif obj[0] == ']':
-                        #print('span end at [%i,%i]'%(row, column))
-                        self.table.setSpan(row,spanStart,1,column-spanStart+1)
+                        spanStart = col
+                        #print('span starts at [%i,%i]:%s'%(row,spanStart,obj))
                         continue
+                    elif obj[0] == ']':
+                        colSkip += 1
+                        #print('span ends at [%i,%i]'%(row, col))
+                        self.table.setSpan(row,spanStart,1,col-spanStart)
+                        continue
+                    if spanStart is not None and not spanFilled:
+                        spanFilled = True
+                        colOut = spanStart
                     item = QtGui.QTableWidgetItem(str(obj))
                     item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
-                    self.table.setItem(row, column, item)
+                    self.table.setItem(row, colOut, item)
                 elif isinstance(obj,QPushButtonCmd):
-                    printd('pushButton at [%i,%i]'%(row, column))
-                    self.table.setCellWidget(row, column, obj)
+                    printd('pushButton at [%i,%i]'%(row, colOut))
+                    self.table.setCellWidget(row, colOut, obj)
                 continue
-
+            
+            if spanStart is not None:
+                spanStart = None
+                #colOut -= 1
+                #print('span stop',col, str(obj))
+                
             # the object is PV
             pv = obj
-            pvTable.par2pos[pv] = row,column    
+            pvTable.par2pos[pv] = row,colOut
             try:
                 item = QtGui.QTableWidgetItem(pv.title())
             except Exception as e:
-                printw('could not define Table[%i,%i]'%(row,column))
+                printw('could not define Table[%i,%i]'%(row,colOut))
                 print(str(e))
                 continue
             #print('ok')
-            printd('pvTable [%i,%i] is %s %s'%(row,column,pv.title()\
-            ,type(pv)))
+            printd('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
                 if pv.is_bool():
-                    printd('it is boolean:'+str(pv.v))
+                    #print('PV %s is boolean:'%pv.name+str(pv.v))
+                    item.setText(pv.name.split(':')[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
                     state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
@@ -118,12 +132,12 @@ class Window(QtGui.QWidget):
                     #,valueChanged=self.value_changed)
                     
                     spinbox.setValue(float(pv.v[0]))
-                    self.table.setCellWidget(row, column, spinbox)
+                    self.table.setCellWidget(row, colOut, spinbox)
                     continue
             except Exception as e:
                 #printw('in is_bool '+pv.title()+':'+str(e))
                 pass
-            self.table.setItem(row, column, item)
+            self.table.setItem(row, col, item)
 
         self.table.itemClicked.connect(self.handleItemClicked)
         self.table.itemPressed.connect(self.handleItemPressed)
@@ -189,8 +203,8 @@ def MySlot(a):
             printw('logic error')
             continue
         try:
-            print('pv',str(rowCol),pv.name)
-            print(len(pv.v),type(pv.v))
+            #print('pv',str(rowCol),pv.name)
+            #print(len(pv.v),type(pv.v))
             if isinstance(pv.v,list):
                 if pv.is_bool():
                     printd('PV '+pv.name+' is bool = '+str(pv.v))
@@ -200,8 +214,8 @@ def MySlot(a):
                     #print('TODO: update spinbox at ',rowCol)
                     #window.table.item(*rowCol).setValue((pv.v[0]))
                     continue
-                print('PV '+pv.name+' is list[%i] of '%len(pv.v)\
-                +str(type(pv.v[0])))
+                #print('PV '+pv.name+' is list[%i] of '%len(pv.v)\
+                #+str(type(pv.v[0])))
                 txt = str(pv.v)[1:-1] #avoid brackets
             elif isinstance(pv.v,str):
                 printd('PV '+pv.name+' is text')
@@ -247,12 +261,15 @@ class PV():
         self.access = access
         self._v = self.v # use getter to store initial value
         self.t = 0.
+        
+        # creating standard attributes from remote ones
+        attributes = ['count', 'features', 'opLimits']
         try:
-            #print('get opl for '+self.name)
-            r = self.access.get(self.name+'.opLimits')
-            #print('opLimit',r)
-            #print(r.values())
-            self.opLimits = list(r.values())[0]
+            for attribute in attributes:
+                r = self.access.get(self.name+'.'+attribute)
+                v = list(r.values())[0]
+                #print('Creating attribute %s.%s = '%(name,attribute)+str(v))
+                setattr(self,attribute,v)
         except:
             #print('opLimit = None for '+self.name)
             self.opLimits = None
@@ -278,7 +295,7 @@ class PV():
 
     @property
     def v(self):
-        # return just values, ignore key and timestamp
+        # return values and timestamp
         #print('getter of %s called'%self.name)
         r = self.access.get(self.name)# +'.values')
         if r is None:
@@ -332,29 +349,37 @@ class PVTable():
                     continue
                 #print('%3i:'%row+line)
                 cols = line.split(',')
-                #print('cols',cols)
                 nCols = len(cols)
                 for col,token in enumerate(cols):
                     if len(token) == 0:
                         obj = ''
+                    elif token in '[]':
+                        obj = token
+                        #nCols -= 1
+                        #print('bracket %s at '%token+str((row,col)))
                     elif token[0] in ('"',"'"):
-                        if token == ']': nCols -= 1 # end of span
-                        #print('['+token+']')
                         blank,txt,attributeString = token.split(token[0],2)
-                        #print('bta',blank,',',txt,',',attributeString,',')
-                        #print(len(attributeString))
                         if len(attributeString) == 0:
                             obj = txt
                         else: # the cell is text with attributes
                             action,cmd = attributeString.split(':',1)
                             action = action[1:]
                             if action == 'launch':
-                                print('pushButton created with cmd:%s'%cmd)
+                                #print('pushButton created with cmd:%s'%cmd)
                                 #does not work in dynamic
                                 #obj = QtGui.QPushButton(txt)
                                 #obj.clicked.connect(lambda: launch(cmd))
                                 obj = QPushButtonCmd(txt,cmd)
+                    elif '`' in token: # PV's attribute
+                        #print('check for attribute')
+                        pvname,attrib = token.split('`')
+                        pv = PV(pvname,access)
+                        #print('temporary PV %s created'%pvname)
+                        obj = str(getattr(pv,attrib))
+                        if obj[0] == '[': obj = obj[1:]
+                        if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
+                        #print('the "%s" is pv'%token)
                         obj = PV(token,access)
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
@@ -419,11 +444,11 @@ if __name__ == '__main__':
     mainWidget = window
 	
     # test some fields
-    pvTable.print_PV_at(6,1)
-    pvTable.print_PV_at(4,1)
-    pv = pvTable.pos2obj[3,1]
-    printd('pv31:'+pv.title())
-    pvTable.print_loc_of_PV(pv)
+    #pvTable.print_PV_at(6,1)
+    #pvTable.print_PV_at(4,1)
+    #pv = pvTable.pos2obj[3,1]
+    #printd('pv31:'+pv.title())
+    #pvTable.print_loc_of_PV(pv)
 
     # arrange keyboard interrupt to kill the program
     import signal

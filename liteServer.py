@@ -41,7 +41,8 @@ adoPet liteServer.0
 #__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
 #__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
 #__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
-__version__ = 'v14 2019-05-23'# opLimits
+#__version__ = 'v14 2019-05-23'# opLimits
+__version__ = 'v15 2019-05-31'# count is array 
 
 import sys
 import socket
@@ -100,7 +101,7 @@ class PV():
     ,opLimits=None):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
-        self.count = [0,len(self.values)]
+        self.count = [len(self.values)]
         self.features = features
         self.desc = desc
         #self.timestamp = [0.]
