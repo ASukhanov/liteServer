@@ -9,7 +9,8 @@
 #__version__ = 'v05 2019-05-29' # spinboxes in table
 #__version__ = 'r06 2019-05-29' # first release
 #__version__ = 'r07 2019-05-30' # cell spanning is OK
-__version__ = 'r08 2019-05-31' # release 08
+#__version__ = 'r08 2019-05-31' # release 08
+__version__ = 'v09 2019-05-31' # detection of right click
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -54,11 +55,33 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
             self.pv.v = self.value()
         except Exception as e:
             print(e)
+            
+    def contextMenuEvent(self,event):
+        # we don't need its contextMenu (activated on right click)
+        print('RightClick at spinbox with PV %s'%self.pv.name)
+        pass
+
+class myTableWidget(QtGui.QTableWidget):
+    def mousePressEvent(self,*args):
+        button = args[0].button()
+        item = self.itemAt(args[0].pos())
+        try:
+            row,col = item.row(),item.column()
+        except:
+            return
+        if button == 2: # right button
+            try:
+                pv = pvTable.pos2obj[(row,col)]
+                print('RightClick at PV %s'%pv.name)
+            except:
+                pass
+        else:
+            super().mousePressEvent(*args)
 
 class Window(QtGui.QWidget):
     def __init__(self, rows, columns):
         QtGui.QWidget.__init__(self)
-        self.table = QtGui.QTableWidget(rows, columns, self)
+        self.table = myTableWidget(rows, columns, self)
         self.table.setShowGrid(False)
         for row in range(rows):
           spanStart,spanFilled = None, False
@@ -139,18 +162,16 @@ class Window(QtGui.QWidget):
                 pass
             self.table.setItem(row, col, item)
 
-        self.table.itemClicked.connect(self.handleItemClicked)
-        self.table.itemPressed.connect(self.handleItemPressed)
+        #self.table.itemClicked.connect(self.handleItemClicked)
+        #self.table.itemPressed.connect(self.handleItemPressed)
+        #self.table.itemDoubleClicked.connect(self.handleItemDoubleClicked)
+        self.table.cellClicked.connect(self.handleCellClicked)
+        #self.table.cellDoubleClicked.connect(self.handleCellDoubleClicked)
         
         layout = QtGui.QVBoxLayout(self)
         layout.addWidget(self.table)
         self._list = []
         monitor = PVMonitor()
-
-    #def value_changed(self,*args):
-    #    print('value changed',args)
-    #    print('sender',self.sender())
-    #    #print(self.sender().name)
 
     def closeEvent(self,*args):
         # Called when the window is closed
@@ -160,9 +181,23 @@ class Window(QtGui.QWidget):
     def handleItemPressed(self, item):
         print('pressed[%i,%i]'%(item.row(),item.column()))
 
+    def handleItemDoubleClicked(self, item):
+        print('DoubleClicked[%i,%i]'%(item.row(),item.column()))
+
     def handleItemClicked(self, item):
         print('clicked[%i,%i]'%(item.row(),item.column()))
-        pv = pvTable.pos2obj[item.row(),item.column()]
+        self.handleCellClicked(item.row(),item.column())
+
+    def handleCellDoubleClicked(self, x,y):
+        print('cell DoubleClicked[%i,%i]'%(x,y))
+
+    def handleCellClicked(self, row,column):
+        print('cell clicked[%i,%i]'%(row,column))
+        item = self.table.itemAt(row,column)
+        #if self.table.rightClick:
+        #    print('rightClick',self.table.rightClick)
+        #    return
+        pv = pvTable.pos2obj[row,column]
         if isinstance(pv,str):
             return
         try:
@@ -180,7 +215,7 @@ class Window(QtGui.QWidget):
                 #d.setWindowModality(Qt.ApplicationModal)
                 d.show()
         except Exception as e:
-            printe('exception in handleItemClicked: '+str(e))
+            printe('exception in handleCellClicked: '+str(e))
 
     def update(self,a):
         print('mainWidget update',a)
