@@ -42,7 +42,8 @@ adoPet liteServer.0
 #__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
 #__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
 #__version__ = 'v14 2019-05-23'# opLimits
-__version__ = 'v15 2019-05-31'# count is array 
+#__version__ = 'v15 2019-05-31'# count is array 
+__version__ = 'v16 2019-06-01'# Device 'server' incorporated
 
 import sys
 import socket
@@ -184,6 +185,13 @@ class PV():
 #````````````````````````````The Request broker```````````````````````````````
 class PV_UDPHandler(SocketServer.BaseRequestHandler):
 
+    def parse_devPar(self,devPar):
+        try:
+           dev,par = devPar.split(':')
+        except:
+           raise NameError('Expected dev:par, got '+str(devPar))
+        return dev,par
+
     def _reply(self,items):
         printd('>_reply [%d'%len(items)+', type:'+str(type(items[0])))
         action = tostr(items[0])
@@ -191,7 +199,7 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
         if action == 'get':
             for i in items[1]:
                 devParName = tostr(i)
-                dev,parProp = devParName.split(':')
+                dev,parProp = self.parse_devPar(devParName)
                 pp = parProp.split('.',1)
                 pv = getattr(DevDict[dev],pp[0])
                 if len(pp) == 1:
@@ -203,7 +211,7 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
                     r[devParName] = v
                 printd('get_value():'+str(r))
         elif action == 'set':
-            dev,par = tostr(items[1]).split(':')
+            dev,par = self.parse_devPar(tostr(items[1]))
             pv = getattr(DevDict[dev],par)
             printd('set:'+str(items[2]))
             return pv.set(items[2])
@@ -233,11 +241,13 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
         printd("{} wrote:".format(self.client_address[0]))
         cmd = ubjson.loadb(data)
         printd(str(cmd))
+        
         try:
             r = self._reply(cmd)
         except Exception as e:
             r = 'ERR. Exception: '+repr(e)
         reply = ubjson.dumpb(r)
+        
         host,port = self.client_address# the port here is temporary
         printd('sending back %d '%len(reply)+'bytes:\n"'+str(r)+'" to '+str((host,port)))
         socket.sendto(reply, (host,port))
@@ -247,12 +257,18 @@ class Server():
     def __init__(self,devices,host=None,port=PORT,dbg=False):
         global DevDict, Dbg
         Dbg = dbg
+        
+        # create Device 'server'
+        dev = [Device('server',{\
+          'version': PV('R','liteServer',[__version__]),
+          'host':    PV('R','Host name',[socket.gethostname()]),
+        })]
+        
         # create global dictionary of all devices
-        DevDict = {dev._name:dev for dev in devices}
-        if False:
-            print('DevDict',DevDict)
-            for d,i in DevDict.items():
-                print('device '+str(d)+':'+str(i.info()))
+        devs = dev + list(devices)
+        DevDict = {dev._name:dev for dev in devs}
+        #for d,i in DevDict.items():  print('device '+str(d))
+                    
         self.host = host if host else ip_address()
         self.port = port
         self.server = SocketServer.UDPServer((self.host, self.port),
