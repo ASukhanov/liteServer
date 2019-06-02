@@ -34,20 +34,20 @@ class Scaler(Device):
     be prefixed with _"""
     def __init__(self,name):
         initials = list((np.random.rand(pargs.nCounters)*1000).round())
-        print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
+        #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
         pars = {
           'counters':   PV('R','Scalers',initials),
           'increments': PV('RW','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all scalers',[1.]\
           ,opLimits=(0,10)),
-          'pause':      PV('RW','Pause counting, boolean',[False]), 
+          'pause':      PV('RW','Pause counting',[False]), 
           'reset':      PV('W','Reset action',[False],setter=self.reset),
         }
         if Python3:
             super().__init__(name,pars)
         else:
             Device.__init__(self,name,pars)
-        print('n,p',self._name,pars)
+        #print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = True
         thread.start()
@@ -62,6 +62,8 @@ class Scaler(Device):
         ns = len(self.counters.values)
         while not EventExit.is_set():
             EventExit.wait(1./self.frequency.values[0])
+            if self.pause.values[0]:
+                continue
             #instance = self._name
             #printd(instance+': cycle %d'%self._cycle)
             ns = len(self.counters.values)

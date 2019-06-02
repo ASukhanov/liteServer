@@ -12,8 +12,9 @@
 #__version__ = 'r08 2019-05-31' # release 08
 #__version__ = 'v09 2019-05-31' # detection of right click
 #__version__ = 'v10 2019-06-01' # pargs.file
-__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
-#TODO# checkbox for 'Pause'
+#__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
+__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
+#TODO 1) discrete parameters, set array
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -127,11 +128,10 @@ class Window(QtGui.QWidget):
             
             if spanStart is not None:
                 spanStart = None
-                #colOut -= 1
-                #print('span stop',col, str(obj))
                 
             # the object is PV
             pv = obj
+            val = pv.v
             pvTable.par2pos[pv] = row,colOut
             try:
                 item = QtGui.QTableWidgetItem(pv.title())
@@ -139,16 +139,19 @@ class Window(QtGui.QWidget):
                 printw('could not define Table[%i,%i]'%(row,colOut))
                 print(str(e))
                 continue
-            #print('ok')
-            printd('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
+            #print('ok',item)
+            #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
                 if pv.is_bool():
-                    #print('PV %s is boolean:'%pv.name+str(pv.v))
+                    #print('PV %s is boolean:'%pv.name+str(val))
                     item.setText(pv.name.split(':')[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
-                    state = QtCore.Qt.Checked if pv.v[0] else QtCore.Qt.Unchecked
+                    state = QtCore.Qt.Checked if val[0] else QtCore.Qt.Unchecked
                     item.setCheckState(state)
+                    self.table.setCellWidget(row, colOut, item)
+                    continue
+                    
                 elif pv.is_spinbox():
                     printd('it is spinbox:'+pv.title())
                     spinbox = QDoubleSpinBoxPV(pv)
@@ -157,7 +160,7 @@ class Window(QtGui.QWidget):
                     #spinbox = QtGui.QDoubleSpinBox(self\
                     #,valueChanged=self.value_changed)
                     
-                    spinbox.setValue(float(pv.v[0]))
+                    spinbox.setValue(float(val[0]))
                     self.table.setCellWidget(row, colOut, spinbox)
                     continue
             except Exception as e:
@@ -195,8 +198,8 @@ class Window(QtGui.QWidget):
         print('cell DoubleClicked[%i,%i]'%(x,y))
 
     def handleCellClicked(self, row,column):
-        print('cell clicked[%i,%i]'%(row,column))
-        item = self.table.itemAt(row,column)
+        item = self.table.item(row,column)
+        print('cell clicked[%i,%i]:'%(row,column))#+str(item.text()))
         #if self.table.rightClick:
         #    print('rightClick',self.table.rightClick)
         #    return
@@ -241,26 +244,27 @@ def MySlot(a):
             printw('logic error')
             continue
         try:
-            #print('pv',str(rowCol),pv.name)
-            #print(len(pv.v),type(pv.v))
-            if isinstance(pv.v,list):
+            val = pv.v
+            if isinstance(val,list):
                 if pv.is_bool():
-                    printd('PV '+pv.name+' is bool = '+str(pv.v))
-                    window.table.item(*rowCol).setCheckState(pv.v[0])
+                    #print('PV '+pv.name+' is bool = '+str(val))
+                    state = window.table.item(*rowCol).checkState()
+                    if val[0] != (state != 0):
+                        print('flip')
+                        window.table.item(*rowCol).setCheckState(val[0])
                     continue
                 elif pv.is_spinbox():
-                    #print('TODO: update spinbox at ',rowCol)
-                    #window.table.item(*rowCol).setValue((pv.v[0]))
                     continue
-                #print('PV '+pv.name+' is list[%i] of '%len(pv.v)\
-                #+str(type(pv.v[0])))
-                txt = str(pv.v)[1:-1] #avoid brackets
-            elif isinstance(pv.v,str):
+                # standard PV
+                #print('PV '+pv.name+' is list[%i] of '%len(val)\
+                #+str(type(val[0])))
+                txt = str(val)[1:-1] #avoid brackets
+            elif isinstance(val,str):
                 printd('PV '+pv.name+' is text')
-                txt = pv.v
+                txt = val
                 #continue
             else:
-                txt = 'Unknown type of '+pv.name+'='+str(type(pv.v))
+                txt = 'Unknown type of '+pv.name+'='+str(type(val))
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
@@ -318,7 +322,6 @@ class PV():
         #print('>is_bool',self.name)
         if isinstance(self._v,list):
             if len(self._v) == 1: # the first one is timestamp
-                #print('pv.v',pv.v)
                 if isinstance(self._v[0],bool):
                     return True
         return False
@@ -345,7 +348,7 @@ class PV():
 
     @v.setter
     def v(self, value):
-        printd('setter of %s'%self.name+' called to change PV to '+str(value))
+        #print('setter of %s'%self.name+' called to change PV to '+str(value))
         r = self.access.set(self.name,value)
         if r:
             printw('could not set %s'%self.name+' to '+str(value))
@@ -364,9 +367,6 @@ class QPushButtonCmd(QtGui.QPushButton):
     def handleClicked(self):
         #print('clicked',self.cmd)
         p = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, shell=True)
-
-#def launch(cmd):
-#    print('launching',cmd)
 
 class PVTable():
     """PV table maps: parameter to (row,col) and (row,col) to object"""
@@ -452,7 +452,6 @@ class PVTable():
         fname = 'pvsheet.tmp'
         #print('>build_temporary_pvfile')
         devices = list(access.ls([]).values())[0]
-        #print(devices)
         f = open(fname,'w')
         for dev in devices:
             f.write("[,'____Device: %s____',]\n"%dev)

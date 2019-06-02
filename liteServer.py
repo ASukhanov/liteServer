@@ -105,7 +105,6 @@ class PV():
         self.count = [len(self.values)]
         self.features = features
         self.desc = desc
-        #self.timestamp = [0.]
         #self.parent = parent
         self.setter = setter
         self.opLimits = opLimits
@@ -120,14 +119,8 @@ class PV():
         return getattr(self,prop)
     
     def _get_values(self):
-        #t = self.timestamp
-        #if t == 0.: t = time.time()
         t = time.time()
         ret = [t] + getattr(self,'values')
-        #/*Tuple
-        #if 'W' not in self.features:
-        #    #print('_get_values: converting to tuple')
-        #    ret = tuple(ret)#*/
         printd('_get_values:'+str(ret))
         return ret
         
@@ -149,11 +142,11 @@ class PV():
         # Special treatment of the boolean an action parameters
         #print('set',len(self.values),type(self.values[0]))
         if len(self.values) == 1 and isinstance(self.values[0],bool):
-            print('Boolean treatment')
+            #print('Boolean treatment %s'%str(vals))
             # the action parameter is the boolean one but not reabable
             # it always is False
             if not self.is_readable():
-                print('Action treatment')
+                #print('Action treatment')
                 vals = [False]
                 if self.setter is not None:
                     # call PV setting method
