@@ -82,16 +82,15 @@ parser.add_argument('-n','--nCounters', type=int, default=1100,
   #the UDP socket size is limited to 64k bytes
 pargs = parser.parse_args()
 
-devices = (
-  Device('server',{'version': PV('RW'\
-  ,'Two %i'%pargs.nCounters+'-channel scalers with individual increments'\
-  ,[__version__])}),
+devices = [
   Scaler('dev1'),
   Scaler('dev2'),
-)
+]
+
 print('Serving:'+str([dev._name for dev in devices]))
 
 server = liteServer.Server(devices,dbg=pargs.dbg)
+server
 server.loop()
 
 
