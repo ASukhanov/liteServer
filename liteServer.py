@@ -43,14 +43,15 @@ adoPet liteServer.0
 #__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
 #__version__ = 'v14 2019-05-23'# opLimits
 #__version__ = 'v15 2019-05-31'# count is array 
-__version__ = 'v16 2019-06-01'# Device 'server' incorporated
+#__version__ = 'v16 2019-06-01'# Device 'server' incorporated
+__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
 
 import sys
 import socket
 #import SocketServer# for python2
 import socketserver as SocketServer# for python3
 import time
-#from collections import OrderedDict as OD
+from collections import OrderedDict as OD
 import ubjson
 import threading
 import math
@@ -259,7 +260,8 @@ class Server():
         
         # create global dictionary of all devices
         devs = dev + list(devices)
-        DevDict = {dev._name:dev for dev in devs}
+        #DevDict = {dev._name:dev for dev in devs}
+        DevDict = OD([[dev._name,dev] for dev in devs])
         #for d,i in DevDict.items():  print('device '+str(d))
                     
         self.host = host if host else ip_address()
