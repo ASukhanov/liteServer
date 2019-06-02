@@ -11,7 +11,9 @@
 #__version__ = 'r07 2019-05-30' # cell spanning is OK
 #__version__ = 'r08 2019-05-31' # release 08
 #__version__ = 'v09 2019-05-31' # detection of right click
-__version__ = 'v10 2019-06-01' # pargs.file
+#__version__ = 'v10 2019-06-01' # pargs.file
+__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
+#TODO# checkbox for 'Pause'
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -372,6 +374,8 @@ class PVTable():
         self.par2pos = OD()
         self.pos2obj = OD()
         maxcol = 0
+        if pargs.pvfile is None:
+            pargs.pvfile = self.build_temporary_pvfile(access)
         with open(pargs.pvfile,'r') as infile:
             row = 0
             for line in infile:
@@ -416,7 +420,11 @@ class PVTable():
                         if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
                         #print('the "%s" is pv'%token)
-                        obj = PV(token,access)
+                        try:
+                            obj = PV(token,access)
+                        except Exception as e:
+                            printe('Cannot create PV %s'%token)
+                            continue
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
                 maxcol = max(maxcol,nCols)
@@ -440,6 +448,22 @@ class PVTable():
         except Exception as e:
             printw('in print_loc:'+str(e))
 
+    def build_temporary_pvfile(self,access):
+        fname = 'pvsheet.tmp'
+        #print('>build_temporary_pvfile')
+        devices = list(access.ls([]).values())[0]
+        #print(devices)
+        f = open(fname,'w')
+        for dev in devices:
+            f.write("[,'____Device: %s____',]\n"%dev)
+            pars = list(access.ls([dev]).values())[0]
+            for par in pars:
+                devPar = dev+':'+par
+                #print(devPar)
+                f.write("'%s',%s\n"%(par,devPar))
+        f.close()
+        print('PV spreadsheet config file generated: %s'%fname)
+        return fname
 #`````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
     global mainWidget
@@ -456,7 +480,8 @@ if __name__ == '__main__':
       help='Hostname')
     parser.add_argument('-t','--timeout',type=float,default=0.1,
       help='timeout of the receiving socket')
-    parser.add_argument('pvfile', default='pvsheet.pvs', nargs='?', 
+    #parser.add_argument('pvfile', default='pvsheet.pvs', nargs='?', 
+    parser.add_argument('pvfile', nargs='?', 
       help='PV list description file')
     pargs = parser.parse_args()
     printd('Monitoring of PVs at '+pargs.host+':%i'%pargs.port)
