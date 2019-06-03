@@ -36,12 +36,13 @@ class Scaler(Device):
         initials = list((np.random.rand(pargs.nCounters)*1000).round())
         #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
         pars = {
-          'counters':   PV('R','Scalers',initials),
-          'increments': PV('RW','Scaler Increments',[-1.]+[1.]*(pargs.nCounters-1)),
-          'frequency':  PV('RW','Update frequency of all scalers',[1.]\
+          'counters':   PV('R','%i of counters'%len(initials),initials),
+          'increments': PV('RW','Increments of the individual counters'\
+          ,[-1.]+[1.]*(pargs.nCounters-1)),
+          'frequency':  PV('RW','Update frequency of all counters',[1.]\
           ,opLimits=(0,10)),
-          'pause':      PV('RW','Pause counting',[False]), 
-          'reset':      PV('W','Reset action',[False],setter=self.reset),
+          'pause':      PV('RW','Pause all counters',[False]), 
+          'reset':      PV('W','Reset all counters',[False],setter=self.reset),
         }
         if Python3:
             super().__init__(name,pars)

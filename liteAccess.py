@@ -69,7 +69,7 @@ class LiteAccess():
             except:
                 #msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
                 #  +traceback.format_exc()
-                msg = 'ERROR: no response for '+str(cmd)+'in %.2f'%sleepTime+' s.'
+                msg = 'ERROR: no response for '+str(cmd)+' in %.2f'%sleepTime+' s.'
                 print(msg)
                 #raise BrokenPipeError(msg)
                 return

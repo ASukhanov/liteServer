@@ -62,7 +62,8 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        print('RightClick at spinbox with PV %s'%self.pv.name)
+        #print('RightClick at spinbox with PV %s'%self.pv.name)
+        mainWidget.rightClick(self.pv)
         pass
 
 class myTableWidget(QtGui.QTableWidget):
@@ -76,7 +77,8 @@ class myTableWidget(QtGui.QTableWidget):
         if button == 2: # right button
             try:
                 pv = pvTable.pos2obj[(row,col)]
-                print('RightClick at PV %s'%pv.name)
+                #print('RightClick at PV %s.'%pv.name)
+                mainWidget.rightClick(pv)
             except:
                 pass
         else:
@@ -200,9 +202,6 @@ class Window(QtGui.QWidget):
     def handleCellClicked(self, row,column):
         item = self.table.item(row,column)
         print('cell clicked[%i,%i]:'%(row,column))#+str(item.text()))
-        #if self.table.rightClick:
-        #    print('rightClick',self.table.rightClick)
-        #    return
         pv = pvTable.pos2obj[row,column]
         if isinstance(pv,str):
             return
@@ -230,6 +229,26 @@ class Window(QtGui.QWidget):
             tableItem.setText(str(a[0]))
         except Exception as e:
             printw('in tableItem.setText:'+str(e))
+            
+    def rightClick(self,pv):
+        #print('mainWidget. RightClick on %s'%pv.name)
+        d = QtGui.QDialog(self)
+        pname = pv.title()
+        d.setWindowTitle("Info on PV %s"%pname)
+        attributes = pv.attributes()
+        #print('attributes',attributes)
+        txt = '    Attributes:\n'
+        for attr,v in attributes.items():
+            vv = list(v)[0]
+            if vv is None:
+                continue
+            if isinstance(vv,list):
+                vv = vv[:100]
+            txt += attr+':\t'+str(vv)+'\n'
+        qte = QtGui.QLabel(txt,d)
+        qte.setWordWrap(True)
+        d.resize(300,150)
+        d.show()
 
 #`````````````````````````````````````````````````````````````````````````````
 def MySlot(a):
@@ -316,24 +335,6 @@ class PV():
             #print('opLimit = None for '+self.name)
             self.opLimits = None
 
-    def title(self): return self.name
-    
-    def is_bool(self):
-        #print('>is_bool',self.name)
-        if isinstance(self._v,list):
-            if len(self._v) == 1: # the first one is timestamp
-                if isinstance(self._v[0],bool):
-                    return True
-        return False
-        
-    def is_spinbox(self):
-        try:        
-            if len(self._v) == 1:
-                if type(self._v[0]) in (float,int):
-                    return True
-        except: pass
-        return False
-
     @property
     def v(self):
         # return values and timestamp
@@ -357,6 +358,34 @@ class PV():
     def v(self):
         print("deleter of v called")
         del self._v
+
+    def title(self): return self.name
+    
+    def is_bool(self):
+        #print('>is_bool',self.name)
+        if isinstance(self._v,list):
+            if len(self._v) == 1: # the first one is timestamp
+                if isinstance(self._v[0],bool):
+                    return True
+        return False
+        
+    def is_spinbox(self):
+        try:        
+            if len(self._v) == 1:
+                if type(self._v[0]) in (float,int):
+                    return True
+        except: pass
+        return False
+        
+    def attributes(self):
+        """Returns a dictionary of all attributes"""
+        r = self.access.ls(self.name)
+        listOfAttr = list(r.values())[0]
+        d = OD()
+        for attr in listOfAttr:
+            r = self.access.get('%s.%s'%(self.name,attr))
+            d[attr] = r.values()
+        return d
 
 class QPushButtonCmd(QtGui.QPushButton):
     def __init__(self,text,cmd):

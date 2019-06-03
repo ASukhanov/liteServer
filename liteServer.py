@@ -107,7 +107,7 @@ class PV():
         self.features = features
         self.desc = desc
         #self.parent = parent
-        self.setter = setter
+        self._setter = setter
         self.opLimits = opLimits
         if self.opLimits is not None:
             if not isinstance(self.values[0],(int,float)):
@@ -149,9 +149,9 @@ class PV():
             if not self.is_readable():
                 #print('Action treatment')
                 vals = [False]
-                if self.setter is not None:
+                if self._setter is not None:
                     # call PV setting method
-                    self.setter(self)
+                    self._setter(self)
             else: # make it boolean 
                 vals = [True] if vals[0] else [False] 
 
