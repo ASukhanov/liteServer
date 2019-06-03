@@ -13,8 +13,9 @@
 #__version__ = 'v09 2019-05-31' # detection of right click
 #__version__ = 'v10 2019-06-01' # pargs.file
 #__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
-__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
+#__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
 #TODO 1) discrete parameters, set array
+__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -322,6 +323,7 @@ class PV():
         self.access = access
         self._v = self.v # use getter to store initial value
         self.t = 0.
+        self._spinbox, self._bool = None,None
         
         # creating standard attributes from remote ones
         attributes = ['count', 'features', 'opLimits']
@@ -334,7 +336,7 @@ class PV():
         except:
             #print('opLimit = None for '+self.name)
             self.opLimits = None
-
+            
     @property
     def v(self):
         # return values and timestamp
@@ -362,20 +364,30 @@ class PV():
     def title(self): return self.name
     
     def is_bool(self):
-        #print('>is_bool',self.name)
+        if self._bool is not None:
+            return self._bool
+        self._bool = False
         if isinstance(self._v,list):
             if len(self._v) == 1: # the first one is timestamp
                 if isinstance(self._v[0],bool):
-                    return True
-        return False
+                     self._bool = True
+        return self._bool
         
+    def is_writable(self):
+        r = list(self.access.get('%s.features'%self.name).values())
+        return ('W' in r)
+    
     def is_spinbox(self):
-        try:        
-            if len(self._v) == 1:
-                if type(self._v[0]) in (float,int):
-                    return True
-        except: pass
-        return False
+        if self._spinbox is not None:
+            return self._spinbox
+        self._spinbox = False
+        if self.is_writable():
+            try:        
+                if len(self._v) == 1:
+                    if type(self._v[0]) in (float,int):
+                        self._spinbox = True
+            except: pass
+        return self._spinbox
         
     def attributes(self):
         """Returns a dictionary of all attributes"""
