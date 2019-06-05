@@ -140,7 +140,7 @@ class PV():
         except:
             vals = [vals]
 
-        # Special treatment of the boolean an action parameters
+        # Special treatment of the boolean and action parameters
         #print('set',len(self.values),type(self.values[0]))
         if len(self.values) == 1 and isinstance(self.values[0],bool):
             #print('Boolean treatment %s'%str(vals))
@@ -177,7 +177,7 @@ class PV():
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
-class PV_UDPHandler(SocketServer.BaseRequestHandler):
+class PV_TCPHandler(SocketServer.BaseRequestHandler):
 
     def parse_devPar(self,devPar):
         try:
@@ -230,11 +230,10 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
         return r
                 
     def handle(self):
-        data = self.request[0].strip()
-        socket = self.request[1]
-        printd("{} wrote:".format(self.client_address[0]))
+        data = self.request.recv(1024).strip()
+        print("{} wrote:".format(self.client_address[0]))
         cmd = ubjson.loadb(data)
-        printd(str(cmd))
+        print(str(cmd))
         
         try:
             r = self._reply(cmd)
@@ -242,9 +241,17 @@ class PV_UDPHandler(SocketServer.BaseRequestHandler):
             r = 'ERR. Exception: '+repr(e)
         reply = ubjson.dumpb(r)
         
+        # test
+        dec = ubjson.loadb(reply)
+        if dec != r:
+            printe('ubjson error')
+        else:
+            print('ubjson OK')
+        
         host,port = self.client_address# the port here is temporary
-        printd('sending back %d '%len(reply)+'bytes:\n"'+str(r)+'" to '+str((host,port)))
-        socket.sendto(reply, (host,port))
+        print('sending back %d '%len(reply)+'bytes:\n"')#\
+        #+str(r)+'" to '+str((host,port)))
+        self.request.sendall(reply)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class Server():
@@ -266,8 +273,12 @@ class Server():
                     
         self.host = host if host else ip_address()
         self.port = port
-        self.server = SocketServer.UDPServer((self.host, self.port),
-          PV_UDPHandler)
+        self.server = SocketServer.TCPServer((self.host, self.port),
+          PV_TCPHandler, False)
+        self.server.allow_reuse_address = True
+        self.server.server_bind()
+        self.server.server_activate()
+        print('server created',self.server)
     
     def loop(self):
         print(__version__\

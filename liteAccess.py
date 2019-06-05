@@ -16,6 +16,8 @@ import sys, time, socket, traceback
 Python3 = sys.version_info.major == 3
 import ubjson
 
+UDP = False
+
 #````````````````````````````Globals``````````````````````````````````````````
 socketSize = 1024*64 # 1K ints need 2028 bytes
 #````````````````````````````Helper functions`````````````````````````````````
@@ -39,8 +41,18 @@ class LiteAccess():
         self.sPort = server[1]
         self.lHost = ip_address()
         self.lPort = self.sPort
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
+        self.recvMax = 1024*1024*4
+        if UDP:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
+        else:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                self.sock.connect((self.lHost,self.lPort))
+            except Exception as e:
+                printe('in sock.connect:'+str(e))
+                sys.exit()
+            
         self.timeout = timeout
         self.sock.settimeout(self.timeout)
 
@@ -48,25 +60,36 @@ class LiteAccess():
         self.sock.close()
 
     def _recvfrom(self):
-        data, addr = self.sock.recvfrom(socketSize)
-        printd('received '+str(type(data))+' from '+str(addr)+':')
-        #printd(data.decode())
-        r = ubjson.loadb(data)
-        return r
+        if UDP:
+            data, addr = self.sock.recvfrom(socketSize)
+        else:
+            if True:#try:
+                data = self.sock.recv(self.recvMax)
+                addr = (self.lHost,self.lPort)
+                print('received %i of '%len(data)+str(type(data))+' from '+str(addr)+':')
+                #printd(data.decode())
+                r = ubjson.loadb(data)
+                return r
+            else:#except Exception as e:
+                printw('in sock.recv:'+str(e))
+                return ''
 
     def _execute_cmd(self, cmd):
         printd('executing: '+str(cmd))
         encoded = ubjson.dumpb(cmd)
-        self.sock.sendto(encoded, (self.sHost, self.sPort))
+        if UDP:
+            self.sock.sendto(encoded, (self.sHost, self.sPort))
+        else:
+            self.sock.sendall(encoded)
         try:
             r = self._recvfrom()
         except Exception as e:
             # that could happen if timeout was too small, try once more
             sleepTime= 0.5
             time.sleep(sleepTime)
-            try:
+            if True:#try:
                 r = self._recvfrom()
-            except:
+            else:#except:
                 #msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
                 #  +traceback.format_exc()
                 msg = 'ERROR: no response for '+str(cmd)+' in %.2f'%sleepTime+' s.'

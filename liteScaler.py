@@ -33,12 +33,12 @@ class Scaler(Device):
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name):
-        initials = list((np.random.rand(pargs.nCounters)*1000).round())
-        #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
+        initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
+        print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
         pars = {
           'counters':   PV('R','%i of counters'%len(initials),initials),
           'increments': PV('RW','Increments of the individual counters'\
-          ,[-1.]+[1.]*(pargs.nCounters-1)),
+          ,[-1]+[1]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all counters',[1.]\
           ,opLimits=(0,10)),
           'pause':      PV('RW','Pause all counters',[False]), 
