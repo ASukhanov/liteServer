@@ -7,6 +7,7 @@ import time
 
 MaxChunk = 60000 # UDP max is 65000,
 #MaxChunk = 1500 # UDP max is 65000,
+ChunkSleep = 0.01 # sleep time between chunks, python receiving socket max out at ~5MB/s
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -29,7 +30,8 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
             return
         
         #h,w,d = 2,4,3
-        #h,w,d = 300,400,3
+        #h,w,d = 300,400,3 # OK with RPi
+        #h,w,d = 480,640,3
         h,w,d = 1100,1600,3 # OK, 5.28MB, avg transfer speed 26.1 MB/s
         #h,w,d = 1200,1600,3 # 5.76MB lost chunks at the end
         #h,w,d = 3000,4000,3 # missing packets after 6MB, need 10ms delay
@@ -67,7 +69,7 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
             #    txt = txt[:100]+'...'
             #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
             self.socket.sendto(prefixed, self.client_address)
-            #time.sleep(.01) #10ms is safe for localhost
+            time.sleep(ChunkSleep) #10ms is safe for localhost
         dt = timer()-ts
         print('sending performance: %.1f MB/s'%(1e-6*len(enc)/dt))
         self.server.last_client_address = self.client_address
