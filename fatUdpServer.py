@@ -30,7 +30,8 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
         
         #h,w,d = 2,4,3
         #h,w,d = 300,400,3
-        h,w,d = 1100,1600,3 # OK, 5.28MB, avg transfer speed 26.1 MB/s
+        h,w,d = 480,640,3 # OK with RPi, receiver rate 4.3 MB/s rarely drops packets
+        #h,w,d = 1100,1600,3 # OK, 5.28MB, avg transfer speed 26.1 MB/s
         #h,w,d = 1200,1600,3 # 5.76MB lost chunks at the end
         #h,w,d = 3000,4000,3 # missing packets after 6MB, need 10ms delay
         dout = (np.arange(h*w*d)%256).reshape(h,w,d).astype('uint8')

@@ -30,6 +30,9 @@ pargs = parser.parse_args()
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #sock.settimeout(0.5)
+#sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,1)
+#sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,10*1024*1024)
+#print(sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF))
 
 prefix = 1
 buff = b''
@@ -48,12 +51,18 @@ sock.sendto(data, (pargs.host, pargs.port))
 print('Sent %s'%data)
 
 ts = timer()
+nTries = 1
 while prefix:
     received, addr = sock.recvfrom(chunkSize)
-    if len(received) <= 3:
-        print('EOD',received)
+    if len(received) == 3: # and received == b'EOD':
+        print('EOD',prefix,nTries)
+        if prefix and nTries:
+            print('got EOD, but %i packets are missed, tries#%i'%(prefix,nTries))
+            nTries -= 1
+            continue
         sock.sendto(b'ACK',(pargs.host, pargs.port))
         break 
+    ichunk += 1
     prefix = int.from_bytes(received[:PrefixLength],'big')
     if prevPrefix is None:
         prevPrefix = prefix + 1
@@ -67,7 +76,10 @@ while prefix:
     #print('received %i bytes from %s'%(len(data),addr))
     #print(prefix)
     buff = b''.join([buff,data])
-    ichunk += 1
+
+if prefix == 0:
+    print('Success')
+    sock.sendto(b'ACK',(pargs.host, pargs.port))
 
 '''recvfrom_into()
 # The recvfrom_into() is surprisingly Very slow
