@@ -7,6 +7,7 @@ import time
 
 MaxChunk = 60000 # UDP max is 65000,
 #MaxChunk = 1500 # UDP max is 65000,
+ChunkSleep = 0.010 # to throttle the sender stream to ~5MB/s (safe for receiving python socket on linux
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -68,7 +69,7 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
             #    txt = txt[:100]+'...'
             #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
             self.socket.sendto(prefixed, self.client_address)
-            #time.sleep(.01) #10ms is safe for localhost
+            time.sleep(ChunkSleep) #10ms is safe for localhost
         dt = timer()-ts
         print('sending performance: %.1f MB/s'%(1e-6*len(enc)/dt))
         self.server.last_client_address = self.client_address
