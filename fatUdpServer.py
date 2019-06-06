@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import socketserver
+import socketserver, socket
 import ubjson
 import numpy as np
 from timeit import default_timer as timer
@@ -8,28 +8,37 @@ import time
 MaxChunk = 60000 # UDP max is 65000,
 #MaxChunk = 1500 # UDP max is 65000,
 
+def ip_address():
+    """Platform-independent way to get local host IP address"""
+    return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
+      for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+
 class MyUDPHandler(socketserver.BaseRequestHandler):
     """UDP server for sending large data objects (numpy arrays). 
     Data are encoded using ubjson, splitted into chunks and
     prefixed with the reversed chunk number."""
-
+    
     def handle(self):
         data = self.request[0].strip()
-        socket = self.request[1]
-        print("%s wrote %d bytes"%(self.client_address[0],len(data)))
+        self.socket = self.request[1]
+        #self.last_client_address = self.client_address
+        print("%s wrote %d bytes:%s"%(self.client_address[0],len(data),str(data)))
+        if data == b'ACK':
+            print('Got acknowledge from %s'%self.client_address[0])
+            self.server.last_client_address = None
+            return
         
         #h,w,d = 2,4,3
         #h,w,d = 300,400,3
         h,w,d = 1100,1600,3 # OK, 5.28MB, avg transfer speed 26.1 MB/s
-        #h,w,d = 1200,1600,3 # 5.76MB lost chanks at the end
-        #h,w,d = 3000,4000,3 # missing packets after 6MB, nedd 10ms delay
+        #h,w,d = 1200,1600,3 # 5.76MB lost chunks at the end
+        #h,w,d = 3000,4000,3 # missing packets after 6MB, need 10ms delay
         dout = (np.arange(h*w*d)%256).reshape(h,w,d).astype('uint8')
         #print(dout.max())
         #doutl = dout.tolist()
         #print('doutl',len(doutl),type(doutl[0][0][0]))
         
-        doutb = {'ts':self.timestamp(),'v':{'shape':[h,w,d],'type':'uint8'\
-        ,'b':bytes(dout)}}
+        doutb = {'ts':self.timestamp(),'v':bytes(dout),'shape':[h,w,d],'type':'uint8'}
 
         #````````````````````prepare array for transfer```````````````````````
         ts = timer()
@@ -40,28 +49,54 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
         # encoding of the doutb is fast! 15ms/for 36MB
         enc = ubjson.dumpb(doutb)
         
-        print('encoding of array [%d,%d,%d]'%dout.shape+' took %.6f s'%(timer()-ts)) 
+        dt = timer()-ts
+        print('encoding time of array [%d,%d,%d]'%dout.shape\
+        +' = %.6f s'%dt+'. %.1f MB/s'%(1e-6*len(enc)/dt))
         #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
         
         print('array shape: [%d,%d,%d]'%dout.shape+', %d bytes'%len(enc))
         nChunks = (len(enc)-1)//MaxChunk + 1
+        ts = timer()
         for iChunk in range(nChunks):
             chunk = enc[iChunk*MaxChunk:min((iChunk+1)*MaxChunk,len(enc))]
             prefixInt = nChunks-iChunk - 1
             prefixBytes = (prefixInt).to_bytes(2,'big')
             prefixed = b''.join([prefixBytes,chunk])
-            txt = str(chunk)
-            if len(txt) > 100:
-                txt = txt[:100]+'...'
+            #txt = str(chunk)
+            #if len(txt) > 100:
+            #    txt = txt[:100]+'...'
             #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
-            socket.sendto(prefixed, self.client_address)
-            #time.sleep(.010) #10ms is safe for localhost
+            self.socket.sendto(prefixed, self.client_address)
+            #time.sleep(.01) #10ms is safe for localhost
+        dt = timer()-ts
+        print('sending performance: %.1f MB/s'%(1e-6*len(enc)/dt))
+        self.server.last_client_address = self.client_address
+        print('lc',self.server.last_client_address)
             
     def timestamp(self):
         t = time.time()
         return [int(t),int(1e9*(t%1))]
 
+class Server(socketserver.UDPServer):
+    def __init__(self,hostPort, handler):
+        super().__init__(hostPort, handler)
+        self.handler = handler
+        self.last_client_address = None
+    
+    def service_actions(self):
+        try:
+            #print('last client',self.last_client_address)
+            if self.last_client_address is not None:
+                print('waiting for ACK from '+str(self.last_client_address))
+                self.socket.sendto(b'EOD', self.last_client_address)
+        except Exception as e:
+            print(e)
+
 if __name__ == "__main__":
-    HOST, PORT = "localhost", 9990
-    with socketserver.UDPServer((HOST, PORT), MyUDPHandler) as server:
-        server.serve_forever()
+    HOST, PORT = ip_address(), 9998
+    print('serving at ',HOST, PORT)
+    
+    #with Server((HOST, PORT), MyUDPHandler) as server:
+    server = Server((HOST, PORT), MyUDPHandler)
+    server.serve_forever()
+    
