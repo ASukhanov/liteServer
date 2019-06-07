@@ -17,7 +17,7 @@ import sys, time, socket, traceback
 Python3 = sys.version_info.major == 3
 import ubjson
 
-UDP = False
+UDP = True
 
 #````````````````````````````Globals``````````````````````````````````````````
 socketSize = 1024*64 # 1K ints need 2028 bytes
@@ -35,7 +35,7 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
 class LiteAccess():
-    def __init__(self, server, dbg = False, timeout = 0.1):
+    def __init__(self, server, dbg = False, timeout = None):
         global Dbg
         Dbg = dbg
         self.sHost = server[0]
@@ -49,6 +49,7 @@ class LiteAccess():
             
         #self.timeout = timeout
         #self.sock.settimeout(self.timeout)
+        print('%s client of %s'%(('TCP','UDP')[UDP],str(server)))
 
     def __del__(self):
         self.sock.close()

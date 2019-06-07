@@ -56,6 +56,7 @@ import ubjson
 import threading
 import math
 
+UDP = True
 PORT = 9999# Communication port number
 DevDict = None # forward declaration
 Dbg = False
@@ -177,7 +178,7 @@ class PV():
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
-class PV_TCPHandler(SocketServer.BaseRequestHandler):
+class PV_Handler(SocketServer.BaseRequestHandler):
 
     def parse_devPar(self,devPar):
         try:
@@ -230,7 +231,11 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
         return r
                 
     def handle(self):
-        data = self.request.recv(1024).strip()
+        if UDP:
+            data = self.request[0].strip()
+            socket = self.request[1]
+        else:
+            data = self.request.recv(1024).strip()
         print("{} wrote:".format(self.client_address[0]))
         cmd = ubjson.loadb(data)
         print(str(cmd))
@@ -251,7 +256,10 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
         host,port = self.client_address# the port here is temporary
         print('sending back %d '%len(reply)+'bytes:\n"')#\
         #+str(r)+'" to '+str((host,port)))
-        self.request.sendall(reply)
+        if UDP:
+            socket.sendto(reply, self.client_address)
+        else:
+            self.request.sendall(reply)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class Server():
@@ -263,6 +271,7 @@ class Server():
         dev = [Device('server',{\
           'version': PV('R','liteServer',[__version__]),
           'host':    PV('R','Host name',[socket.gethostname()]),
+          'status':  PV('R','Messages from liteServer',['']),
         })]
         
         # create global dictionary of all devices
@@ -273,16 +282,15 @@ class Server():
                     
         self.host = host if host else ip_address()
         self.port = port
-        self.server = SocketServer.TCPServer((self.host, self.port),
-          PV_TCPHandler, False)
+        s = SocketServer.UDPServer if UDP else SocketServer.TCPServer
+        self.server = s((self.host, self.port), PV_Handler, False)
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
         print('server created',self.server)
     
     def loop(self):
-        print(__version__\
-          +'. Waiting for messages at '+self.host+':'+str(self.port))
+        print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+':'+str(self.port)))
         self.server.serve_forever()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # see liteScalerMan.py liteAccess.py
