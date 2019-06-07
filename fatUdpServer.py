@@ -55,7 +55,7 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
         print('encoding time of array [%d,%d,%d]'%dout.shape\
         +' = %.6f s'%dt+'. %.1f MB/s'%(1e-6*len(enc)/dt))
         #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-        
+        ts = timer()
         print('array shape: [%d,%d,%d]'%dout.shape+', %d bytes'%len(enc))
         nChunks = (len(enc)-1)//MaxChunk + 1
         ts = timer()

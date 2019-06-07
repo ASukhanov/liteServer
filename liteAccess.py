@@ -10,7 +10,8 @@
 #__version__ = 'v08 2019-01-06'# more detailed printing on timeout
 #__version__ = 'v09 2019-01-17'# socket size set to UDP max (64k), timeout 0.1,
 #__version__ = 'v10 2019-02-04'# bug fixed in main
-__version__ = 'v11 2019-05-21'# abridged printing
+#__version__ = 'v11 2019-05-21'# abridged printing
+__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
 
 import sys, time, socket, traceback
 Python3 = sys.version_info.major == 3
@@ -45,16 +46,9 @@ class LiteAccess():
         if UDP:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
-        else:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                self.sock.connect((self.lHost,self.lPort))
-            except Exception as e:
-                printe('in sock.connect:'+str(e))
-                sys.exit()
             
-        self.timeout = timeout
-        self.sock.settimeout(self.timeout)
+        #self.timeout = timeout
+        #self.sock.settimeout(self.timeout)
 
     def __del__(self):
         self.sock.close()
@@ -64,15 +58,17 @@ class LiteAccess():
             data, addr = self.sock.recvfrom(socketSize)
         else:
             if True:#try:
+                r = ''
                 data = self.sock.recv(self.recvMax)
+                self.sock.close()
                 addr = (self.lHost,self.lPort)
-                print('received %i of '%len(data)+str(type(data))+' from '+str(addr)+':')
-                #printd(data.decode())
-                r = ubjson.loadb(data)
-                return r
             else:#except Exception as e:
                 printw('in sock.recv:'+str(e))
-                return ''
+                r = ''
+        printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)+':')
+        #printd(str(data.decode())) # don't print it here, could be utf8 issue
+        r = ubjson.loadb(data)
+        return r
 
     def _execute_cmd(self, cmd):
         printd('executing: '+str(cmd))
@@ -80,6 +76,12 @@ class LiteAccess():
         if UDP:
             self.sock.sendto(encoded, (self.sHost, self.sPort))
         else:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                self.sock.connect((self.lHost,self.lPort))
+            except Exception as e:
+                printe('in sock.connect:'+str(e))
+                sys.exit()
             self.sock.sendall(encoded)
         try:
             r = self._recvfrom()
@@ -102,7 +104,7 @@ class LiteAccess():
             msg = 'liteServer.' + r
             print('ERROR: '+msg)
             raise Exception(msg)
-        printd('decoded: '+str(r))
+        printd('decoded: '+str(r)[:200])
         return r
 
     def ls(self,pvName=[]):

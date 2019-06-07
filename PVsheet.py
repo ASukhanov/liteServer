@@ -15,7 +15,8 @@
 #__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
 #__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
 #TODO 1) discrete parameters, set array
-__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
+#__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
+__version__ = 'v14 2019-06-07' # dbg corrected
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -254,7 +255,7 @@ class Window(QtGui.QWidget):
 #`````````````````````````````````````````````````````````````````````````````
 def MySlot(a):
     """Global redirector of the SignalSourceDataReady"""
-    #print('MySlot received event:'+str(a))
+    printd('MySlot received event:'+str(a))
     if mainWidget is None:
         printe('mainWidget not defined yet')
         return
@@ -528,7 +529,7 @@ if __name__ == '__main__':
 
     import liteAccess
     liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
-    ,dbg=False, timeout=pargs.timeout)
+    ,dbg=pargs.dbg, timeout=pargs.timeout)
 
     app = QtGui.QApplication(sys.argv)
 
