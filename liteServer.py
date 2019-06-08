@@ -101,24 +101,16 @@ class PV():
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
     def __init__(self,features='RW', desc='', values=[0], extra={}):
-        #setter=None,opLimits=None):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
         self.count = [len(self.values)]
         self.features = features
         self.desc = desc
-        self._opLimits = None
+        
         # absorb additional properties
         for prop,obj in extra.items():
-            print('adding extra',prop,obj)
+            print('adding extra'+str((prop,obj)))
             setattr(self,prop,obj)
-        
-        ##self.parent = parent
-        #self._setter = setter
-        #self.opLimits = opLimits
-        #if self.opLimits is not None:
-        #    if not isinstance(self.values[0],(int,float)):
-        #        raise TypeError('opLimits for non-number')
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
@@ -156,9 +148,9 @@ class PV():
             if not self.is_readable():
                 #print('Action treatment')
                 vals = [False]
-                if self._setter is not None:
-                    # call PV setting method
-                    self._setter(self)
+                # call PV setting method
+                try:    self.setter(self)
+                except: pass
             else: # make it boolean 
                 vals = [True] if vals[0] else [False] 
 
@@ -168,11 +160,12 @@ class PV():
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
             + str(type(self.values[0])))
             
-        if self.opLimits is not None:
+        try:
             #print('checking for opLimits')
-            if vals[0] <= self.opLimits[0] or vals[0] >= self.opLimits[1]:
+            if vals[0] <= self._opLimits[0] or vals[0] >= self.opLimits[1]:
                 raise ValueError('out of opLimits '+str(self.opLimits)+': '\
                 + str(vals[0]))
+        except: pass
 
         self.values = vals
         
@@ -192,49 +185,6 @@ class PV_Handler(SocketServer.BaseRequestHandler):
         except:
            raise NameError('Expected dev:par, got '+str(devPar))
         return dev,par
-
-    def _replyOld(self,serverMsg):
-        #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
-        cmd = tostr(serverMsg[0])
-        r = {}
-        if cmd == 'get':
-            for i in serverMsg[1]:
-                devParName = tostr(i)
-                dev,parProp = self.parse_devPar(devParName)
-                pp = parProp.split('.',1)
-                pv = getattr(DevDict[dev],pp[0])
-                if len(pp) == 1:
-                    r[devParName] = pv.get_values()
-                    printd('repl %s:'%devParName\
-                    +str((len(r[devParName]),type(r[devParName]))))
-                else:
-                    v = pv.get_prop(pp[1])
-                    r[devParName] = v
-                printd('get_value():'+str(r)[:200])
-        elif cmd == 'set':
-            dev,par = self.parse_devPar(tostr(serverMsg[1]))
-            pv = getattr(DevDict[dev],par)
-            printd('set:'+str(serverMsg[2]))
-            return pv.set(serverMsg[2])
-        elif cmd == 'ls':
-            if len(serverMsg) == 1:
-                return {'supported devices':[i for i in DevDict]}
-            if len(serverMsg[1]) == 0:
-                return {'supported devices':[i for i in DevDict]}
-            for i in serverMsg[1]:
-                devParName = tostr(i)
-                devPar = devParName.split(':')
-                if len(devPar) == 1:
-                    dev = DevDict[devPar[0]]
-                    r[devPar[0]] = [i for i in vars(dev)\
-                      if not i.startswith('_')]
-                else:
-                    #TODO handle dev:par.feature
-                    pv = getattr(DevDict[devPar[0]],devPar[1])
-                    r[devParName] = pv.info()
-        else:
-            return {'ERR':'Wrong command "'+str(cmd)+'"'}
-        return r
 
     def _reply(self,serverMsg):
         #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
@@ -283,9 +233,9 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             socket = self.request[1]
         else:
             data = self.request.recv(1024).strip()
-        print('Client %s wrote:'%str(self.client_address))
+        printd('Client %s wrote:'%str(self.client_address))
         cmd = ubjson.loadb(data)
-        print(str(cmd))
+        printd(str(cmd))
         
         try:
             r = self._reply(cmd)
@@ -293,17 +243,10 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             r = 'ERR. Exception: '+repr(e)
         reply = ubjson.dumpb(r)
         
-        # test
-        dec = ubjson.loadb(reply)
-        if dec != r:
-            printe('ubjson error')
-        else:
-            print('ubjson OK')
-        
         host,port = self.client_address# the port here is temporary
-        print('sending back %d bytes to %s:'%(len(reply)\
+        printd('sending back %d bytes to %s:'%(len(reply)\
         ,str(self.client_address)))
-        print(str(reply)[:200])
+        printd(str(reply)[:200])
         if UDP:
             socket.sendto(reply, self.client_address)
         else:
@@ -335,7 +278,6 @@ class Server():
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
-        print('server created',self.server)
     
     def loop(self):
         print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+':'+str(self.port)))

@@ -45,19 +45,20 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
     def __init__(self,pv):
         super().__init__()
         self.pv = pv
-        opl = self.pv.opLimits
-        if opl is not None:
+        try:    opl = self.pv.opLimits
+        except: pass
+        else:
             self.setRange(*opl)
             ss = (opl[1]-opl[0])/100.
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
             #print('ss',ss)
             self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
-        print('instantiated',self.pv.title())
+        printd('instantiated %s'%self.pv.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
-        print('changing %s to '%self.pv.title()+str(self.value()))
+        printd('changing %s to '%self.pv.title()+str(self.value()))
         try:
             self.pv.v = self.value()
         except Exception as e:
@@ -204,14 +205,14 @@ class Window(QtGui.QWidget):
 
     def handleCellClicked(self, row,column):
         item = self.table.item(row,column)
-        print('cell clicked[%i,%i]:'%(row,column))#+str(item.text()))
+        printd('cell clicked[%i,%i]:'%(row,column))
         pv = pvTable.pos2obj[row,column]
         if isinstance(pv,str):
             return
         try:
             if pv.is_bool():
                 checked = item.checkState() == QtCore.Qt.Checked
-                print('bool clicked '+pv.name+':'+str(checked))
+                printd('bool clicked '+pv.name+':'+str(checked))
                 pv.v = checked # change server's pv
             else:
                 d = QtGui.QDialog(self)
@@ -272,7 +273,7 @@ def MySlot(a):
                     #print('PV '+pv.name+' is bool = '+str(val))
                     state = window.table.item(*rowCol).checkState()
                     if val[0] != (state != 0):
-                        print('flip')
+                        printd('flip')
                         window.table.item(*rowCol).setCheckState(val[0])
                     continue
                 elif pv.is_spinbox():
@@ -328,15 +329,15 @@ class PV():
         self._spinbox, self._bool = None,None
         
         # creating standard attributes from remote ones
-        attributes = ['count', 'features', 'opLimits']
-        try:
-            for attribute in attributes:
-                v = list(self.access.get([self.name+'.'+attribute]).values())[0]
-                #print('Creating attribute %s.%s = '%(name,attribute)+str(v))
-                setattr(self,attribute,v)
-        except:
-            #print('opLimit = None for '+self.name)
-            self.opLimits = None
+        #attributes = ['count', 'features', 'opLimits',]
+        attributes = list(self.access.ls([self.name]).values())[0]
+        printd('attrs %s'%attributes)
+        for attribute in attributes:
+            if attribute not in ['count', 'features', 'opLimits']:
+                continue
+            v = list(self.access.get([self.name+'.'+attribute]).values())[0]
+            #print('Creating attribute %s.%s = '%(name,attribute)+str(v))
+            setattr(self,attribute,v)
             
     @property
     def v(self):
@@ -353,7 +354,7 @@ class PV():
     @v.setter
     def v(self, value):
         #print('setter of %s'%self.name+' called to change PV to '+str(value))
-        r = self.access.set(self.name,value)
+        r = self.access.set((self.name,value))
         if r:
             printw('could not set %s'%self.name+' to '+str(value))
 
@@ -375,7 +376,7 @@ class PV():
         return self._bool
         
     def is_writable(self):
-        r = list(self.access.get(['%s.features'%self.name]).values())
+        r = list(self.access.get(['%s.features'%self.name]).values())[0]
         return ('W' in r)
     
     def is_spinbox(self):
