@@ -15,7 +15,9 @@
 #__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
 #__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
 #TODO 1) discrete parameters, set array
-__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
+#__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
+#__version__ = 'v14 2019-06-07' # dbg corrected
+__version__ = 'v15 2019-06-07' # 
 
 import threading, socket, subprocess
 #import pyqtgraph as pg
@@ -254,7 +256,7 @@ class Window(QtGui.QWidget):
 #`````````````````````````````````````````````````````````````````````````````
 def MySlot(a):
     """Global redirector of the SignalSourceDataReady"""
-    #print('MySlot received event:'+str(a))
+    printd('MySlot received event:'+str(a))
     if mainWidget is None:
         printe('mainWidget not defined yet')
         return
@@ -329,8 +331,7 @@ class PV():
         attributes = ['count', 'features', 'opLimits']
         try:
             for attribute in attributes:
-                r = self.access.get(self.name+'.'+attribute)
-                v = list(r.values())[0]
+                v = list(self.access.get([self.name+'.'+attribute]).values())[0]
                 #print('Creating attribute %s.%s = '%(name,attribute)+str(v))
                 setattr(self,attribute,v)
         except:
@@ -341,7 +342,7 @@ class PV():
     def v(self):
         # return values and timestamp
         #print('getter of %s called'%self.name)
-        r = self.access.get(self.name)# +'.values')
+        r = self.access.get([self.name])
         if r is None:
             return
         ret = list(r.values())[0]
@@ -374,7 +375,7 @@ class PV():
         return self._bool
         
     def is_writable(self):
-        r = list(self.access.get('%s.features'%self.name).values())
+        r = list(self.access.get(['%s.features'%self.name]).values())
         return ('W' in r)
     
     def is_spinbox(self):
@@ -395,8 +396,7 @@ class PV():
         listOfAttr = list(r.values())[0]
         d = OD()
         for attr in listOfAttr:
-            r = self.access.get('%s.%s'%(self.name,attr))
-            d[attr] = r.values()
+            d[attr] = self.access.get(['%s.%s'%(self.name,attr)]).values()
         return d
 
 class QPushButtonCmd(QtGui.QPushButton):
@@ -447,9 +447,6 @@ class PVTable():
                             action = action[1:]
                             if action == 'launch':
                                 #print('pushButton created with cmd:%s'%cmd)
-                                #does not work in dynamic
-                                #obj = QtGui.QPushButton(txt)
-                                #obj.clicked.connect(lambda: launch(cmd))
                                 obj = QPushButtonCmd(txt,cmd)
                     elif '`' in token: # PV's attribute
                         #print('check for attribute')
@@ -464,7 +461,7 @@ class PVTable():
                         try:
                             obj = PV(token,access)
                         except Exception as e:
-                            printe('Cannot create PV %s'%token)
+                            printe('Cannot create PV %s:'%token+str(e))
                             continue
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
@@ -493,10 +490,12 @@ class PVTable():
         fname = 'pvsheet.tmp'
         #print('>build_temporary_pvfile')
         devices = list(access.ls([]).values())[0]
+        printd('devs:'+str(devices))
         f = open(fname,'w')
         for dev in devices:
             f.write("[,'____Device: %s____',]\n"%dev)
             pars = list(access.ls([dev]).values())[0]
+            printd('pars:'+str(pars))
             for par in pars:
                 devPar = dev+':'+par
                 #print(devPar)
@@ -528,7 +527,7 @@ if __name__ == '__main__':
 
     import liteAccess
     liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
-    ,dbg=False, timeout=pargs.timeout)
+    ,dbg=pargs.dbg, timeout=pargs.timeout)
 
     app = QtGui.QApplication(sys.argv)
 

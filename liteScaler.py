@@ -40,9 +40,10 @@ class Scaler(Device):
           'increments': PV('RW','Increments of the individual counters'\
           ,[-1]+[1]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all counters',[1.]\
-          ,opLimits=(0,10)),
+          ,extra={'opLimits':(0,10)}),
           'pause':      PV('RW','Pause all counters',[False]), 
-          'reset':      PV('W','Reset all counters',[False],setter=self.reset),
+          'reset':      PV('W','Reset all counters',[False]\
+          ,extra={'setter':self.reset}),
         }
         if Python3:
             super().__init__(name,pars)

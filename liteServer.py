@@ -56,6 +56,7 @@ import ubjson
 import threading
 import math
 
+UDP = True
 PORT = 9999# Communication port number
 DevDict = None # forward declaration
 Dbg = False
@@ -99,19 +100,25 @@ class PV():
     The type and count is determined from default values.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW', desc='', values=[0], setter=None\
-    ,opLimits=None):#parent=None):#, name=''):
+    def __init__(self,features='RW', desc='', values=[0], extra={}):
+        #setter=None,opLimits=None):#parent=None):#, name=''):
         #self.name = name # name is not needed, it is keyed in the dictionary
         self.values = values
         self.count = [len(self.values)]
         self.features = features
         self.desc = desc
-        #self.parent = parent
-        self._setter = setter
-        self.opLimits = opLimits
-        if self.opLimits is not None:
-            if not isinstance(self.values[0],(int,float)):
-                raise TypeError('opLimits for non-number')
+        self._opLimits = None
+        # absorb additional properties
+        for prop,obj in extra.items():
+            print('adding extra',prop,obj)
+            setattr(self,prop,obj)
+        
+        ##self.parent = parent
+        #self._setter = setter
+        #self.opLimits = opLimits
+        #if self.opLimits is not None:
+        #    if not isinstance(self.values[0],(int,float)):
+        #        raise TypeError('opLimits for non-number')
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
@@ -122,7 +129,7 @@ class PV():
     def _get_values(self):
         t = time.time()
         ret = [t] + getattr(self,'values')
-        printd('_get_values:'+str(ret))
+        printd('_get_values:'+str(ret)[:200])
         return ret
         
     def get_values(self):
@@ -177,7 +184,7 @@ class PV():
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
-class PV_TCPHandler(SocketServer.BaseRequestHandler):
+class PV_Handler(SocketServer.BaseRequestHandler):
 
     def parse_devPar(self,devPar):
         try:
@@ -186,12 +193,12 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
            raise NameError('Expected dev:par, got '+str(devPar))
         return dev,par
 
-    def _reply(self,items):
-        printd('>_reply [%d'%len(items)+', type:'+str(type(items[0])))
-        action = tostr(items[0])
+    def _replyOld(self,serverMsg):
+        #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
+        cmd = tostr(serverMsg[0])
         r = {}
-        if action == 'get':
-            for i in items[1]:
+        if cmd == 'get':
+            for i in serverMsg[1]:
                 devParName = tostr(i)
                 dev,parProp = self.parse_devPar(devParName)
                 pp = parProp.split('.',1)
@@ -203,18 +210,18 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
                 else:
                     v = pv.get_prop(pp[1])
                     r[devParName] = v
-                printd('get_value():'+str(r))
-        elif action == 'set':
-            dev,par = self.parse_devPar(tostr(items[1]))
+                printd('get_value():'+str(r)[:200])
+        elif cmd == 'set':
+            dev,par = self.parse_devPar(tostr(serverMsg[1]))
             pv = getattr(DevDict[dev],par)
-            printd('set:'+str(items[2]))
-            return pv.set(items[2])
-        elif action == 'ls':
-            if len(items) == 1:
+            printd('set:'+str(serverMsg[2]))
+            return pv.set(serverMsg[2])
+        elif cmd == 'ls':
+            if len(serverMsg) == 1:
                 return {'supported devices':[i for i in DevDict]}
-            if len(items[1]) == 0:
+            if len(serverMsg[1]) == 0:
                 return {'supported devices':[i for i in DevDict]}
-            for i in items[1]:
+            for i in serverMsg[1]:
                 devParName = tostr(i)
                 devPar = devParName.split(':')
                 if len(devPar) == 1:
@@ -226,12 +233,57 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
                     pv = getattr(DevDict[devPar[0]],devPar[1])
                     r[devParName] = pv.info()
         else:
-            return {'ERR':'Wrong command "'+str(action)+'"'}
+            return {'ERR':'Wrong command "'+str(cmd)+'"'}
+        return r
+
+    def _reply(self,serverMsg):
+        #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
+        printd('>_reply')
+        #cmd = tostr(serverMsg[0])
+        cmd,arg = serverMsg['cmd']
+        r = {}
+        if cmd == 'get':
+            for devParName in arg:
+                dev,parProp = self.parse_devPar(devParName)
+                pp = parProp.split('.',1)
+                pv = getattr(DevDict[dev],pp[0])
+                if len(pp) == 1:
+                    r[devParName] = pv.get_values()
+                    printd('repl %s:'%devParName\
+                    +str((len(r[devParName]),type(r[devParName]))))
+                else:
+                    v = pv.get_prop(pp[1])
+                    r[devParName] = v
+                printd('get_value():'+str(r)[:200])
+        elif cmd == 'set':
+            dev,par = self.parse_devPar(arg[0])
+            pv = getattr(DevDict[dev],par)
+            printd('set:'+str(arg[1]))
+            return pv.set(arg[1])
+        elif cmd == 'ls':
+            if len(arg) == 0:
+                return {'supported devices':[i for i in DevDict]}
+            for devParName in arg:
+                devPar = devParName.split(':')
+                if len(devPar) == 1:
+                    dev = DevDict[devPar[0]]
+                    r[devPar[0]] = [i for i in vars(dev)\
+                      if not i.startswith('_')]
+                else:
+                    #TODO handle dev:par.feature
+                    pv = getattr(DevDict[devPar[0]],devPar[1])
+                    r[devParName] = pv.info()
+        else:
+            return {'ERR':'Wrong command "'+str(cmd)+'"'}
         return r
                 
     def handle(self):
-        data = self.request.recv(1024).strip()
-        print("{} wrote:".format(self.client_address[0]))
+        if UDP:
+            data = self.request[0].strip()
+            socket = self.request[1]
+        else:
+            data = self.request.recv(1024).strip()
+        print('Client %s wrote:'%str(self.client_address))
         cmd = ubjson.loadb(data)
         print(str(cmd))
         
@@ -249,9 +301,13 @@ class PV_TCPHandler(SocketServer.BaseRequestHandler):
             print('ubjson OK')
         
         host,port = self.client_address# the port here is temporary
-        print('sending back %d '%len(reply)+'bytes:\n"')#\
-        #+str(r)+'" to '+str((host,port)))
-        self.request.sendall(reply)
+        print('sending back %d bytes to %s:'%(len(reply)\
+        ,str(self.client_address)))
+        print(str(reply)[:200])
+        if UDP:
+            socket.sendto(reply, self.client_address)
+        else:
+            self.request.sendall(reply)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class Server():
@@ -263,6 +319,7 @@ class Server():
         dev = [Device('server',{\
           'version': PV('R','liteServer',[__version__]),
           'host':    PV('R','Host name',[socket.gethostname()]),
+          'status':  PV('R','Messages from liteServer',['']),
         })]
         
         # create global dictionary of all devices
@@ -273,16 +330,15 @@ class Server():
                     
         self.host = host if host else ip_address()
         self.port = port
-        self.server = SocketServer.TCPServer((self.host, self.port),
-          PV_TCPHandler, False)
+        s = SocketServer.UDPServer if UDP else SocketServer.TCPServer
+        self.server = s((self.host, self.port), PV_Handler, False)
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
         print('server created',self.server)
     
     def loop(self):
-        print(__version__\
-          +'. Waiting for messages at '+self.host+':'+str(self.port))
+        print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+':'+str(self.port)))
         self.server.serve_forever()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # see liteScalerMan.py liteAccess.py
