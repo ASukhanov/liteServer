@@ -45,7 +45,7 @@ adoPet liteServer.0
 #__version__ = 'v15 2019-05-31'# count is array 
 #__version__ = 'v16 2019-06-01'# Device 'server' incorporated
 #__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
-__version__ = 'v18 2019-06-09'# numpy array support
+__version__ = 'v19 2019-06-09'# numpy array support
 
 import sys
 import socket
@@ -133,7 +133,7 @@ class PV():
     
     def add_prop(self,prop,parDict={}):
         # add property to parameter dictionary
-        #print('>add_prop',prop,str(parDict)[:60])
+        printd('>add_prop %s'%str((prop,parDict))[:60])
         try:
             # if the parameter is numpy array:
             value = prop[0]
@@ -142,10 +142,10 @@ class PV():
             printd('not numpy, %s'%str(e))
             parDict['values'] = prop
         else:
-            #print('numpy array, add key "numpy"')
+            printd('numpy array %s, add key "numpy"'%str((shape,dtype)))
             parDict['values'] = value.tobytes()
             parDict['numpy'] = shape,dtype
-        printd('_get_values:'+str(parDict)[:200])
+        printd('<add_prop:'+str(parDict)[:200])
         return parDict
 
     def _get_values(self):
