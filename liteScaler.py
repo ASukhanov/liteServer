@@ -8,9 +8,11 @@
 #__version__ = 'v06 2019-01-02'# action parameter is OK
 #__version__ = 'v07 2019-01-08'# super() corrected for python2
 #__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
-__version__ = 'v09 2019-05-21'# version parameter, includes description
+#__version__ = 'v09 2019-05-21'# version parameter, includes description
+#__version__ = 'v10 2019-06-08'# timestamping
+__version__ = 'v11 2019-06-09'# numpy array support
 
-import sys, threading
+import sys, time, threading
 Python3 = sys.version_info.major == 3
 import numpy as np
 
@@ -34,16 +36,19 @@ class Scaler(Device):
     be prefixed with _"""
     def __init__(self,name):
         initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
-        print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
+        #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
+        h,w,p = 120,160,3
+        image = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
         pars = {
           'counters':   PV('R','%i of counters'%len(initials),initials),
           'increments': PV('RW','Increments of the individual counters'\
-          ,[-1]+[1]*(pargs.nCounters-1)),
+                        ,[-1]+[1]*(pargs.nCounters-1)),
           'frequency':  PV('RW','Update frequency of all counters',[1.]\
-          ,extra={'opLimits':(0,10)}),
+                        ,opLimits=(0,10)),
           'pause':      PV('RW','Pause all counters',[False]), 
           'reset':      PV('W','Reset all counters',[False]\
-          ,extra={'setter':self.reset}),
+                        ,setter=self.reset),
+          'image':      PV('R','Image',[image])
         }
         if Python3:
             super().__init__(name,pars)
@@ -66,12 +71,16 @@ class Scaler(Device):
             EventExit.wait(1./self.frequency.values[0])
             if self.pause.values[0]:
                 continue
-            #instance = self._name
-            #printd(instance+': cycle %d'%self._cycle)
-            ns = len(self.counters.values)
+
+            # increment counters individually
             for i,increment in enumerate(self.increments.values[:ns]):
                 #print(instance+': c,i='+str((self.counters.values[i],increment)))
                 self.counters.values[i] += increment
+                self.counters.timestamp = [time.time()]
+                
+            # increment pixels in the image
+            self.image.values[0] = (self.image.values[0] + 1).astype('uint8')
+            
             self._cycle += 1
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

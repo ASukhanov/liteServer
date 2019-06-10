@@ -12,9 +12,11 @@
 #__version__ = 'v10 2019-02-04'# bug fixed in main
 #__version__ = 'v11 2019-05-21'# abridged printing
 #__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
-__version__ = 'v13 2019-06-07'# get(), set() ls()
+#__version__ = 'v13 2019-06-07'# get(), set() ls()
+__version__ = 'v14 2019-06-09'# numpy array support
 
 import sys, os, pwd, time, socket, traceback
+from timeit import default_timer as timer
 Python3 = sys.version_info.major == 3
 import ubjson
 
@@ -71,9 +73,34 @@ class LiteAccess():
                 r = ''
         printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)+':')
         #printd(str(data.decode())) # don't print it here, could be utf8 issue
-        r = ubjson.loadb(data)
-        printd(str(r))
-        return r
+        decoded = ubjson.loadb(data)
+        printd(str(decoded)[:200]+'...')
+        try:
+            parDict = list(decoded.values())[0]
+        except:
+            return decoded
+        if not isinstance(parDict,dict):
+            return decoded
+        #print('parDict',str(parDict)[:200])
+        try: # assume it is numpy array
+            shape,dtype = parDict['numpy']
+        except Exception as e: # it is not numpy array, 
+            #print('not np',e)
+            return decoded # standard stuff timestamp and values, no further conversion
+        
+        # additional decoding of numpy arrays.
+        import numpy as np
+        # this section is fast, 18us for 56Kbytes
+        #shape,dtype = parDict['numpy']
+        parName = list(decoded)[0]
+        ndarray = np.frombuffer(parDict['values'],dtype)
+        # replace values in the decoded dict
+        #converted = {parName}
+        #try: converted = {parName:{'timestamp':parDict['timestamp']}
+        #except: pass
+        #converted['values'] = ndarray.reshape(shape)}}
+        decoded[parName]['values'] = ndarray.reshape(shape)
+        return decoded
 
     def execute_cmd(self, cmd):
         cmd['username'] = self.username
@@ -91,13 +118,13 @@ class LiteAccess():
                 sys.exit()
             self.sock.sendall(encoded)
         if True:#try
-            r = self._recvfrom()
+            decoded = self._recvfrom()
         else:#except Exception as e:
             # that could happen if timeout was too small, try once more
             sleepTime= 0.5
             time.sleep(sleepTime)
             if True:#try:
-                r = self._recvfrom()
+                decoded = self._recvfrom()
             else:#except:
                 #msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
                 #  +traceback.format_exc()
@@ -106,13 +133,15 @@ class LiteAccess():
                 #raise BrokenPipeError('ERROR: '+msg)
                 return
             print('WARNING: timeout %f'%self.timeout+' too small')
-        isText = isinstance(r,str) if Python3 else isinstance(r,unicode)
+        isText = isinstance(decoded,str) if Python3 else isinstance(decoded,unicode)
         if isText:
-            msg = 'from liteServer: ' + r
+            msg = 'from liteServer: ' + decoded
             printe(msg)
             raise Exception(msg)
-        printd('decoded: '+str(r)[:200])
-        return r
+        if Dbg:
+            txt = str(decoded)
+            print('decoded:'+txt[:200]+'...'+txt[-40:])
+        return decoded
 
     def get(self,arg):
         return self.execute_cmd({'cmd':('get',arg)})
@@ -149,7 +178,6 @@ if __name__ == "__main__":
     if len(pargs.par) == 0:
         pargs.ls = True
 
-    from timeit import default_timer as timer
     ts = timer()
     if pargs.ls:
         print(prefix+str(liteAccess.ls(pargs.par)))
@@ -160,15 +188,13 @@ if __name__ == "__main__":
         try:
             par,val = parval.split('=')
         except:
-            # get action
+            # get() action
             d = liteAccess.get(pargs.par)
-            for item,val in d.items():
-                l = len(val)
-                suffix = '} length='+str(l)
-                txt = str(val) if l <= 20 else str(val[:20])[:-1]+',...]'
-                print(prefix+'{'+item+':'+txt+suffix)
+            txt = str(d)
+            if len(txt)>200: txt = txt[:200]+'...'+txt[-40:]
+            print(txt)
         else:
-            # set action
+            # set() action
             try:    val = float(val)
             except: pass
             print(prefix+str(liteAccess.set((par,val))))

@@ -44,7 +44,8 @@ adoPet liteServer.0
 #__version__ = 'v14 2019-05-23'# opLimits
 #__version__ = 'v15 2019-05-31'# count is array 
 #__version__ = 'v16 2019-06-01'# Device 'server' incorporated
-__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
+#__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
+__version__ = 'v18 2019-06-09'# numpy array support
 
 import sys
 import socket
@@ -100,29 +101,56 @@ class PV():
     The type and count is determined from default values.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW', desc='', values=[0], extra={}):
+    def __init__(self,features='RW', desc='', values=[0], opLimits=None\
+        ,setter=None):#, numpy=None):
         #self.name = name # name is not needed, it is keyed in the dictionary
+        self.timestamp = None
         self.values = values
         self.count = [len(self.values)]
         self.features = features
         self.desc = desc
         
-        # absorb additional properties
-        for prop,obj in extra.items():
-            print('adding extra'+str((prop,obj)))
-            setattr(self,prop,obj)
+        # if the parameter is numpy :
+        try:    
+            shape,dtype = values[0].shape, values[0].dtype
+            printd('par is numpy')
+        except: 
+            pass
+        
+        # absorb optional properties
+        self.opLimits = opLimits
+        self.setter = setter
+        #self.numpy = numpy# for numpy array it is: (shape,dtype)
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
 
-    def get_prop(self,prop):
-        return getattr(self,prop)
+    def get_prop(self,propName):
+        #print('>get_prop',propName)
+        prop = self.add_prop(getattr(self,propName))
+        #print('prop',type(prop),len(prop),str(prop)[:60]+'...')
+        return prop
     
+    def add_prop(self,prop,parDict={}):
+        # add property to parameter dictionary
+        #print('>add_prop',prop,str(parDict)[:60])
+        try:
+            # if the parameter is numpy array:
+            value = prop[0]
+            shape,dtype = value.shape, str(value.dtype)
+        except Exception as e:
+            printd('not numpy, %s'%str(e))
+            parDict['values'] = prop
+        else:
+            #print('numpy array, add key "numpy"')
+            parDict['values'] = value.tobytes()
+            parDict['numpy'] = shape,dtype
+        printd('_get_values:'+str(parDict)[:200])
+        return parDict
+
     def _get_values(self):
-        t = time.time()
-        ret = [t] + getattr(self,'values')
-        printd('_get_values:'+str(ret)[:200])
-        return ret
+        parDict = {'timestamp':self.timestamp}
+        return self.add_prop(self.values,parDict)
         
     def get_values(self):
         """Overridable getter"""
@@ -146,11 +174,11 @@ class PV():
             # the action parameter is the boolean one but not reabable
             # it always is False
             if not self.is_readable():
-                #print('Action treatment')
+                print('Action treatment')
                 vals = [False]
                 # call PV setting method
-                try:    self.setter(self)
-                except: pass
+                if self.setter is not None:
+                    self.setter(self) # (self) is important!
             else: # make it boolean 
                 vals = [True] if vals[0] else [False] 
 
@@ -160,12 +188,11 @@ class PV():
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
             + str(type(self.values[0])))
             
-        try:
-            #print('checking for opLimits')
-            if vals[0] <= self._opLimits[0] or vals[0] >= self.opLimits[1]:
+        if self.opLimits is not None:
+            printd('checking for opLimits')
+            if vals[0] <= self.opLimits[0] or vals[0] >= self.opLimits[1]:
                 raise ValueError('out of opLimits '+str(self.opLimits)+': '\
                 + str(vals[0]))
-        except: pass
 
         self.values = vals
         
@@ -173,7 +200,9 @@ class PV():
         raise NotImplementedError('PV Monitor() is not implemented yet')
 
     def info(self):
-        r = [i for i in vars(self) if not i.startswith('_')]
+        # list all members which are not None and not prefixed with '_'
+        r = [i for i in vars(self) 
+          if not (i.startswith('_') or getattr(self,i) is None)]
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
@@ -191,20 +220,23 @@ class PV_Handler(SocketServer.BaseRequestHandler):
         printd('>_reply')
         #cmd = tostr(serverMsg[0])
         cmd,arg = serverMsg['cmd']
-        r = {}
+        returnedDict = {}
         if cmd == 'get':
             for devParName in arg:
                 dev,parProp = self.parse_devPar(devParName)
-                pp = parProp.split('.',1)
-                pv = getattr(DevDict[dev],pp[0])
-                if len(pp) == 1:
-                    r[devParName] = pv.get_values()
-                    printd('repl %s:'%devParName\
-                    +str((len(r[devParName]),type(r[devParName]))))
+                try:
+                    par,prop = parProp.split('.',1)
+                except:
+                    # case: device:parameter
+                    pv = getattr(DevDict[dev],parProp)
+                    returnedDict[devParName] = pv.get_values()
+                    printd('repl %s:'%devParName+str((len(returnedDict[devParName]),type(returnedDict[devParName]))))
                 else:
-                    v = pv.get_prop(pp[1])
-                    r[devParName] = v
-                printd('get_value():'+str(r)[:200])
+                    #print('case: device:parameter.property, %s'%devParName)
+                    pv = getattr(DevDict[dev],par)
+                    v = pv.get_prop(prop)
+                    returnedDict[devParName] = v
+                printd('get_value():'+str(returnedDict)[:200])
         elif cmd == 'set':
             dev,par = self.parse_devPar(arg[0])
             pv = getattr(DevDict[dev],par)
@@ -214,18 +246,27 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             if len(arg) == 0:
                 return {'supported devices':[i for i in DevDict]}
             for devParName in arg:
-                devPar = devParName.split(':')
-                if len(devPar) == 1:
-                    dev = DevDict[devPar[0]]
-                    r[devPar[0]] = [i for i in vars(dev)\
+                try:
+                    dev,par = devParName.split(':')
+                    #print('case: ls(dev:parProp): %s:%s'%(dev,par))
+                    try:
+                        pv = getattr(DevDict[dev],par)
+                        #print('subcase: dev:par')
+                        returnedDict[devParName] = pv.info()
+                    except Exception as e: 
+                        #print('subcase: dev:par.prop %s, %s'%(devParName,e))
+                        par,prop = par.split('.')
+                        #print(dev,par,prop)
+                        pv = getattr(DevDict[dev],par)
+                        returnedDict[devParName] = pv.get_prop(prop)
+                except Exception as e:
+                    #print('case: ls(dev): %s, %s'%(devParName,e))
+                    dev = DevDict[devParName]
+                    returnedDict[devParName] = [i for i in vars(dev)\
                       if not i.startswith('_')]
-                else:
-                    #TODO handle dev:par.feature
-                    pv = getattr(DevDict[devPar[0]],devPar[1])
-                    r[devParName] = pv.info()
         else:
             return {'ERR':'Wrong command "'+str(cmd)+'"'}
-        return r
+        return returnedDict
                 
     def handle(self):
         if UDP:

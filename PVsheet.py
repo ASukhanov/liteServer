@@ -17,9 +17,11 @@
 #TODO 1) discrete parameters, set array
 #__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
 #__version__ = 'v14 2019-06-07' # dbg corrected
-__version__ = 'v15 2019-06-07' # 
+#__version__ = 'v15 2019-06-07' # pv.values is dict
+__version__ = 'v16 2019-06-09'# numpy array support
 
-import threading, socket, subprocess
+import threading, socket, subprocess, sys
+from timeit import default_timer as timer
 #import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 #from PyQt5 import QtCore, QtGui
@@ -66,7 +68,7 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        #print('RightClick at spinbox with PV %s'%self.pv.name)
+        print('RightClick at spinbox with PV %s'%self.pv.name)
         mainWidget.rightClick(self.pv)
         pass
 
@@ -81,7 +83,7 @@ class myTableWidget(QtGui.QTableWidget):
         if button == 2: # right button
             try:
                 pv = pvTable.pos2obj[(row,col)]
-                #print('RightClick at PV %s.'%pv.name)
+                print('RightClick at PV %s.'%pv.name)
                 mainWidget.rightClick(pv)
             except:
                 pass
@@ -235,12 +237,12 @@ class Window(QtGui.QWidget):
             printw('in tableItem.setText:'+str(e))
             
     def rightClick(self,pv):
-        #print('mainWidget. RightClick on %s'%pv.name)
+        print('mainWidget. RightClick on %s'%pv.name)
         d = QtGui.QDialog(self)
         pname = pv.title()
         d.setWindowTitle("Info on PV %s"%pname)
         attributes = pv.attributes()
-        #print('attributes',attributes)
+        print('attributes:%s'%str(attributes)[:100])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
             vv = list(v)[0]
@@ -268,6 +270,7 @@ def MySlot(a):
             continue
         try:
             val = pv.v
+            printd('val:%s'%str(val[:100]))
             if isinstance(val,list):
                 if pv.is_bool():
                     #print('PV '+pv.name+' is bool = '+str(val))
@@ -286,6 +289,8 @@ def MySlot(a):
                 printd('PV '+pv.name+' is text')
                 txt = val
                 #continue
+            elif isinstance(val,np.ndarray):
+                txt = '%s: %s'%(val.shape,str(val))
             else:
                 txt = 'Unknown type of '+pv.name+'='+str(type(val))
             window.table.item(*rowCol).setText(txt)
@@ -340,16 +345,15 @@ class PV():
             setattr(self,attribute,v)
             
     @property
-    def v(self):
-        # return values and timestamp
-        #print('getter of %s called'%self.name)
-        r = self.access.get([self.name])
-        if r is None:
-            return
-        ret = list(r.values())[0]
-        if not isinstance(ret,str):
-            self.t,ret = ret[0], ret[1:]# first item is timestamp
-        return ret # the rest are data
+    def v(self): # getter
+        # return values and store timestamp
+        #printd('getter of %s called'%self.name)
+        #devParDict = self.access.get([self.name])
+        #parDict = list(devParDict.values())[0]
+        parDict = list(self.access.get([self.name]).values())[0]
+        #printd('prop %s'%str(parDict)[:70])
+        self.t = parDict['timestamp']
+        return parDict['values']
 
     @v.setter
     def v(self, value):
@@ -393,7 +397,9 @@ class PV():
         
     def attributes(self):
         """Returns a dictionary of all attributes"""
-        r = self.access.ls(self.name)
+        #print('>=====================================attributes',self.name)
+        r = self.access.ls([self.name])
+        #printd('r',r)
         listOfAttr = list(r.values())[0]
         d = OD()
         for attr in listOfAttr:
@@ -458,7 +464,7 @@ class PVTable():
                         if obj[0] == '[': obj = obj[1:]
                         if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
-                        #print('the "%s" is pv'%token)
+                        printd('the "%s" is pv'%token)
                         try:
                             obj = PV(token,access)
                         except Exception as e:
