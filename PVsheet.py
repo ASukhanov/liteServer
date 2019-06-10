@@ -526,7 +526,7 @@ if __name__ == '__main__':
       help='Port number')
     parser.add_argument('-H','--host',default=ip_address(),nargs='?',
       help='Hostname')
-    parser.add_argument('-t','--timeout',type=float,default=0.1,
+    parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
     #parser.add_argument('pvfile', default='pvsheet.pvs', nargs='?', 
     parser.add_argument('pvfile', nargs='?', 

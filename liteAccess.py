@@ -13,7 +13,8 @@
 #__version__ = 'v11 2019-05-21'# abridged printing
 #__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
 #__version__ = 'v13 2019-06-07'# get(), set() ls()
-__version__ = 'v14 2019-06-09'# numpy array support
+#__version__ = 'v14 2019-06-09'# numpy array support
+__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
 
 import sys, os, pwd, time, socket, traceback
 from timeit import default_timer as timer
@@ -52,9 +53,10 @@ class LiteAccess():
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
             
-        #self.timeout = timeout
-        #self.sock.settimeout(self.timeout)
-        print('%s client of %s'%(('TCP','UDP')[UDP],str(server)))
+        self.timeout = timeout
+        self.sock.settimeout(self.timeout)
+        print('%s client of %s, timeout %s'
+        %(('TCP','UDP')[UDP],str(server),str(timeout)))
 
     def __del__(self):
         self.sock.close()
@@ -167,7 +169,7 @@ if __name__ == "__main__":
       help='Hostname')
     parser.add_argument('-l','--ls',action='store_true',help='List of devices,parameters or features')
     parser.add_argument('-s','--set',action='store_true',help='Set parameter')
-    parser.add_argument('-t','--timeout',type=float,default=0.1,
+    parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
     parser.add_argument('par',help='',nargs='*')
     pargs = parser.parse_args()
