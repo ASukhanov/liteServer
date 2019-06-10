@@ -18,7 +18,8 @@
 #__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
 #__version__ = 'v14 2019-06-07' # dbg corrected
 #__version__ = 'v15 2019-06-07' # pv.values is dict
-__version__ = 'v16 2019-06-09'# numpy array support
+#__version__ = 'v16 2019-06-09'# numpy array support
+__version__ = 'v18 2019-06-09'# spinbox fixed
 
 import threading, socket, subprocess, sys
 from timeit import default_timer as timer
@@ -47,20 +48,19 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
     def __init__(self,pv):
         super().__init__()
         self.pv = pv
-        try:    opl = self.pv.opLimits
+        try:    opl = self.pv.opLimits['values']
         except: pass
         else:
             self.setRange(*opl)
             ss = (opl[1]-opl[0])/100.
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
-            #print('ss',ss)
             self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
-        printd('instantiated %s'%self.pv.title())
+        #print('instantiated %s'%self.pv.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
-        printd('changing %s to '%self.pv.title()+str(self.value()))
+        #print('changing %s to '%self.pv.title()+str(self.value()))
         try:
             self.pv.v = self.value()
         except Exception as e:
@@ -380,11 +380,13 @@ class PV():
         return self._bool
         
     def is_writable(self):
-        r = list(self.access.get(['%s.features'%self.name]).values())[0]
-        return ('W' in r)
+        key = '%s.features'%self.name
+        r = self.access.get([key])
+        return ('W' in r[key]['values'])
     
     def is_spinbox(self):
         if self._spinbox is not None:
+            #print('is_spinbox %s'%str(self._spinbox))
             return self._spinbox
         self._spinbox = False
         if self.is_writable():
