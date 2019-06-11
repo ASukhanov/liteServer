@@ -45,19 +45,26 @@ adoPet liteServer.0
 #__version__ = 'v15 2019-05-31'# count is array 
 #__version__ = 'v16 2019-06-01'# Device 'server' incorporated
 #__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
-__version__ = 'v19 2019-06-09'# numpy array support
+#__version__ = 'v19 2019-06-09'# numpy array support
+__version__ = 'v20 2019-06-10'# UDP Acknowledge
 
 import sys
 import socket
 #import SocketServer# for python2
 import socketserver as SocketServer# for python3
 import time
+from timeit import default_timer as timer
 from collections import OrderedDict as OD
 import ubjson
 import threading
 import math
 
 UDP = True
+MaxChunk = 60000
+PrefixLength = 2
+ChunkSleep = 0
+MaxEOD = 4
+
 PORT = 9999# Communication port number
 DevDict = None # forward declaration
 Dbg = False
@@ -77,6 +84,27 @@ def ip_address():
 
 def tostr(item):
     return item if isinstance(item,str) else item.decode()
+
+def sendUdp(buf,socket,addr):
+    # send buffer via UDP socked, chopping it to smaller chunks
+    lbuf = len(buf)
+    printd('>sendUdp %i bytes'%lbuf)
+    ts = timer()
+    nChunks = (lbuf-1)//MaxChunk + 1
+    for iChunk in range(nChunks):
+        chunk = buf[iChunk*MaxChunk:min((iChunk+1)*MaxChunk,lbuf)]
+        prefixInt = nChunks-iChunk - 1
+        prefixBytes = (prefixInt).to_bytes(PrefixLength,'big')
+        prefixed = b''.join([prefixBytes,chunk])
+        #txt = str(chunk)
+        #if len(txt) > 100:
+        #    txt = txt[:100]+'...'
+        #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
+        socket.sendto(prefixed, addr)
+        time.sleep(ChunkSleep)
+    dt = timer()-ts
+    if lbuf > 1000:
+        print('sent %i bytes, perf: %.1f MB/s'%(lbuf,1e-6*len(buf)/dt))
 
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
@@ -272,6 +300,10 @@ class PV_Handler(SocketServer.BaseRequestHandler):
         if UDP:
             data = self.request[0].strip()
             socket = self.request[1]
+            if data == b'ACK':
+                printd('Got ACK from %s'%str(self.client_address))
+                del self.server.ackCounts[(socket,self.client_address)]
+                return
         else:
             data = self.request.recv(1024).strip()
         printd('Client %s wrote:'%str(self.client_address))
@@ -288,12 +320,37 @@ class PV_Handler(SocketServer.BaseRequestHandler):
         printd('sending back %d bytes to %s:'%(len(reply)\
         ,str(self.client_address)))
         printd(str(reply)[:200])
+
         if UDP:
-            socket.sendto(reply, self.client_address)
+            sendUdp(reply, socket, self.client_address)
+            # initiate the sending of EOD to that client
+            self.server.ackCounts[(socket,self.client_address)] = MaxEOD
         else:
             self.request.sendall(reply)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
+class myUDPServer(SocketServer.UDPServer):
+    """Subclass the UDPServer to override the service_actions()"""
+    def __init__(self,hostPort, handler):
+        super().__init__(hostPort, handler, False)
+        #self.handler = handler
+        self.ackCounts = {}
+
+    def service_actions(self):
+        """service_actions() called by server periodically (0.5s)"""
+        #print('ackCounts: %s'%str(self.ackCounts))
+        
+        for sockAddr,ackCount in self.ackCounts.items():
+            sock,addr = sockAddr
+            if ackCount == 0:
+                printw('No ACK from %s'%str(addr))
+                del self.ackCounts[sockAddr]
+                return
+            # keep sending EODs to that client
+            printd('waiting for ACK%i from '%ackCount+str(addr))
+            self.ackCounts[sockAddr] -= 1
+            sock.sendto(b'\x00\x00',addr)
+            
 class Server():
     def __init__(self,devices,host=None,port=PORT,dbg=False):
         global DevDict, Dbg
@@ -314,11 +371,13 @@ class Server():
                     
         self.host = host if host else ip_address()
         self.port = port
-        s = SocketServer.UDPServer if UDP else SocketServer.TCPServer
-        self.server = s((self.host, self.port), PV_Handler, False)
+        s = myUDPServer if UDP else SocketServer.TCPServer
+        self.server = s((self.host, self.port), PV_Handler)#, False)
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
+
+    
     
     def loop(self):
         print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+':'+str(self.port)))

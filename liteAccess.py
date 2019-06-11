@@ -14,7 +14,8 @@
 #__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
 #__version__ = 'v13 2019-06-07'# get(), set() ls()
 #__version__ = 'v14 2019-06-09'# numpy array support
-__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
+#__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
+__version__ = 'v16 2019-06-10'# UDP Acknowledge
 
 import sys, os, pwd, time, socket, traceback
 from timeit import default_timer as timer
@@ -22,6 +23,7 @@ Python3 = sys.version_info.major == 3
 import ubjson
 
 UDP = True
+PrefixLength = 2
 
 #````````````````````````````Globals``````````````````````````````````````````
 socketSize = 1024*64 # 1K ints need 2028 bytes
@@ -37,6 +39,16 @@ def ip_address():
     """Platform-independent way to get local host IP address"""
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+
+def recvUdp(socket,socketSize):
+    """Receive chopped UDP message"""
+    data = None
+    while True:
+        buf, addr = socket.recvfrom(socketSize)
+        if len(buf) == 2: #EOD detected
+            break
+        data = buf[PrefixLength:]   
+    return data, addr
 
 class LiteAccess():
     def __init__(self, server, dbg = False, timeout = None):
@@ -63,7 +75,11 @@ class LiteAccess():
 
     def _recvfrom(self):
         if UDP:
-            data, addr = self.sock.recvfrom(socketSize)
+            #data, addr = self.sock.recvfrom(socketSize)
+            data, addr = recvUdp(self.sock,socketSize)
+            # acknowledge the receiving
+            self.sock.sendto(b'ACK', (self.sHost, self.sPort))
+            printd('ACK sent to '+str((self.sHost, self.sPort)))
         else:
             if True:#try:
                 r = ''
