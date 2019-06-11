@@ -15,7 +15,8 @@
 #__version__ = 'v13 2019-06-07'# get(), set() ls()
 #__version__ = 'v14 2019-06-09'# numpy array support
 #__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
-__version__ = 'v16 2019-06-10'# UDP Acknowledge
+#__version__ = 'v16 2019-06-10'# UDP Acknowledge
+__version__ = 'v17 2019-06-11'# chunking OK
 
 import sys, os, pwd, time, socket, traceback
 from timeit import default_timer as timer
@@ -23,7 +24,7 @@ Python3 = sys.version_info.major == 3
 import ubjson
 
 UDP = True
-PrefixLength = 2
+PrefixLength = 4
 
 #````````````````````````````Globals``````````````````````````````````````````
 socketSize = 1024*64 # 1K ints need 2028 bytes
@@ -43,11 +44,26 @@ def ip_address():
 def recvUdp(socket,socketSize):
     """Receive chopped UDP message"""
     data = None
+    chunk = {}
     while True:
-        buf, addr = socket.recvfrom(socketSize)
-        if len(buf) == 2: #EOD detected
+        buf, addr = socket.recvfrom(socketSize)        
+        size = len(buf) - PrefixLength
+        if size <= 0: #EOD detected
+            #print('EOD detected')
             break
-        data = buf[PrefixLength:]   
+        offset = int.from_bytes(buf[:PrefixLength],'big')
+        #print('chunk',offset,size)
+        chunk[offset] = size,buf[PrefixLength:]
+    # assemble all chunks
+    data = bytearray()
+    l = list(chunk.items())
+    l.reverse()
+    for offset,sizeBuf in l:
+        size,buf = sizeBuf
+        #print('assembled offset,size',offset,size)
+        data += buf
+    #print('assembled %i bytes'%len(data))
+    #print(str(data)[:200]+'...'+str(data)[-60:])
     return data, addr
 
 class LiteAccess():

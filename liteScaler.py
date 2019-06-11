@@ -37,7 +37,9 @@ class Scaler(Device):
     def __init__(self,name):
         initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
         #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
-        h,w,p = 120,160,3
+        #h,w,p = 120,160,3
+        #h,w,p = 2000,3000,3 #works on localhost with 1ms delay 50MB/s
+        h,w,p = 960,1280,3 # OK on localhost with 60K chunks and 1ms delay, server busy 200%
         image = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
         pars = {
           'counters':   PV('R','%i of counters'%len(initials),initials),
@@ -79,7 +81,8 @@ class Scaler(Device):
                 self.counters.timestamp = [time.time()]
                 
             # increment pixels in the image
-            self.image.values[0] = (self.image.values[0] + 1).astype('uint8')
+            # this is very time consuming:
+            #self.image.values[0] = (self.image.values[0] + 1).astype('uint8')
             
             self._cycle += 1
         print('Scaler '+self._name+' exit')

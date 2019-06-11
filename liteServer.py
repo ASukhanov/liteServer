@@ -46,7 +46,9 @@ adoPet liteServer.0
 #__version__ = 'v16 2019-06-01'# Device 'server' incorporated
 #__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
 #__version__ = 'v19 2019-06-09'# numpy array support
-__version__ = 'v20 2019-06-10'# UDP Acknowledge
+#__version__ = 'v20 2019-06-10'# UDP Acknowledge
+#__version__ = 'v20 2019-06-10'# framing works 
+__version__ = 'v21 2019-06-10'# chunking OK
 
 import sys
 import socket
@@ -60,9 +62,11 @@ import threading
 import math
 
 UDP = True
-MaxChunk = 60000
-PrefixLength = 2
-ChunkSleep = 0
+ChunkSize = 60000
+#ChunkSize = 10000
+PrefixLength = 4
+ChunkSleep = 0.001 # works on localhost, 50MB/s, GUI not responsive
+
 MaxEOD = 4
 
 PORT = 9999# Communication port number
@@ -88,12 +92,14 @@ def tostr(item):
 def sendUdp(buf,socket,addr):
     # send buffer via UDP socked, chopping it to smaller chunks
     lbuf = len(buf)
-    printd('>sendUdp %i bytes'%lbuf)
+    #print('>sendUdp %i bytes'%lbuf)
     ts = timer()
-    nChunks = (lbuf-1)//MaxChunk + 1
-    for iChunk in range(nChunks):
-        chunk = buf[iChunk*MaxChunk:min((iChunk+1)*MaxChunk,lbuf)]
-        prefixInt = nChunks-iChunk - 1
+    nChunks = (lbuf-1)//ChunkSize + 1
+    # send chunks in backward order
+    for iChunk in range(nChunks-1,-1,-1):
+        chunk = buf[iChunk*ChunkSize:min((iChunk+1)*ChunkSize,lbuf)]
+        prefixInt = iChunk*ChunkSize
+        #print('pi',prefixInt)
         prefixBytes = (prefixInt).to_bytes(PrefixLength,'big')
         prefixed = b''.join([prefixBytes,chunk])
         #txt = str(chunk)
@@ -349,7 +355,7 @@ class myUDPServer(SocketServer.UDPServer):
             # keep sending EODs to that client
             printd('waiting for ACK%i from '%ackCount+str(addr))
             self.ackCounts[sockAddr] -= 1
-            sock.sendto(b'\x00\x00',addr)
+            sock.sendto(b'\x00\x00\x00\x00',addr)
             
 class Server():
     def __init__(self,devices,host=None,port=PORT,dbg=False):
