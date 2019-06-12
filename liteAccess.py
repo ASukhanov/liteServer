@@ -45,6 +45,7 @@ def recvUdp(socket,socketSize):
     """Receive chopped UDP data"""
     chunks = []
     tryMore = 5
+    ts = timer()
     while tryMore:
         buf, addr = socket.recvfrom(socketSize)        
         size = len(buf) - PrefixLength
@@ -75,6 +76,7 @@ def recvUdp(socket,socketSize):
         if allAssembled:
             break
         tryMore -= 1
+    ts1 = timer()
         
     if not allAssembled:
         raise BufferError('Partial assembly of %i frames'%len(chunks))
@@ -84,7 +86,10 @@ def recvUdp(socket,socketSize):
     for offset,size,buf in chunks:
         printd('assembled offset,size '+str((offset,size)))
         data += buf
-
+    tf = timer()
+    if len(data) > 500000:
+        print('received %i bytes in %.3fs, assembled in %.6fs'\
+        %(len(data),ts1-ts,tf-ts1))
     printd('assembled %i bytes'%len(data))
     #print(str(data)[:200]+'...'+str(data)[-60:])
     return data, addr
