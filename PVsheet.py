@@ -304,7 +304,6 @@ class PVMonitor(QtCore.QThread):
     def __init__(self):
         # for signal/slot paradigm we need to call the parent init
         super(PVMonitor,self).__init__()
-        self.eventNumber = 0
         #...
         thread = threading.Thread(target=self.thread_proc)
         thread.start()
@@ -313,11 +312,8 @@ class PVMonitor(QtCore.QThread):
     def thread_proc(self):
         printd('>thread_proc')
         while not EventExit.isSet():
-            EventExit.wait(1)
-            #self.eventNumber += 1
-            #a = self.eventNumber,self.eventNumber**2
-            #print('proc',EventExit.isSet(),self.eventNumber,a)
             self.callback(None)
+            EventExit.wait(2)
         print('<thread_proc')
 
     def callback(self,*args):

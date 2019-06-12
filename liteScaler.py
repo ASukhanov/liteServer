@@ -34,13 +34,16 @@ class Scaler(Device):
     """ Derived from liteServer.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
-    def __init__(self,name):
+    def __init__(self,name,bigImage=False):
         initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
         #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
-        #h,w,p = 120,160,3
-        #h,w,p = 2000,3000,3 #works on localhost with 1ms delay 50MB/s
-        h,w,p = 960,1280,3 # OK on localhost with 60K chunks and 1ms delay, server busy 200%
-        image = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
+        h,w,p = 120,160,3
+        smallImg = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
+        #h,w,p = 2000,3000,3 #works on localhost with 1ms delay 50MB/s, server busy 200%
+        #h,w,p = 960,1280,3 # 3.6 MB, OK on localhost with 60K chunks and 1ms delay
+        h,w,p = 480,640,3 # 0.9 MB, OK on localhost with 60K chunks
+        bigImg = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
+        img = bigImg if bigImage else smallImg    
         pars = {
           'counters':   PV('R','%i of counters'%len(initials),initials),
           'increments': PV('RW','Increments of the individual counters'\
@@ -50,7 +53,7 @@ class Scaler(Device):
           'pause':      PV('RW','Pause all counters',[False]), 
           'reset':      PV('W','Reset all counters',[False]\
                         ,setter=self.reset),
-          'image':      PV('R','Image',[image])
+          'image':      PV('R','Image',[img])
         }
         if Python3:
             super().__init__(name,pars)
@@ -84,6 +87,8 @@ class Scaler(Device):
             # this is very time consuming:
             #self.image.values[0] = (self.image.values[0] + 1).astype('uint8')
             
+            self.image.values[0][0,0,0] = self._cycle
+            
             self._cycle += 1
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -100,7 +105,7 @@ pargs = parser.parse_args()
 
 devices = [
   Scaler('dev1'),
-  Scaler('dev2'),
+  Scaler('dev2',bigImage=True),
 ]
 
 print('Serving:'+str([dev._name for dev in devices]))

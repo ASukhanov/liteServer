@@ -42,27 +42,50 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
 def recvUdp(socket,socketSize):
-    """Receive chopped UDP message"""
-    data = None
-    chunk = {}
-    while True:
+    """Receive chopped UDP data"""
+    chunks = []
+    tryMore = 5
+    while tryMore:
         buf, addr = socket.recvfrom(socketSize)        
         size = len(buf) - PrefixLength
-        if size <= 0: #EOD detected
-            #print('EOD detected')
-            break
         offset = int.from_bytes(buf[:PrefixLength],'big')
-        #print('chunk',offset,size)
-        chunk[offset] = size,buf[PrefixLength:]
-    # assemble all chunks
+        if size > 0:
+            printd('chunk received '+str((offset,size)))
+            chunks.append((offset,size,buf[PrefixLength:]))
+            continue
+        printd('EOD detected')
+        # check for holes
+        chunks = sorted(chunks)
+        prev = None
+        allAssembled = True
+        for offset,size,buf in chunks:
+            printd('check offset,size:'+str((offset,size)))
+            if prev == None:
+                prev = offset,size
+                continue
+            if prev[0] + prev[1] == offset:
+                prev = offset,size
+                continue
+            printw('hole [%i] in the assembly chain @%i, re-request'\
+            %prev)
+            cmd = {'cmd':('retransmit',prev)}
+            socket.sendto(ubjson.dumpb(cmd),addr)
+            allAssembled = False
+            break
+        if allAssembled:
+            break
+        tryMore -= 1
+        
+    if not allAssembled:
+        raise BufferError('Partial assembly of %i frames'%len(chunks))
+
     data = bytearray()
-    l = list(chunk.items())
-    l.reverse()
-    for offset,sizeBuf in l:
-        size,buf = sizeBuf
-        #print('assembled offset,size',offset,size)
+    chunks = sorted(chunks)
+    for offset,size,buf in chunks:
+        printd('assembled offset,size '+str((offset,size)))
         data += buf
-    #print('assembled %i bytes'%len(data))
+
+    printd('assembled %i bytes'%len(data))
     #print(str(data)[:200]+'...'+str(data)[-60:])
     return data, addr
 
