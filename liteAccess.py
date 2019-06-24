@@ -1,5 +1,50 @@
 #!/usr/bin/env python3
-"""Base class for accessing Process Variables, served by a liteServer."""
+"""Base class for accessing multiple Process Variables, served by a liteServer.
+Usage:
+
+Create access to multiple PVs:
+  pvs = liteAccess.PV(['host;port',['dev1','dev2'...],['par1','par2'...]])
+  # This will create an access object for PVs: dev1,par1; dev2,par2,; etc...
+  # Note 1, the bracket can be omitted when accessing single item.
+  # Note 2, all elements can be addressed using empty string: ''
+  # The 'host;port'='' refers to the local host.
+  # Examples:
+  liteAccess.PV(['hostname']): list of all devices on a host
+  liteAccess.PV(['']):  list of all devices on local host
+  single_PV_on_local_host = liteAccess.PV(['','server','version'])
+  versions_of dev1_and_dev2_on_acnlin23 = liteAccess.PV(['acnlinec23',['dev1','dev2'],'version'])
+  all_PVs_of_the_dev1_and_dev2 = liteAccess.PV(['acnlinec23',['dev1','dev2'],''])
+
+Information about PVs:
+  pvs.info(): returns dictionary with properties of associated PVs
+  pvs.info(['prop1','prop2',...]): returns dictionary with particualr properties
+                                  of associated PVs
+  # Note, the info() does not returns values.
+  # Examples:
+  pvs.info(['count','features'])
+  
+Get values of the associated PVs:
+  pvs.value: represent values of the associated PVs.
+  Supported types: int, float, str, list, dict and numpy.ndarray
+  
+  # Example:
+  print(str(multiple_PV_on_acnlin23.value))
+  
+Change value of a PV:
+  pvs.value = new_value
+
+Command line usage examples:
+liteAccess.py -i            # list all device and parameters on local host
+liteAccess.py -i ::         # same
+liteAccess.py -i acnlin23:: # same on host 'acnlin23'
+liteAccess.py -i :server:   # show info of all parameter os device 'server'
+liteAccess.py -i :dev1:     # show info of all parameter os device 'dev1'
+liteAccess.py :dev1:frequency # get dev1:frequency
+liteAccess.py :dev2:counters # get array of counters of dev1
+liteAccess.py :dev2:image   # get numpy array of an image
+liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
+
+"""
 #__version__ = 'v01 2018-12-17'# created
 #__version__ = 'v02 2018-12-17'# python3 compatible
 #__version__ = 'v03 2018-12-19'#
@@ -12,22 +57,24 @@
 #__version__ = 'v10 2019-02-04'# bug fixed in main
 #__version__ = 'v11 2019-05-21'# abridged printing
 #__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
-#__version__ = 'v13 2019-06-07'# get(), set() ls()
+#__version__ = 'v13 2019-06-07'# get(), set() info()
 #__version__ = 'v14 2019-06-09'# numpy array support
 #__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
 #__version__ = 'v16 2019-06-10'# UDP Acknowledge
-__version__ = 'v17 2019-06-11'# chunking OK
+#__version__ = 'v17 2019-06-11'# chunking OK
+__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
 
 import sys, os, pwd, time, socket, traceback
 from timeit import default_timer as timer
 Python3 = sys.version_info.major == 3
 import ubjson
 
+#````````````````````````````Globals``````````````````````````````````````````
 UDP = True
 PrefixLength = 4
-
-#````````````````````````````Globals``````````````````````````````````````````
-socketSize = 1024*64 # 1K ints need 2028 bytes
+timeout = None # for socket operations. means blocking None
+socketSize = 1024*64 # max size of UDP transfer
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Helper functions`````````````````````````````````
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
@@ -88,18 +135,32 @@ def recvUdp(socket,socketSize):
         data += buf
     tf = timer()
     if len(data) > 500000:
-        print('received %i bytes in %.3fs, assembled in %.6fs'\
+        printd('received %i bytes in %.3fs, assembled in %.6fs'\
         %(len(data),ts1-ts,tf-ts1))
     printd('assembled %i bytes'%len(data))
     #print(str(data)[:200]+'...'+str(data)[-60:])
     return data, addr
 
-class LiteAccess():
-    def __init__(self, server, dbg = False, timeout = None):
-        global Dbg
-        Dbg = dbg
-        self.sHost = server[0]
-        self.sPort = server[1]
+def parsePVname(txt):
+    try:    hostPort,dev,parProp = txt.split(':')
+    except:
+        raise NameError('PV access should be: host;port:dev:par')
+    pp = parProp.split('.')
+    try:    par,props = pp
+    except: 
+        par = pp[0]
+        props = ''
+    return  hostPort,dev,par,props  
+
+class Channel():
+    '''Provides connection to host'''
+    def __init__(self,hostPort):
+        self.hostPort = hostPort
+        hp = self.hostPort.split(';',1)
+        self.sHost = hp[0]
+        if self.sHost == '': self.sHost = ip_address()
+        try:    self.sPort = int(hp[1])
+        except: self.sPort = 9700
         self.lHost = ip_address()
         self.lPort = self.sPort
         self.recvMax = 1024*1024*4
@@ -108,19 +169,16 @@ class LiteAccess():
         if UDP:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
-            
-        self.timeout = timeout
-        self.sock.settimeout(self.timeout)
+            self.sock.settimeout(timeout)
         print('%s client of %s, timeout %s'
-        %(('TCP','UDP')[UDP],str(server),str(timeout)))
+        %(('TCP','UDP')[UDP],str((self.sHost,self.sPort)),str(timeout)))
 
-    def __del__(self):
-        self.sock.close()
-
-    def _recvfrom(self):
+    def recvDictio(self):
         if UDP:
             #data, addr = self.sock.recvfrom(socketSize)
+            printd('>recvUdp')
             data, addr = recvUdp(self.sock,socketSize)
+            printd('<recvUdp')
             # acknowledge the receiving
             self.sock.sendto(b'ACK', (self.sHost, self.sPort))
             printd('ACK sent to '+str((self.sHost, self.sPort)))
@@ -138,37 +196,37 @@ class LiteAccess():
         decoded = ubjson.loadb(data)
         printd(str(decoded)[:200]+'...')
         try:
+            # assume the dictionary is ordered, take the first value
             parDict = list(decoded.values())[0]
         except:
             return decoded
         if not isinstance(parDict,dict):
             return decoded
-        #print('parDict',str(parDict)[:200])
         try: # assume it is numpy array
             shape,dtype = parDict['numpy']
         except Exception as e: # it is not numpy array, 
             #print('not np',e)
-            return decoded # standard stuff timestamp and values, no further conversion
+            return decoded # standard stuff timestamp and value, no further conversion
         
         # additional decoding of numpy arrays.
         import numpy as np
         # this section is fast, 18us for 56Kbytes
         #shape,dtype = parDict['numpy']
         parName = list(decoded)[0]
-        ndarray = np.frombuffer(parDict['values'],dtype)
-        # replace values in the decoded dict
+        ndarray = np.frombuffer(parDict['value'],dtype)
+        # replace value in the decoded dict
         #converted = {parName}
         #try: converted = {parName:{'timestamp':parDict['timestamp']}
         #except: pass
-        #converted['values'] = ndarray.reshape(shape)}}
-        decoded[parName]['values'] = ndarray.reshape(shape)
+        #converted['value'] = ndarray.reshape(shape)}}
+        decoded[parName]['value'] = ndarray.reshape(shape)
         return decoded
 
-    def execute_cmd(self, cmd):
-        cmd['username'] = self.username
-        cmd['program'] = self.program
-        printd('executing: '+str(cmd))
-        encoded = ubjson.dumpb(cmd)
+    def sendDictio(self,dictio):
+        printd('executing: '+str(dictio))
+        dictio['username'] = self.username
+        dictio['program'] = self.program
+        encoded = ubjson.dumpb(dictio)
         if UDP:
             self.sock.sendto(encoded, (self.sHost, self.sPort))
         else:
@@ -179,14 +237,54 @@ class LiteAccess():
                 printe('in sock.connect:'+str(e))
                 sys.exit()
             self.sock.sendall(encoded)
+    
+channels = {} # map of channels
+
+class PV():
+    def __init__(self, hostDevsPars, timeout = None, dbg = False):
+        global Dbg
+        Dbg = dbg
+        
+        # check for argument validity
+        expectedArg = "(['host;port',['dev1','dev2'...],['par1','par2'...]])"
+        def expectedArgWrong():
+            raise NameError('Expected arg should be: '+expectedArg)
+        if len(hostDevsPars) == 1:
+            hostDevsPars += [[''],['']]
+        if len(hostDevsPars) == 2:
+            hostDevsPars += [['']]
+        try:    hostPort, self.devs, self.pars = hostDevsPars
+        except: expectedArgWrong()
+        if not isinstance(hostPort,str): 
+            expectedArgWrong()
+        if not isinstance(self.devs,list):
+            self.devs = [self.devs]
+        if not all(isinstance(i,str) for i in self.devs): 
+            expectedArgWrong()
+        if not isinstance(self.pars,list):
+            self.pars = [self.pars]
+        if not all(isinstance(i,str) for i in self.pars):
+            expectedArgWrong()
+                
+        self.name = str(self.devs)+':'+str(self.pars) # used for diagnostics
+        try: self.channel = channels[hostPort]
+        except:
+             self.channel = Channel(hostPort)
+             channels[hostPort] = self.channel
+
+    #def __del__(self):
+    #    self.sock.close()
+
+    def execute_cmd(self, cmd):
+        self.channel.sendDictio(cmd)
         if True:#try
-            decoded = self._recvfrom()
+            decoded = self.channel.recvDictio()
         else:#except Exception as e:
             # that could happen if timeout was too small, try once more
             sleepTime= 0.5
             time.sleep(sleepTime)
             if True:#try:
-                decoded = self._recvfrom()
+                decoded = self.channel.recvDictio()
             else:#except:
                 #msg = 'ERROR: Data lost (no data in %f'%sleepTime+' s).'\
                 #  +traceback.format_exc()
@@ -194,7 +292,7 @@ class LiteAccess():
                 printe(msg)
                 #raise BrokenPipeError('ERROR: '+msg)
                 return
-            print('WARNING: timeout %f'%self.timeout+' too small')
+            print('WARNING: timeout %f'%timeout+' too small')
         isText = isinstance(decoded,str) if Python3 else isinstance(decoded,unicode)
         if isText:
             msg = 'from liteServer: ' + decoded
@@ -205,14 +303,28 @@ class LiteAccess():
             print('decoded:'+txt[:200]+'...'+txt[-40:])
         return decoded
 
-    def get(self,arg):
-        return self.execute_cmd({'cmd':('get',arg)})
+    @property # to manipulate value
+    def value(self): # getter
+        # return value and timestamp
+        return self.execute_cmd({'cmd':('get',(self.devs,self.pars))})
 
-    def set(self,arg):
-        return self.execute_cmd({'cmd':('set',arg)})
+    @value.setter
+    def value(self,value):
+        printd('setter called '+self.name+' = '+str(value))
+        r = self.execute_cmd({'cmd':\
+            ('set',(self.devs,self.pars,['value'],value))})
+        return r
     
-    def ls(self,arg):
-        return self.execute_cmd({'cmd':('ls',arg)})
+    @value.deleter
+    def value(self):
+        printd("deleter of v called")
+        
+    def info(self,props=['']):
+        # returns information about remote parameter
+        if not isinstance(props,list):
+           props = [props]
+        return self.execute_cmd({'cmd':('info',(self.devs,self.pars\
+        ,props))})
 
     def monitor(self, pvName, callback):
         """Calls the callback() each time parameter changes"""
@@ -221,44 +333,39 @@ class LiteAccess():
 #````````````````````````````Test program`````````````````````````````````````
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description=\
-      'Test of the LiteAccess')
+    from argparse import RawTextHelpFormatter
+    parser = argparse.ArgumentParser(description=__doc__\
+      ,formatter_class=RawTextHelpFormatter)
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
-    parser.add_argument('-p','--port',help='Port number',type=int,default=9999)
-    parser.add_argument('-H','--host',default=ip_address(),nargs='?',
-      help='Hostname')
-    parser.add_argument('-l','--ls',action='store_true',help='List of devices,parameters or features')
-    parser.add_argument('-s','--set',action='store_true',help='Set parameter')
+    parser.add_argument('-i','--info',action='store_true',help=\
+    'List of devices,parameters or features')
     parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
-    parser.add_argument('par',help='',nargs='*')
+    parser.add_argument('pvs',nargs='*',default=['::'],help=\
+    'Process Variables: host;port:device:parameter')
     pargs = parser.parse_args()
-    prefix = 'Reply from '+pargs.host+':'+str(pargs.port)+': '
-
-    liteAccess = LiteAccess((pargs.host,pargs.port), pargs.dbg, pargs.timeout)
-
-    if len(pargs.par) == 0:
-        pargs.ls = True
 
     ts = timer()
-    if pargs.ls:
-        print(prefix+str(liteAccess.ls(pargs.par)))
-        print('Execution time: %.4f'%(timer()- ts))
-        sys.exit()
-    for parval in pargs.par:
-        print('parval',parval)
-        try:
-            par,val = parval.split('=')
-        except:
-            # get() action
-            d = liteAccess.get(pargs.par)
-            txt = str(d)
-            if len(txt)>200: txt = txt[:200]+'...'+txt[-40:]
-            print(txt)
-        else:
-            # set() action
+    def printSmart(txt):
+        print('reply:')
+        if len(txt)>200: txt = txt[:200]+'...'+txt[-40:]
+        print(txt)
+
+    for parval in pargs.pvs:
+        val = None
+        try:    pvname,val = parval.split('=',1)
+        except: pvname = parval
+        hdpe = parsePVname(pvname)
+        pv = PV(hdpe[:3],timeout=pargs.timeout)
+        if pargs.info:
+            printSmart(str(pv.info(hdpe[3])))
+            continue
+        if val: # set() action
             try:    val = float(val)
             except: pass
-            print(prefix+str(liteAccess.set((par,val))))
+            pv.value = val
+        else:   # get() action
+            value = pv.value
+            printSmart(str(value))
     print('Execution time: %.4f'%(timer()- ts))
 

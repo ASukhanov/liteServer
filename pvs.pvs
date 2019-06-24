@@ -1,0 +1,19 @@
+# Example of the PVsheet config file
+[,'____Device: server____',]
+'status',:server:status
+'version',:server:version
+'host',:server:host
+[,'____Device: dev1____',]
+'increments',:dev1:increments
+'image',:dev1:image
+'reset',:dev1:reset
+'counters',:dev1:counters
+'frequency',:dev1:frequency
+'pause',:dev1:pause
+[,'____Device: dev2____',]
+'increments',:dev2:increments
+'image',:dev2:image
+'reset',:dev2:reset
+'counters',:dev2:counters
+'frequency',:dev2:frequency
+'pause',:dev2:pause

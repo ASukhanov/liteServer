@@ -10,7 +10,8 @@
 #__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
 #__version__ = 'v09 2019-05-21'# version parameter, includes description
 #__version__ = 'v10 2019-06-08'# timestamping
-__version__ = 'v11 2019-06-09'# numpy array support
+#__version__ = 'v11 2019-06-09'# numpy array support
+__version__ = 'v12 2019-06-17'# release
 
 import sys, time, threading
 Python3 = sys.version_info.major == 3
@@ -66,47 +67,48 @@ class Scaler(Device):
         
     def reset(self,pv):
         print('resetting scalers of %s'%self._name)
-        for i in range(len(self.counters.values)):
-            self.counters.values[i] = 0
+        for i in range(len(self.counters.value)):
+            self.counters.value[i] = 0
         
     def _state_machine(self):
         self._cycle = 0
-        ns = len(self.counters.values)
+        ns = len(self.counters.value)
         while not EventExit.is_set():
-            EventExit.wait(1./self.frequency.values[0])
-            if self.pause.values[0]:
+            EventExit.wait(1./self.frequency.value[0])
+            if self.pause.value[0]:
                 continue
 
             # increment counters individually
-            for i,increment in enumerate(self.increments.values[:ns]):
-                #print(instance+': c,i='+str((self.counters.values[i],increment)))
-                self.counters.values[i] += increment
+            for i,increment in enumerate(self.increments.value[:ns]):
+                #print(instance+': c,i='+str((self.counters.value[i],increment)))
+                self.counters.value[i] += increment
                 self.counters.timestamp = [time.time()]
                 
             # increment pixels in the image
             # this is very time consuming:
-            #self.image.values[0] = (self.image.values[0] + 1).astype('uint8')
+            #self.image.value[0] = (self.image.value[0] + 1).astype('uint8')
             
-            self.image.values[0][0,0,0] = self._cycle
+            self.image.value[0][0,0,0] = self._cycle
             
             self._cycle += 1
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # parse arguments
 import argparse
-parser = argparse.ArgumentParser(description=\
-  'Simple Process Variable server.')
+parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
+parser.add_argument('-b','--bigImage', action='store_true', help=\
+'generate big image >64kB')
+parser.add_argument('-s','--scalers', type=int, default=2,help=\
+'number of devices/scalers (2)')
 parser.add_argument('-n','--nCounters', type=int, default=1100,
   help='Number of counters in each scaler')
   #default liteAcces accepts 1100 doubles, 9990 int16s
   #the UDP socket size is limited to 64k bytes
 pargs = parser.parse_args()
 
-devices = [
-  Scaler('dev1'),
-  Scaler('dev2',bigImage=True),
-]
+devices = [Scaler('dev'+str(i+1),bigImage=pargs.bigImage)\
+  for i in range(pargs.scalers)]
 
 print('Serving:'+str([dev._name for dev in devices]))
 

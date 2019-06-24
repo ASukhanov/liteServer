@@ -19,15 +19,19 @@
 #__version__ = 'v14 2019-06-07' # dbg corrected
 #__version__ = 'v15 2019-06-07' # pv.values is dict
 #__version__ = 'v16 2019-06-09'# numpy array support
-__version__ = 'v18 2019-06-09'# spinbox fixed
+#__version__ = 'v18 2019-06-09'# spinbox fixed
+#__version__ = 'v19 2019-06-21'# redesign
+#TODO: not very reliable on wifi (wide network)
+__version__ = 'v20 2019-06-21'#
 
-import threading, socket, subprocess, sys
+import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
-#import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 #from PyQt5 import QtCore, QtGui
 import numpy as np
 from collections import OrderedDict as OD
+import traceback
+import liteAccess as LA
 
 EventExit = threading.Event()
 
@@ -146,6 +150,7 @@ class Window(QtGui.QWidget):
             except Exception as e:
                 printw('could not define Table[%i,%i]'%(row,colOut))
                 print(str(e))
+                print('Traceback: '+repr(traceback.format_exc()))
                 continue
             #print('ok',item)
             #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
@@ -257,9 +262,15 @@ class Window(QtGui.QWidget):
         d.show()
 
 #`````````````````````````````````````````````````````````````````````````````
+myslotBusy = False
 def MySlot(a):
     """Global redirector of the SignalSourceDataReady"""
+    global myslotBusy
     printd('MySlot received event:'+str(a))
+    if myslotBusy:
+        print('Busy')
+        return
+    myslotBusy = True
     if mainWidget is None:
         printe('mainWidget not defined yet')
         return
@@ -270,7 +281,8 @@ def MySlot(a):
             continue
         try:
             val = pv.v
-            printd('val:%s'%str(val[:100]))
+            #print('pv.v',val)
+            printd('val:%s'%str(val)[:100])
             if isinstance(val,list):
                 if pv.is_bool():
                     #print('PV '+pv.name+' is bool = '+str(val))
@@ -296,7 +308,9 @@ def MySlot(a):
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
- #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+            print('Traceback: '+repr(traceback.format_exc()))
+    myslotBusy = False
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
 class PVMonitor(QtCore.QThread): 
     # inheritance from QtCore.QThread is needed for qt signals
@@ -322,46 +336,40 @@ class PVMonitor(QtCore.QThread):
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class PV():
     """Process Variable object, provides getter and setter"""
-    def __init__(self,name,access):
+    def __init__(self,name):
         self.name = name
-        self.access = access
-        self._v = self.v # use getter to store initial value
+        printd('pv name: '+str(name))
+        self.pv = LA.PV(name.split(':'))
+        self.key = list(self.pv.info())[0]
+        printd('key:'+str(self.key))
+        #print('pv vars:'+str(vars(self.pv)))
+        self.initialValue = self.v # use getter to store initial value
         self.t = 0.
-        self._spinbox, self._bool = None,None
-        
+        self._spinbox, self._bool = None,None        
         # creating standard attributes from remote ones
-        #attributes = ['count', 'features', 'opLimits',]
-        attributes = list(self.access.ls([self.name]).values())[0]
-        printd('attrs %s'%attributes)
-        for attribute in attributes:
+        self.attributes = self.pv.info()[self.key]
+        printd('attrs %s'%self.attributes)
+        for attribute,v in self.attributes.items():
             if attribute not in ['count', 'features', 'opLimits']:
                 continue
-            v = list(self.access.get([self.name+'.'+attribute]).values())[0]
-            #print('Creating attribute %s.%s = '%(name,attribute)+str(v))
+            printd('Creating attribute %s.%s = '%(name,attribute)+str(v))
             setattr(self,attribute,v)
             
     @property
     def v(self): # getter
         # return values and store timestamp
-        #printd('getter of %s called'%self.name)
-        #devParDict = self.access.get([self.name])
-        #parDict = list(devParDict.values())[0]
-        parDict = list(self.access.get([self.name]).values())[0]
-        #printd('prop %s'%str(parDict)[:70])
-        self.t = parDict['timestamp']
-        return parDict['values']
+        printd('getter of %s called'%self.name)
+        return(self.pv.value[self.key]['value'])
 
     @v.setter
     def v(self, value):
-        #print('setter of %s'%self.name+' called to change PV to '+str(value))
-        r = self.access.set((self.name,value))
-        if r:
-            printw('could not set %s'%self.name+' to '+str(value))
+        printd('setter of %s'%self.name+' called to change PV to '+str(value))
+        self.pv.value = value
 
     @v.deleter
     def v(self):
         print("deleter of v called")
-        del self._v
+        del self.initialValue
 
     def title(self): return self.name
     
@@ -369,16 +377,16 @@ class PV():
         if self._bool is not None:
             return self._bool
         self._bool = False
-        if isinstance(self._v,list):
-            if len(self._v) == 1: # the first one is timestamp
-                if isinstance(self._v[0],bool):
-                     self._bool = True
+        #print('iv',self.name,str(self.initialValue)[:60])
+        #if isinstance(self.initialValue,list):
+        if len(self.initialValue) == 1:
+            if isinstance(self.initialValue[0],bool):
+                 self._bool = True
+        #print('is bool ',self._bool)
         return self._bool
         
     def is_writable(self):
-        key = '%s.features'%self.name
-        r = self.access.get([key])
-        return ('W' in r[key]['values'])
+        return 'W' in self.features
     
     def is_spinbox(self):
         if self._spinbox is not None:
@@ -387,22 +395,11 @@ class PV():
         self._spinbox = False
         if self.is_writable():
             try:        
-                if len(self._v) == 1:
-                    if type(self._v[0]) in (float,int):
+                if len(self.initialValue) == 1:
+                    if type(self.initialValue[0]) in (float,int):
                         self._spinbox = True
             except: pass
         return self._spinbox
-        
-    def attributes(self):
-        """Returns a dictionary of all attributes"""
-        #print('>=====================================attributes',self.name)
-        r = self.access.ls([self.name])
-        #printd('r',r)
-        listOfAttr = list(r.values())[0]
-        d = OD()
-        for attr in listOfAttr:
-            d[attr] = self.access.get(['%s.%s'%(self.name,attr)]).values()
-        return d
 
 class QPushButtonCmd(QtGui.QPushButton):
     def __init__(self,text,cmd):
@@ -416,12 +413,13 @@ class QPushButtonCmd(QtGui.QPushButton):
 
 class PVTable():
     """PV table maps: parameter to (row,col) and (row,col) to object"""
-    def __init__(self,fileName,access):
+    def __init__(self,fileName):
+        
         self.par2pos = OD()
         self.pos2obj = OD()
         maxcol = 0
         if pargs.pvfile is None:
-            pargs.pvfile = self.build_temporary_pvfile(access)
+            pargs.pvfile = self.build_temporary_pvfile()
         with open(pargs.pvfile,'r') as infile:
             row = 0
             for line in infile:
@@ -433,10 +431,11 @@ class PVTable():
                     self.pos2obj[(row,0)] = None
                     row += 1  
                     continue
-                #print('%3i:'%row+line)
+                printd('%3i:'%row+line)
                 cols = line.split(',')
                 nCols = len(cols)
                 for col,token in enumerate(cols):
+                    printd('token:'+str(token))
                     if len(token) == 0:
                         obj = ''
                     elif token in '[]':
@@ -446,27 +445,30 @@ class PVTable():
                     elif token[0] in ('"',"'"):
                         blank,txt,attributeString = token.split(token[0],2)
                         if len(attributeString) == 0:
+                            printd('cell is text')
                             obj = txt
                         else: # the cell is text with attributes
+                            printd('cell is text with attributes') 
                             action,cmd = attributeString.split(':',1)
                             action = action[1:]
                             if action == 'launch':
                                 #print('pushButton created with cmd:%s'%cmd)
                                 obj = QPushButtonCmd(txt,cmd)
-                    elif '`' in token: # PV's attribute
-                        #print('check for attribute')
-                        pvname,attrib = token.split('`')
-                        pv = PV(pvname,access)
-                        #print('temporary PV %s created'%pvname)
-                        obj = str(getattr(pv,attrib))
-                        if obj[0] == '[': obj = obj[1:]
-                        if obj[-1] == ']': obj = obj[:-1]
+                    #elif '`' in token: # PV's attribute
+                    #    printd('check for attribute '+token)
+                    #    pvname,attrib = token.split('`')
+                    #    pv = PV(pvname,access)
+                    #    printd('temporary PV %s created'%pvname)
+                    #    obj = str(getattr(pv,attrib))
+                    #    if obj[0] == '[': obj = obj[1:]
+                    #    if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
                         printd('the "%s" is pv'%token)
                         try:
-                            obj = PV(token,access)
+                            obj = PV(token)
                         except Exception as e:
                             printe('Cannot create PV %s:'%token+str(e))
+                            print('Traceback: '+repr(traceback.format_exc()))
                             continue
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
@@ -491,18 +493,18 @@ class PVTable():
         except Exception as e:
             printw('in print_loc:'+str(e))
 
-    def build_temporary_pvfile(self,access):
+    def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'
-        #print('>build_temporary_pvfile')
-        devices = list(access.ls([]).values())[0]
+        print('>build_temporary_pvfile')
+        devices = LA.PV([pargs.host]).info()
         printd('devs:'+str(devices))
         f = open(fname,'w')
         for dev in devices:
             f.write("[,'____Device: %s____',]\n"%dev)
-            pars = list(access.ls([dev]).values())[0]
+            pars = LA.PV([pargs.host,dev]).info().keys()
             printd('pars:'+str(pars))
             for par in pars:
-                devPar = dev+':'+par
+                devPar = pargs.host+':'+par
                 #print(devPar)
                 f.write("'%s',%s\n"%(par,devPar))
         f.close()
@@ -515,50 +517,40 @@ if __name__ == '__main__':
     import sys
  
     import argparse
-    parser = argparse.ArgumentParser(
-      description = 'Process Variable viewer')
+    parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
-    parser.add_argument('-p','--port',type=int,default=9999,
+    parser.add_argument('-p','--port',default='9999',
       help='Port number')
     parser.add_argument('-H','--host',default=ip_address(),nargs='?',
       help='Hostname')
     parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
-    #parser.add_argument('pvfile', default='pvsheet.pvs', nargs='?', 
     parser.add_argument('pvfile', nargs='?', 
       help='PV list description file')
     pargs = parser.parse_args()
-    printd('Monitoring of PVs at '+pargs.host+':%i'%pargs.port)
-
-    import liteAccess
-    liteAccess = liteAccess.LiteAccess((pargs.host,pargs.port)\
-    ,dbg=pargs.dbg, timeout=pargs.timeout)
+    printd('Monitoring of PVs at '+pargs.host+':%s'%pargs.port)
 
     app = QtGui.QApplication(sys.argv)
 
     # read config file
-    pvTable = PVTable(pargs.pvfile,liteAccess)
+    pvTable = PVTable(pargs.pvfile)
 
     # define GUI
     window = Window(*pvTable.shape)
-    title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
+    try:
+        title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
+    except:
+        title = 'PVs from '+pargs.host
     #print(title)
     window.setWindowTitle(title)
     window.resize(350, 300)
     window.show()
     mainWidget = window
-	
-    # test some fields
-    #pvTable.print_PV_at(6,1)
-    #pvTable.print_PV_at(4,1)
-    #pv = pvTable.pos2obj[3,1]
-    #printd('pv31:'+pv.title())
-    #pvTable.print_loc_of_PV(pv)
 
     # arrange keyboard interrupt to kill the program
     import signal
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-	
+    
     # start GUI
     try:
         app.instance().exec_()
