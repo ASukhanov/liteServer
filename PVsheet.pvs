@@ -1,19 +1,19 @@
-# pvview configuration file
+# Example of the PVsheet configuration file
 [,'Test of the table view of a Process Variable server',,,]
-'Server description:',server:version.desc,'version:',server:version
-[,'Test',],dev1:frequency,dev1:frequency`opLimits
+'Description:',:server:version.desc,'version:',:server:version
+[,'Test',],:dev1:frequency,:dev1:frequency`opLimits
 #!Blank
 [,'____________________________________________________________________',,,]
 'First set of',dev1:counters`count,[,'counters',]
-,dev1:frequency,[,':Update frequency [Hz]. Range:',],dev1:frequency`opLimits
-,dev1:increments,[,':Individual increments',]
-'Counters:',dev1:counters,dev1:reset
+,:dev1:frequency,[,':Update frequency [Hz]. Range:',],dev1:frequency`opLimits
+,:dev1:increments,[,':Individual increments',]
+'Counters:',:dev1:counters,:dev1:reset
 #!Blank
 [,'====================================================================',,,]
-'Second set of',dev2:counters`count,[,'counters',]
-,dev2:frequency,':Frequency'
-,dev2:increments,':increments'
-'Counters:',dev2:counters,dev2:reset
+'Second set of',:dev2:counters`count,[,'counters',]
+,:dev2:frequency,':Frequency'
+,:dev2:increments,':increments'
+'Counters:',:dev2:counters,:dev2:reset
 [,'____________________________________________________________________',,,]
 'Shell cmd:','xterm';launch:xterm
 'Shell cmd:','xclock';launch:xclock

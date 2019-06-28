@@ -22,7 +22,8 @@
 #__version__ = 'v18 2019-06-09'# spinbox fixed
 #__version__ = 'v19 2019-06-21'# redesign
 #TODO: not very reliable on wifi (wide network)
-__version__ = 'v20 2019-06-21'#
+#__version__ = 'v20 2019-06-21'#
+__version__ = 'v21 2019-06-27'# right click fixed, config file OK
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -87,7 +88,7 @@ class myTableWidget(QtGui.QTableWidget):
         if button == 2: # right button
             try:
                 pv = pvTable.pos2obj[(row,col)]
-                print('RightClick at PV %s.'%pv.name)
+                #print('RightClick at PV %s.'%pv.name)
                 mainWidget.rightClick(pv)
             except:
                 pass
@@ -156,8 +157,9 @@ class Window(QtGui.QWidget):
             #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
                 if pv.is_bool():
-                    #print('PV %s is boolean:'%pv.name+str(val))
-                    item.setText(pv.name.split(':')[1])
+                    #print( 'PV %s is boolean:'%pv.name+str(val))
+                    #item.setText(pv.name.split(':')[1])
+                    item.setText(pv.name.split(':',1)[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
                     state = QtCore.Qt.Checked if val[0] else QtCore.Qt.Unchecked
@@ -242,15 +244,15 @@ class Window(QtGui.QWidget):
             printw('in tableItem.setText:'+str(e))
             
     def rightClick(self,pv):
-        print('mainWidget. RightClick on %s'%pv.name)
+        #print('mainWidget. RightClick on %s'%pv.name)
         d = QtGui.QDialog(self)
         pname = pv.title()
         d.setWindowTitle("Info on PV %s"%pname)
         attributes = pv.attributes()
-        print('attributes:%s'%str(attributes)[:100])
+        #print('attributes:%s'%str(attributes)[:100])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
-            vv = list(v)[0]
+            vv = v if isinstance(v,str) else list(v)[0]
             if vv is None:
                 continue
             if isinstance(vv,list):
@@ -347,9 +349,9 @@ class PV():
         self.t = 0.
         self._spinbox, self._bool = None,None        
         # creating standard attributes from remote ones
-        self.attributes = self.pv.info()[self.key]
-        printd('attrs %s'%self.attributes)
-        for attribute,v in self.attributes.items():
+        self.attr = self.pv.info()[self.key]
+        printd('attrs %s'%self.attr)
+        for attribute,v in self.attr.items():
             if attribute not in ['count', 'features', 'opLimits']:
                 continue
             printd('Creating attribute %s.%s = '%(name,attribute)+str(v))
@@ -400,6 +402,9 @@ class PV():
                         self._spinbox = True
             except: pass
         return self._spinbox
+        
+    def attributes(self):
+        return self.attr
 
 class QPushButtonCmd(QtGui.QPushButton):
     def __init__(self,text,cmd):
@@ -435,26 +440,26 @@ class PVTable():
                 cols = line.split(',')
                 nCols = len(cols)
                 for col,token in enumerate(cols):
-                    printd('token:'+str(token))
+                  try:
+                    #print( 'token:'+str(token))
                     if len(token) == 0:
                         obj = ''
                     elif token in '[]':
                         obj = token
-                        #nCols -= 1
-                        #print('bracket %s at '%token+str((row,col)))
                     elif token[0] in ('"',"'"):
                         blank,txt,attributeString = token.split(token[0],2)
                         if len(attributeString) == 0:
                             printd('cell is text')
                             obj = txt
                         else: # the cell is text with attributes
-                            printd('cell is text with attributes') 
+                            #print( 'cell is text with attributes') 
                             action,cmd = attributeString.split(':',1)
                             action = action[1:]
                             if action == 'launch':
                                 #print('pushButton created with cmd:%s'%cmd)
                                 obj = QPushButtonCmd(txt,cmd)
-                    #elif '`' in token: # PV's attribute
+                    elif '`' in token: # PV's attribute
+                        raise NotImplementedError('syntax quotation ` is not supported yet in '+token)
                     #    printd('check for attribute '+token)
                     #    pvname,attrib = token.split('`')
                     #    pv = PV(pvname,access)
@@ -463,15 +468,18 @@ class PVTable():
                     #    if obj[0] == '[': obj = obj[1:]
                     #    if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
-                        printd('the "%s" is pv'%token)
+                        #print( 'the "%s" is pv'%token)
                         try:
                             obj = PV(token)
                         except Exception as e:
-                            printe('Cannot create PV %s:'%token+str(e))
-                            print('Traceback: '+repr(traceback.format_exc()))
-                            continue
+                            txt = 'Cannot create PV %s:'%token+str(e)
+                            raise NameError(txt)
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
+                  except Exception as e:
+                    printw(str(e))
+                    self.pos2obj[(row,col)] = '?'
+
                 maxcol = max(maxcol,nCols)
                 row += 1
         self.shape = row,maxcol
