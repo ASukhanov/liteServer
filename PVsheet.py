@@ -23,7 +23,9 @@
 #__version__ = 'v19 2019-06-21'# redesign
 #TODO: not very reliable on wifi (wide network)
 #__version__ = 'v20 2019-06-21'#
-__version__ = 'v21 2019-06-27'# right click fixed, config file OK
+#__version__ = 'v21 2019-06-27'# right click fixed, config file OK
+__version__ = 'v22 2019-06-28'# table created with initial values, not titles
+
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -144,7 +146,9 @@ class Window(QtGui.QWidget):
                 
             # the object is PV
             pv = obj
-            val = pv.v
+            #val = pv.v
+            initialValue = pv.initialValue[0]
+            #print( 'initialValue',initialValue)
             pvTable.par2pos[pv] = row,colOut
             try:
                 item = QtGui.QTableWidgetItem(pv.title())
@@ -157,12 +161,12 @@ class Window(QtGui.QWidget):
             #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
                 if pv.is_bool():
-                    #print( 'PV %s is boolean:'%pv.name+str(val))
+                    #print( 'PV %s is boolean:'%pv.name+str(initialValue))
                     #item.setText(pv.name.split(':')[1])
                     item.setText(pv.name.split(':',1)[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
-                    state = QtCore.Qt.Checked if val[0] else QtCore.Qt.Unchecked
+                    state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
                     item.setCheckState(state)
                     self.table.setCellWidget(row, colOut, item)
                     continue
@@ -175,7 +179,7 @@ class Window(QtGui.QWidget):
                     #spinbox = QtGui.QDoubleSpinBox(self\
                     #,valueChanged=self.value_changed)
                     
-                    spinbox.setValue(float(val[0]))
+                    spinbox.setValue(float(initialValue))
                     self.table.setCellWidget(row, colOut, spinbox)
                     continue
             except Exception as e:
