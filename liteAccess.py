@@ -62,7 +62,8 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
 #__version__ = 'v16 2019-06-10'# UDP Acknowledge
 #__version__ = 'v17 2019-06-11'# chunking OK
-__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
+#__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
+__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
 
 import sys, os, pwd, time, socket, traceback
 from timeit import default_timer as timer
@@ -244,7 +245,7 @@ class PV():
     def __init__(self, hostDevsPars, timeout = None, dbg = False):
         global Dbg
         Dbg = dbg
-        
+        #print( '>PV',hostDevsPars)
         # check for argument validity
         expectedArg = "(['host;port',['dev1','dev2'...],['par1','par2'...]])"
         def expectedArgWrong():
@@ -356,7 +357,7 @@ if __name__ == "__main__":
         try:    pvname,val = parval.split('=',1)
         except: pvname = parval
         hdpe = parsePVname(pvname)
-        pv = PV(hdpe[:3],timeout=pargs.timeout)
+        pv = PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)
         if pargs.info:
             printSmart(str(pv.info(hdpe[3])))
             continue
