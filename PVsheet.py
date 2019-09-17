@@ -24,13 +24,13 @@
 #TODO: not very reliable on wifi (wide network)
 #__version__ = 'v20 2019-06-21'#
 #__version__ = 'v21 2019-06-27'# right click fixed, config file OK
-__version__ = 'v22 2019-06-28'# table created with initial values, not titles
-
+#__version__ = 'v22 2019-06-28'# table created with initial values, not titles
+__version__ = 'v23 2019-09-15'#
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
-from pyqtgraph.Qt import QtCore, QtGui
-#from PyQt5 import QtCore, QtGui
+#from pyqtgraph.Qt import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 import numpy as np
 from collections import OrderedDict as OD
 import traceback
@@ -50,7 +50,7 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
+class QDoubleSpinBoxPV(QtWidgets.QDoubleSpinBox):
     """Spinbox, which stores associated PV""" 
     def __init__(self,pv):
         super().__init__()
@@ -79,7 +79,7 @@ class QDoubleSpinBoxPV(QtGui.QDoubleSpinBox):
         mainWidget.rightClick(self.pv)
         pass
 
-class myTableWidget(QtGui.QTableWidget):
+class myTableWidget(QtWidgets.QTableWidget):
     def mousePressEvent(self,*args):
         button = args[0].button()
         item = self.itemAt(args[0].pos())
@@ -97,9 +97,9 @@ class myTableWidget(QtGui.QTableWidget):
         else:
             super().mousePressEvent(*args)
 
-class Window(QtGui.QWidget):
+class Window(QtWidgets.QWidget):
     def __init__(self, rows, columns):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         self.table = myTableWidget(rows, columns, self)
         self.table.setShowGrid(False)
         for row in range(rows):
@@ -410,7 +410,7 @@ class PV():
     def attributes(self):
         return self.attr
 
-class QPushButtonCmd(QtGui.QPushButton):
+class QPushButtonCmd(QtWidgets.QPushButton):
     def __init__(self,text,cmd):
         self.cmd = cmd
         super().__init__(text)
@@ -542,7 +542,7 @@ if __name__ == '__main__':
     pargs = parser.parse_args()
     printd('Monitoring of PVs at '+pargs.host+':%s'%pargs.port)
 
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
 
     # read config file
     pvTable = PVTable(pargs.pvfile)
