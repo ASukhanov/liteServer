@@ -29,10 +29,8 @@ __version__ = 'v23 2019-09-15'#
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
-#from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5 import QtCore, QtGui, QtWidgets
 import numpy as np
-from collections import OrderedDict as OD
 import traceback
 import liteAccess as LA
 
@@ -133,7 +131,7 @@ class Window(QtWidgets.QWidget):
                     if spanStart is not None and not spanFilled:
                         spanFilled = True
                         colOut = spanStart
-                    item = QtGui.QTableWidgetItem(str(obj))
+                    item = QtWidgets.QTableWidgetItem(str(obj))
                     item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
                     self.table.setItem(row, colOut, item)
                 elif isinstance(obj,QPushButtonCmd):
@@ -151,7 +149,7 @@ class Window(QtWidgets.QWidget):
             #print( 'initialValue',initialValue)
             pvTable.par2pos[pv] = row,colOut
             try:
-                item = QtGui.QTableWidgetItem(pv.title())
+                item = QtWidgets.QTableWidgetItem(pv.title())
             except Exception as e:
                 printw('could not define Table[%i,%i]'%(row,colOut))
                 print(str(e))
@@ -176,7 +174,7 @@ class Window(QtWidgets.QWidget):
                     spinbox = QDoubleSpinBoxPV(pv)
                     # using other ways is more complicated as it is not trivial
                     # to transfer argument to the method
-                    #spinbox = QtGui.QDoubleSpinBox(self\
+                    #spinbox = QtWidgets.QDoubleSpinBox(self\
                     #,valueChanged=self.value_changed)
                     
                     spinbox.setValue(float(initialValue))
@@ -193,7 +191,7 @@ class Window(QtWidgets.QWidget):
         self.table.cellClicked.connect(self.handleCellClicked)
         #self.table.cellDoubleClicked.connect(self.handleCellDoubleClicked)
         
-        layout = QtGui.QVBoxLayout(self)
+        layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
         self._list = []
         monitor = PVMonitor()
@@ -228,11 +226,11 @@ class Window(QtWidgets.QWidget):
                 printd('bool clicked '+pv.name+':'+str(checked))
                 pv.v = checked # change server's pv
             else:
-                d = QtGui.QDialog(self)
+                d = QtWidgets.QDialog(self)
                 d.setWindowTitle("Info")
                 pname = pv.title()
-                ql = QtGui.QLabel(pname,d)
-                qte = QtGui.QTextEdit(item.text(),d)
+                ql = QtWidgets.QLabel(pname,d)
+                qte = QtWidgets.QTextEdit(item.text(),d)
                 qte.move(0,20)
                 #d.setWindowModality(Qt.ApplicationModal)
                 d.show()
@@ -249,7 +247,7 @@ class Window(QtWidgets.QWidget):
             
     def rightClick(self,pv):
         #print('mainWidget. RightClick on %s'%pv.name)
-        d = QtGui.QDialog(self)
+        d = QtWidgets.QDialog(self)
         pname = pv.title()
         d.setWindowTitle("Info on PV %s"%pname)
         attributes = pv.attributes()
@@ -262,7 +260,7 @@ class Window(QtWidgets.QWidget):
             if isinstance(vv,list):
                 vv = vv[:100]
             txt += attr+':\t'+str(vv)+'\n'
-        qte = QtGui.QLabel(txt,d)
+        qte = QtWidgets.QLabel(txt,d)
         qte.setWordWrap(True)
         d.resize(300,150)
         d.show()
