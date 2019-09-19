@@ -63,9 +63,10 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v16 2019-06-10'# UDP Acknowledge
 #__version__ = 'v17 2019-06-11'# chunking OK
 #__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
-__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
+#__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
+__version__ = 'v20 2019-09-18'# try/except on pwd
 
-import sys, os, pwd, time, socket, traceback
+import sys, os, time, socket, traceback
 from timeit import default_timer as timer
 Python3 = sys.version_info.major == 3
 import ubjson
@@ -165,7 +166,12 @@ class Channel():
         self.lHost = ip_address()
         self.lPort = self.sPort
         self.recvMax = 1024*1024*4
-        self.username = pwd.getpwuid(os.getuid()).pw_name
+        try:
+            import pwd
+            self.username = pwd.getpwuid(os.getuid()).pw_name
+        except:
+            printe('getpwuid not supported')
+            self.username = 'Unknown'
         self.program = sys.argv[0]
         if UDP:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
