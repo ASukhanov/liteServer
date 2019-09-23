@@ -64,7 +64,7 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v17 2019-06-11'# chunking OK
 #__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
 #__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
-__version__ = 'v20 2019-09-18'# try/except on pwd
+__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
 
 import sys, os, time, socket, traceback
 from timeit import default_timer as timer
@@ -312,6 +312,7 @@ class PV():
 
     @property # to manipulate value
     def value(self): # getter
+        '''Getter/setter of PV/property'''
         # return value and timestamp
         return self.execute_cmd({'cmd':('get',(self.devs,self.pars))})
 
@@ -337,7 +338,7 @@ class PV():
         """Calls the callback() each time parameter changes"""
         return 'Not implemented yet'
 
-#````````````````````````````Test program`````````````````````````````````````
+#````````````````````````````Test programpv =`````````````````````````````````````
 if __name__ == "__main__":
     import argparse
     from argparse import RawTextHelpFormatter
@@ -348,9 +349,13 @@ if __name__ == "__main__":
     'List of devices,parameters or features')
     parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
-    parser.add_argument('pvs',nargs='*',default=['::'],help=\
+    pvsDefault = ['::']
+    parser.add_argument('pvs',nargs='*',default=pvsDefault,help=\
     'Process Variables: host;port:device:parameter')
     pargs = parser.parse_args()
+    if not pargs.info and pargs.pvs == pvsDefault:
+        print('Please specify :device:parameter')
+        sys.exit()
 
     ts = timer()
     def printSmart(txt):
