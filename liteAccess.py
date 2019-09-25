@@ -64,7 +64,8 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v17 2019-06-11'# chunking OK
 #__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
 #__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
-__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
+#__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
+__version__ = 'v21 2019-09-23'#
 
 import sys, os, time, socket, traceback
 from timeit import default_timer as timer
@@ -253,6 +254,7 @@ class PV():
         Dbg = dbg
         #print( '>PV',hostDevsPars)
         # check for argument validity
+        hostDevsPars = list(hostDevsPars)
         expectedArg = "(['host;port',['dev1','dev2'...],['par1','par2'...]])"
         def expectedArgWrong():
             raise NameError('Expected arg should be: '+expectedArg)
@@ -264,11 +266,11 @@ class PV():
         except: expectedArgWrong()
         if not isinstance(hostPort,str): 
             expectedArgWrong()
-        if not isinstance(self.devs,list):
+        if not isinstance(self.devs,(list,tuple)):
             self.devs = [self.devs]
         if not all(isinstance(i,str) for i in self.devs): 
             expectedArgWrong()
-        if not isinstance(self.pars,list):
+        if not isinstance(self.pars,(list,tuple)):
             self.pars = [self.pars]
         if not all(isinstance(i,str) for i in self.pars):
             expectedArgWrong()
