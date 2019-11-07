@@ -350,7 +350,7 @@ class myUDPServer(SocketServer.UDPServer):
 
     def service_actions(self):
         """service_actions() called by server periodically (0.5s)"""
-        printd('ackCounts: %s'%str(self.ackCounts))
+        #printd('ackCounts: %s'%str(self.ackCounts))
         
         for sockAddr,ackCount in self.ackCounts.items():
             sock,addr = sockAddr

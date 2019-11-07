@@ -340,7 +340,7 @@ class PV():
         """Calls the callback() each time parameter changes"""
         return 'Not implemented yet'
 
-#````````````````````````````Test programpv =`````````````````````````````````````
+#````````````````````````````Test program`````````````````````````````````````
 if __name__ == "__main__":
     import argparse
     from argparse import RawTextHelpFormatter
