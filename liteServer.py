@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Very lightweight base class of the Process Variable Server.
 It hosts the process variables and responds to get/set/monitor/info commands.
 
