@@ -70,7 +70,7 @@ class Gaussmeter(Device):
     
         #device specific initialization
         def open_serial():
-            return serial.Serial(comPort, 115200, timeout = .5)
+            return serial.Serial(comPort, 115200, timeout = pargs.timeout)
         self._ser = None
         for attempt in range(4):
             try:
@@ -101,6 +101,8 @@ parser = argparse.ArgumentParser(description=\
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
 parser.add_argument('-H','--host',help='host IP address',default='localhost')
 parser.add_argument('-p','--port',type=int,help='IP port',default=9700)
+parser.add_argument('-t','--timeout',type=float,default=.5\
+,help='COM port timeout')
 parser.add_argument('comPorts',nargs='*',default=['COM1'])
 pargs = parser.parse_args()
 
