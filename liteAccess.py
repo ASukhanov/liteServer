@@ -65,7 +65,8 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
 #__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
 #__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
-__version__ = 'v21 2019-09-23'#
+#__version__ = 'v21 2019-09-23'#
+__version__ = 'v21 2019-11-07'# --period
 
 import sys, os, time, socket, traceback
 from timeit import default_timer as timer
@@ -145,9 +146,10 @@ def recvUdp(socket,socketSize):
     return data, addr
 
 def parsePVname(txt):
+    #print('parsePVname',txt)
     try:    hostPort,dev,parProp = txt.split(':')
     except:
-        raise NameError('PV access should be: host;port:dev:par')
+        raise NameError('PV access should be: "host;port:dev:par"')
     pp = parProp.split('.')
     try:    par,props = pp
     except: 
@@ -351,6 +353,8 @@ if __name__ == "__main__":
     'List of devices,parameters or features')
     parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
+    parser.add_argument('-p','--period',type=float,default=0.,
+      help='repeat command every period (s)')
     pvsDefault = ['::']
     parser.add_argument('pvs',nargs='*',default=pvsDefault,help=\
     'Process Variables: host;port:device:parameter')
@@ -359,27 +363,34 @@ if __name__ == "__main__":
         print('Please specify :device:parameter')
         sys.exit()
 
-    ts = timer()
     def printSmart(txt):
         print('reply:')
         if len(txt)>200: txt = txt[:200]+'...'+txt[-40:]
         print(txt)
 
-    for parval in pargs.pvs:
-        val = None
-        try:    pvname,val = parval.split('=',1)
-        except: pvname = parval
-        hdpe = parsePVname(pvname)
-        pv = PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)
-        if pargs.info:
-            printSmart(str(pv.info(hdpe[3])))
-            continue
-        if val: # set() action
-            try:    val = float(val)
-            except: pass
-            pv.value = val
-        else:   # get() action
-            value = pv.value
-            printSmart(str(value))
-    print('Execution time: %.4f'%(timer()- ts))
+    print('pargs.pvs',pargs.pvs,pargs.period)
+    while True:
+        for parval in pargs.pvs:
+            val = None
+            
+            try:    pvname,val = parval.split('=',1)
+            except: pvname = parval
+            hdpe = parsePVname(pvname)
+            pv = PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)
+            if pargs.info:
+                printSmart(str(pv.info(hdpe[3])))
+                continue
+            if val: # set() action
+                try:    val = float(val)
+                except: pass
+                pv.value = val
+            else:   # get() action
+                ts = timer()
+                value = pv.value
+                print('Get time: %.4f'%(timer()- ts))
+                printSmart(str(value))
+        if pargs.period == 0.:
+            break
+        else:
+            time.sleep(pargs.period)
 

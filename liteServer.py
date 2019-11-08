@@ -44,7 +44,8 @@ Known issues:
 #__version__ = 'v20 2019-06-10'# framing works 
 #__version__ = 'v21 2019-06-10'# chunking OK
 #__version__ = 'v22a 2019-06-17'# release
-__version__ = 'v23a 2019-06-21'# redesign
+#__version__ = 'v23a 2019-06-21'# redesign
+__version__ = 'v24 2019-11-07'# release
 
 import sys
 import socket
@@ -68,15 +69,16 @@ MaxEOD = 4
 
 PORT = 9700# Communication port number
 DevDict = None # forward declaration
-Dbg = False
+Dbg = True
 EventExit = threading.Event()
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
-def printd(msg):
-    if Dbg: print('dbg: '+msg)
+#def printd(msg):
+#    if Dbg: print('dbg: '+msg)
+def printd(msg): pass# print('DBG: '+msg)
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -116,7 +118,8 @@ class Device():
     """
     def __init__(self,name='?',pars=None):
         self._name = name
-        #print('pars '+str(pars))
+        #print('Dbg',Dbg)
+        printd('pars '+str(pars))
         for p,v in pars.items():
             #print('setting '+p+' to '+str(v))
             #print('value type:',type(v.value))
@@ -135,8 +138,9 @@ class PV():
     The type and count is determined from default value.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW', desc='', value=[0], opLimits=None\
-        ,setter=None):#, numpy=None):
+    def __init__(self,features='RW', desc='', value=[0], parent=None\
+        ,opLimits=None, setter=None):#, numpy=None):
+        printd('>PV: '+str((features,desc,value,opLimits)))
         self._name = None # assighned in device.__init__. 
         # name is not really needed, as it is keyed in the dictionary
         self.timestamp = None
@@ -144,6 +148,7 @@ class PV():
         self.count = [len(self.value)]
         self.features = features
         self.desc = desc
+        self.parent = parent
         
         # if the parameter is numpy :
         try:    
@@ -159,31 +164,11 @@ class PV():
         
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
-    
-    def add_prop(self,propName,propVal,parDict={}):
-        # add property to output dictionary
-        printd('>add_prop %s'%str((propName,propVal,parDict))[:60])
-        try:
-            # if the parameter is numpy array:
-            value = propVal[0]
-            shape,dtype = value.shape, str(value.dtype)
-        except Exception as e:
-            printd('not numpy, %s'%str(e))
-            parDict[propName] = propVal
-        else:
-            printd('numpy array %s, add key "numpy"'%str((shape,dtype)))
-            parDict['value'] = value.tobytes()
-            parDict['numpy'] = shape,dtype
-        printd('<add_prop:'+str(parDict)[:200])
-        return parDict
 
-    def _get_values(self):
-        parDict = {'timestamp':self.timestamp}
-        return self.add_prop(self.value,parDict)
-        
-    def get_values(self):
+    def update_values(self):
         """Overridable getter"""
-        return self._get_values()
+        printd('default get_values')
+        pass
 
     def is_writable(self): return 'W' in self.features
     def is_readable(self): return 'R' in self.features
@@ -265,8 +250,9 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             parDict = {}
             returnedDict[devParName] = parDict
             if cmd == 'get':
+                pv.update_values()
                 value = getattr(pv,'value')
-                #print('value',value)
+                printd('value:'+str(value))
                 try:
                     # if value is numpy array:
                     shape,dtype = value[0].shape, str(value[0].dtype)
@@ -365,8 +351,7 @@ class myUDPServer(SocketServer.UDPServer):
             
 class Server():
     def __init__(self,devices,host=None,port=PORT,dbg=False):
-        global DevDict, Dbg
-        Dbg = dbg
+        global DevDict
         
         # create Device 'server'
         dev = [Device('server',{\
