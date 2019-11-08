@@ -364,7 +364,7 @@ if __name__ == "__main__":
         sys.exit()
 
     def printSmart(txt):
-        print('reply:')
+        print('reply:',end='')#flush=True
         if len(txt)>200: txt = txt[:200]+'...'+txt[-40:]
         print(txt)
 
