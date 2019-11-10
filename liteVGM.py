@@ -111,9 +111,10 @@ parser.add_argument('-t','--timeout',type=float,default=.5\
 parser.add_argument('comPorts',nargs='*',default=['COM1'])
 pargs = parser.parse_args()
 
+liteServer.Server.Dbg = pargs.dbg
 devices = [Gaussmeter('Gaussmeter%d'%i,comPort=p) for i,p in enumerate(pargs.comPorts)]
 server = liteServer.Server(devices,
-  host=pargs.host, port=pargs.port, dbg=pargs.dbg)
+  host=pargs.host, port=pargs.port)
 
 try:
     server.loop()
