@@ -14,7 +14,6 @@
 __version__ = 'v12 2019-06-17'# release
 
 import sys, time, threading
-Python3 = sys.version_info.major == 3
 import numpy as np
 
 import liteServer
@@ -30,7 +29,12 @@ def printd(msg):
     if pargs.dbg:
         print('DBG:'+str(msg))
 #````````````````````````````Process Variables````````````````````````````````
-# We create two instances of a Scalers device and one instance of 'passive'
+class PVt(PV):
+    '''PV, returning current time.''' 
+    # override data updater
+    def update_value(self):
+        self.value = [time.time()]
+
 class Scaler(Device):
     """ Derived from liteServer.Device.
     Note: All class members, which are not process variables should 
@@ -54,12 +58,10 @@ class Scaler(Device):
           'pause':      PV('RW','Pause all counters',[False]), 
           'reset':      PV('W','Reset all counters',[False]\
                         ,setter=self.reset),
-          'image':      PV('R','Image',[img])
+          'image':      PV('R','Image',[img]),
+          'time':       PVt('R','Current time',[0.],parent=self),#parent is for testing
         }
-        if Python3:
-            super().__init__(name,pars)
-        else:
-            Device.__init__(self,name,pars)
+        super().__init__(name,pars)
         #print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = True
@@ -107,12 +109,13 @@ parser.add_argument('-n','--nCounters', type=int, default=1100,
   #the UDP socket size is limited to 64k bytes
 pargs = parser.parse_args()
 
+liteServer.Server.Dbg = pargs.dbg
 devices = [Scaler('dev'+str(i+1),bigImage=pargs.bigImage)\
   for i in range(pargs.scalers)]
 
 print('Serving:'+str([dev._name for dev in devices]))
 
-server = liteServer.Server(devices,dbg=pargs.dbg)
+server = liteServer.Server(devices)
 server
 server.loop()
 

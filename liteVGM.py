@@ -3,10 +3,13 @@
 #__version__ = 'v01 2018-12-27'# created
 #__version__ = 'v02 2018-05-07'# better error handling
 #__version__ = 'v03 2018-05-08'# longer (0.5s) time.sleep on opening, it helps
-__version__ = 'v03 2011-11-07'# support new liteServer 
+#__version__ = 'v04 2011-11-07'# support new liteServer 
+#__version__ = 'v05 2011-11-09'# parent abandoned, global serialDev
+__version__ = 'v06 2011-11-10'# parent is back, it is simplest way to provide PVD with the proper serial device
+
 
 import sys, serial, time
-Python3 = sys.version_info.major == 3
+#Python3 = sys.version_info.major == 3
 import liteServer
 
 PV = liteServer.PV
@@ -36,11 +39,11 @@ def decode_data_point(dp):
     r['N'] *= scale
     return round(r['N'],4)
 
-def vgm_command(ser,cmd):
+def vgm_command(cmd,serDev):
     """execute command on a gaussmeter with serial interface ser"""
     printd('>vgm_command: '+str(cmd))
-    ser.write(cmd)
-    dps = ser.read(100)
+    serDev.write(cmd)
+    dps = serDev.read(100)
     ldps = len(dps)
     printd('read %d'%ldps+' bytes')
 
@@ -61,35 +64,37 @@ def vgm_command(ser,cmd):
 class PVD(PV):
     # override data updater
     def update_values(self):
-        r = vgm_command(self.parent._ser,b'\x03'*6)
+        r = vgm_command(b'\x03'*6,self.parent.serialDev)
         printd('getv:'+str(r))
         self.value = r
         
 class Gaussmeter(Device):
+    #``````````````Attributes, same for all class instances```````````````````    Dbg = False
+    Dbg = False
+    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+    #``````````````Instantiation``````````````````````````````````````````````
+    #global serialDev
     def __init__(self,name,comPort='COM1'):
     
         #device specific initialization
         def open_serial():
             return serial.Serial(comPort, 115200, timeout = pargs.timeout)
-        self._ser = None
+        serialDev = None
         for attempt in range(4):
             try:
-                self._ser = open_serial()
+                serialDev = open_serial()
                 break
             except Exception as e:
                 printw('attempt %i'%attempt+' to open '+comPort+':'+str(e))
             time.sleep(0.5*(attempt+1))
-        if self._ser is None:
+        if serialDev is None:
             printe('could not open '+comPort)
         else:
             print('Succesfully open '+name+' at '+comPort)
 
         # create parameters
         pars = {'DP': PVD('R','Data Points',[0.]*5,parent=self)}
-        if Python3:
-            super().__init__(name,pars)
-        else:
-            super().__init__(name,pars)
+        super().__init__(name,pars)
         
         # test
         #pars['DP'].update_values()
@@ -106,7 +111,7 @@ parser.add_argument('-t','--timeout',type=float,default=.5\
 parser.add_argument('comPorts',nargs='*',default=['COM1'])
 pargs = parser.parse_args()
 
-devices = [Gaussmeter('Gaussmeter%d'%i,p) for i,p in enumerate(pargs.comPorts)]
+devices = [Gaussmeter('Gaussmeter%d'%i,comPort=p) for i,p in enumerate(pargs.comPorts)]
 server = liteServer.Server(devices,
   host=pargs.host, port=pargs.port)
 

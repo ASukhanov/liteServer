@@ -46,7 +46,9 @@ Known issues:
 #__version__ = 'v21 2019-06-10'# chunking OK
 #__version__ = 'v22a 2019-06-17'# release
 #__version__ = 'v23a 2019-06-21'# redesign
-__version__ = 'v24 2019-11-07'# release
+#__version__ = 'v24 2019-11-07'# release
+#__version__ = 'v24 2019-11-08'# PV.parent removed, it conflicts with json
+__version__ = 'v24 2019-11-10'# Dbg and devDict are Server attributes 
 
 import sys
 import socket
@@ -69,17 +71,15 @@ ChunkSleep = 0.001 # works on localhost, 50MB/s, and on shallow network
 MaxEOD = 4
 
 PORT = 9700# Communication port number
-DevDict = None # forward declaration
-Dbg = True
 EventExit = threading.Event()
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
-#def printd(msg):
-#    if Dbg: print('dbg: '+msg)
-def printd(msg): pass# print('DBG: '+msg)
+def printd(msg):
+    if Server.Dbg: print('dbg: '+msg)
+#def printd(msg): pass# print('lsDBG: '+msg)
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -139,9 +139,9 @@ class PV():
     The type and count is determined from default value.
     Features is string, containing letters from 'RWD'.
     More properties can be added in derived classes"""
-    def __init__(self,features='RW', desc='', value=[0], parent=None\
-        ,opLimits=None, setter=None):#, numpy=None):
-        printd('>PV: '+str((features,desc,value,opLimits)))
+    def __init__(self,features='RW', desc='', value=[0]\
+        ,opLimits=None, setter=None, parent=None):#, numpy=None):
+        printd('>PV: '+str((features,desc,value,opLimits,parent)))
         self._name = None # assighned in device.__init__. 
         # name is not really needed, as it is keyed in the dictionary
         self.timestamp = None
@@ -149,7 +149,7 @@ class PV():
         self.count = [len(self.value)]
         self.features = features
         self.desc = desc
-        self.parent = parent
+        self._parent = parent
         
         # if the parameter is numpy :
         try:    
@@ -166,7 +166,7 @@ class PV():
     def __str__(self):
         print('PV object desc: %s at %s'%(self.desc,id(self)))
 
-    def update_values(self):
+    def update_value(self):
         """Overridable getter"""
         printd('default get_values')
         pass
@@ -231,7 +231,7 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             cmd,args = serverMsg['cmd']
             devs = args[0]
             if len(devs[0]) == 0:
-                devs = [i[0] for i in DevDict.items()]
+                devs = [i[0] for i in Server.DevDict.items()]
                 if len(args[1][0])+len(args[2][0]) == 0:
                     return devs
         except Exception as e:
@@ -242,16 +242,16 @@ class PV_Handler(SocketServer.BaseRequestHandler):
           parNames = args[1]
           if len(parNames[0]) == 0:
             # replace parNames with a list of all parameters
-            dev = DevDict[devName]
+            dev = Server.DevDict[devName]
             parNames = [i for i in vars(dev) if not i.startswith('_')]
           printd('parNames:'+str(parNames))
           for parName in parNames:
-            pv = getattr(DevDict[devName],parName)
+            pv = getattr(Server.DevDict[devName],parName)
             devParName = devName+':'+parName
             parDict = {}
             returnedDict[devParName] = parDict
             if cmd == 'get':
-                pv.update_values()
+                self.value = pv.update_value()
                 value = getattr(pv,'value')
                 printd('value:'+str(value))
                 try:
@@ -287,7 +287,7 @@ class PV_Handler(SocketServer.BaseRequestHandler):
                         # do not return value on info() it could be very long
                         parDict['value'] = '?'
                     else:
-                        pv = getattr(DevDict[devName],parName)
+                        pv = getattr(Server.DevDict[devName],parName)
                         propVal = getattr(pv,propName)
                         parDict[propName] = propVal
         return returnedDict
@@ -312,6 +312,7 @@ class PV_Handler(SocketServer.BaseRequestHandler):
             r = 'ERR. Exception: '+repr(e)
             exc = traceback.format_exc()
             print('Traceback: '+repr(exc))
+        
         printd('reply object: '+str(r)[:200]+'...'+str(r)[-40:])
         reply = ubjson.dumpb(r)
         
@@ -351,9 +352,15 @@ class myUDPServer(SocketServer.UDPServer):
             sock.sendto(b'\x00\x00\x00\x00',addr)
             
 class Server():
+    '''liteServer object'''
+    
+    #``````````````Attributes`````````````````````````````````````````````````
+    Dbg = False
+    DevDict = None
+    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+    #``````````````Instantiation``````````````````````````````````````````````
     def __init__(self,devices,host=None,port=PORT,dbg=False):
-        global DevDict
-        
+        print('Server.Dbg',Server.Dbg)
         # create Device 'server'
         dev = [Device('server',{\
           'version': PV('R','liteServer',[__version__]),
@@ -364,9 +371,9 @@ class Server():
         # create global dictionary of all devices
         devs = dev + list(devices)
         #DevDict = {dev._name:dev for dev in devs}
-        DevDict = OD([[dev._name,dev] for dev in devs])
+        Server.DevDict = OD([[dev._name,dev] for dev in devs])
         #for d,i in DevDict.items():  print('device '+str(d))
-        #print('DevDict',DevDict)
+        #print('DevDict',Server.DevDict)
                     
         self.host = host if host else ip_address()
         self.port = port
@@ -375,9 +382,10 @@ class Server():
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
+        print('Server instantiated')
     
     def loop(self):
         print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+';'+str(self.port)))
         self.server.serve_forever()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# see liteScalerMan.py liteAccess.py
+# see liteScaler.py liteAccess.py
