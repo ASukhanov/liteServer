@@ -113,7 +113,7 @@ pargs = parser.parse_args()
 
 devices = [Gaussmeter('Gaussmeter%d'%i,comPort=p) for i,p in enumerate(pargs.comPorts)]
 server = liteServer.Server(devices,
-  host=pargs.host, port=pargs.port)
+  host=pargs.host, port=pargs.port, dbg=pargs.dbg)
 
 try:
     server.loop()
