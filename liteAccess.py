@@ -66,7 +66,8 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
 #__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
 #__version__ = 'v21 2019-09-23'#
-__version__ = 'v21 2019-11-07'# --period
+#__version__ = 'v22 2019-11-07'# --period
+__version__ = 'v23 2019-11-10'# reconnection
 
 import sys, os, time, socket, traceback
 from timeit import default_timer as timer
@@ -76,7 +77,7 @@ import ubjson
 #````````````````````````````Globals``````````````````````````````````````````
 UDP = True
 PrefixLength = 4
-timeout = None # for socket operations. means blocking None
+#timeout = None # for socket operations. means blocking None
 socketSize = 1024*64 # max size of UDP transfer
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Helper functions`````````````````````````````````
@@ -159,7 +160,7 @@ def parsePVname(txt):
 
 class Channel():
     '''Provides connection to host'''
-    def __init__(self,hostPort):
+    def __init__(self,hostPort,timeout=None):
         self.hostPort = hostPort
         hp = self.hostPort.split(';',1)
         self.sHost = hp[0]
@@ -278,9 +279,9 @@ class PV():
             expectedArgWrong()
                 
         self.name = str(self.devs)+':'+str(self.pars) # used for diagnostics
-        try: self.channel = channels[hostPort]
+        try: self.channel = channels[hostPort,timeout]
         except:
-             self.channel = Channel(hostPort)
+             self.channel = Channel(hostPort,timeout)
              channels[hostPort] = self.channel
 
     #def __del__(self):
@@ -351,7 +352,7 @@ if __name__ == "__main__":
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
     parser.add_argument('-i','--info',action='store_true',help=\
     'List of devices,parameters or features')
-    parser.add_argument('-t','--timeout',type=float,default=None,
+    parser.add_argument('-t','--timeout',type=float,default=10,
       help='timeout of the receiving socket')
     parser.add_argument('-p','--period',type=float,default=0.,
       help='repeat command every period (s)')
@@ -369,26 +370,39 @@ if __name__ == "__main__":
         print(txt)
 
     print('pargs.pvs',pargs.pvs,pargs.period)
-    while True:
+    def reconnect():
+        pvs = []
         for parval in pargs.pvs:
-            val = None
-            
             try:    pvname,val = parval.split('=',1)
             except: pvname = parval
             hdpe = parsePVname(pvname)
-            pv = PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)
-            if pargs.info:
-                printSmart(str(pv.info(hdpe[3])))
+            pvs.append(PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg))
+        return pvs
+    pvs = reconnect()
+
+    while True:
+        for pv in pvs:
+            val = None
+            try:
+                if pargs.info:
+                    printSmart(str(pv.info(hdpe[3])))
+                    continue
+                if val: # set() action
+                    try:    val = float(val)
+                    except: pass
+                    pv.value = val
+                else:   # get() action
+                    ts = timer()
+                    value = pv.value
+                    print('Get time: %.4f'%(timer()- ts))
+                    printSmart(str(value))
+            except socket.timeout as e:
+                #exc_type, exc_obj, exc_tb = sys.exc_info()
+                #printe('Exception %s: '%exc_type+str(e))
+                printw('socket.timeout with %s, reconnecting.'%pv.name)
+                pvs = reconnect()
                 continue
-            if val: # set() action
-                try:    val = float(val)
-                except: pass
-                pv.value = val
-            else:   # get() action
-                ts = timer()
-                value = pv.value
-                print('Get time: %.4f'%(timer()- ts))
-                printSmart(str(value))
+            
         if pargs.period == 0.:
             break
         else:
