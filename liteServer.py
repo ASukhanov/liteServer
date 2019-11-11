@@ -150,7 +150,6 @@ class PV():
         self.features = features
         self.desc = desc
         self._parent = parent
-        print('PV.parent',parent)
         
         # if the parameter is numpy :
         try:    
