@@ -22,7 +22,7 @@ Released
 ### Examples
 - liteScaler.py # server for 2 devices 
 - liteAccess.py -i :: # list of supported devices on local host
-- liteAccess.py -i "192.168.1.0;9700:: # list of devices, served by a liteServer with IP adrress 192.168.1.0 at port 9700
+- liteAccess.py -i "192.168.1.0;9700::" # list of devices, served by a liteServer with IP adrress 192.168.1.0 at port 9700
 - liteAccess.py -i :dev1: # list of parameters of dev1, served by a liteServer  on local host
 - liteAccess.py -i :dev1:counters # list of features of parameter dev1:counters
 - liteAccess.py -p1.5 ":dev1:frequency" ":dev2:frequency"# print frequencies of dev1 and dev2 every 1.5 seconds
