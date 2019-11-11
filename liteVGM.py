@@ -63,7 +63,7 @@ def vgm_command(cmd,serDev):
 #````````````````````````````Process Variables````````````````````````````````
 class PVD(PV):
     # override data updater
-    def update_values(self):
+    def update_value(self):
         r = vgm_command(b'\x03'*6,self.parent.serialDev)
         printd('getv:'+str(r))
         self.value = r
