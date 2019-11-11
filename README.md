@@ -20,12 +20,11 @@ The liteAccess.py is the base class for accessing the server parameters.
 Released
 
 ### Examples
-- liteScalerMan.py # server for 10 scalers with individual increments
-- liteAccess.py -l # list of supported devices
-- liteAccess.py -l dev1 # list of parameters of dev1
-- liteAccess.py -l dev1:counters # list of features of parameter dev1:counters
-- liteAccess.py dev1:counters # print counters values
-- liteAccess.py dev1:counters.desc # print description of dev1:counters
-- liteAccess.py -s dev1:counters 1 2 3 4 5 6 7 8 9 10 # initialize dev1:counters
-- liteAccess.py dev1:counters dev2:counters # get values of dev1:counters and dev2:counters
+- liteScaler.py # server for 2 devices 
+- liteAccess.py -i :: # list of supported devices on local host
+- liteAccess.py -i "192.168.1.0;9700:: # list of devices, served by a liteServer with IP adrress 192.168.1.0 at port 9700
+- liteAccess.py -i :dev1: # list of parameters of dev1, served by a liteServer  on local host
+- liteAccess.py -i :dev1:counters # list of features of parameter dev1:counters
+- liteAccess.py ":dev1:frequency" ":dev2:frequency"# print frequencies of dev1 and dev2
+- liteAccess.py ":dev1:frequency=2" ":dev2:frequency=3"# set frequencies of dev1 and dev2
 
