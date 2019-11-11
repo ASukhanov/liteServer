@@ -371,19 +371,19 @@ if __name__ == "__main__":
 
     print('pargs.pvs',pargs.pvs,pargs.period)
     def reconnect():
-        pvProps = []
+        pvPropVals = []
         for parval in pargs.pvs:
+            val = None
             try:    pvname,val = parval.split('=',1)
             except: pvname = parval
             hdpe = parsePVname(pvname)
-            pvProps.append((PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)\
-            ,hdpe[3]))
-        return pvProps
-    pvProps = reconnect()
+            pvPropVals.append((PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)\
+            ,hdpe[3],val))
+        return pvPropVals
+    pvPropVals = reconnect()
 
     while True:
-        for pv,prop in pvProps:
-            val = None
+        for pv,prop,val in pvPropVals:
             try:
                 if pargs.info:
                     printSmart(str(pv.info(prop)))
@@ -401,7 +401,7 @@ if __name__ == "__main__":
                 #exc_type, exc_obj, exc_tb = sys.exc_info()
                 #printe('Exception %s: '%exc_type+str(e))
                 printw('socket.timeout with %s, reconnecting.'%pv.name)
-                pvProps = reconnect()
+                pvPropVals = reconnect()
                 continue
             
         if pargs.period == 0.:
