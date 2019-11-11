@@ -11,7 +11,8 @@
 #__version__ = 'v09 2019-05-21'# version parameter, includes description
 #__version__ = 'v10 2019-06-08'# timestamping
 #__version__ = 'v11 2019-06-09'# numpy array support
-__version__ = 'v12 2019-06-17'# release
+#__version__ = 'v12 2019-06-17'# release
+__version__ = 'v13 2019-11-10'# better dbg, new PV: time with overridden update_value and parent
 
 import sys, time, threading
 import numpy as np
@@ -20,14 +21,13 @@ import liteServer
 PV = liteServer.PV
 Device = liteServer.Device
 EventExit = liteServer.EventExit
-printd = liteServer.printd
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
 def printd(msg): 
     if pargs.dbg:
-        print('DBG:'+str(msg))
+        print('dbgScaler: '+str(msg))
 #````````````````````````````Process Variables````````````````````````````````
 class PVt(PV):
     '''PV, returning current time.''' 

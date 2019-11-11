@@ -15,7 +15,6 @@ import liteServer
 PV = liteServer.PV
 Device = liteServer.Device
 EventExit = liteServer.EventExit
-printd = liteServer.printd
 
 #`````````````````````````````Helper methods```````````````````````````````````
 def printe(msg):
@@ -23,6 +22,8 @@ def printe(msg):
 def printw(msg):
     print('WARNING '+msg)
 #def printd(msg): pass#print('DBG: '+msg)
+def printd(msg):
+    if liteServer.Server.Dbg: print('dbgVGM:'+str(msg))
     
 def decode_data_point(dp):
     """Decode 6 bytes of a data point"""
@@ -73,21 +74,20 @@ class Gaussmeter(Device):
     Dbg = False
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Instantiation``````````````````````````````````````````````
-    #global serialDev
     def __init__(self,name,comPort='COM1'):
     
         #device specific initialization
         def open_serial():
             return serial.Serial(comPort, 115200, timeout = pargs.timeout)
-        serialDev = None
+        self.serialDev = None
         for attempt in range(4):
             try:
-                serialDev = open_serial()
+                self.serialDev = open_serial()
                 break
             except Exception as e:
                 printw('attempt %i'%attempt+' to open '+comPort+':'+str(e))
             time.sleep(0.5*(attempt+1))
-        if serialDev is None:
+        if self.serialDev is None:
             printe('could not open '+comPort)
         else:
             print('Succesfully open '+name+' at '+comPort)

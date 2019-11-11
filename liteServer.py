@@ -78,8 +78,7 @@ def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
 def printd(msg):
-    if Server.Dbg: print('dbg: '+msg)
-#def printd(msg): pass# print('lsDBG: '+msg)
+    if Server.Dbg: print('dbgServ: '+str(msg))
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
