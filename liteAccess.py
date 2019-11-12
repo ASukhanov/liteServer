@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Base class for accessing multiple Process Variables, served by a liteServer.
 Usage:
 
@@ -13,6 +13,7 @@ Create access to multiple PVs:
   liteAccess.PV(['']):  list of all devices on local host
   single_PV_on_local_host = liteAccess.PV(['','server','version'])
   versions_of dev1_and_dev2_on_acnlin23 = liteAccess.PV(['acnlinec23',['dev1','dev2'],'version'])
+  multiple_PV_on_acnlin23 = liteAccess.PV(['acnlinec23',['dev1','dev2'],[dev1','dev2']])
   all_PVs_of_the_dev1_and_dev2 = liteAccess.PV(['acnlinec23',['dev1','dev2'],''])
 
 Information about PVs:
@@ -37,6 +38,7 @@ Command line usage examples:
 liteAccess.py -i            # list all device and parameters on local host
 liteAccess.py -i ::         # same
 liteAccess.py -i acnlin23:: # same on host 'acnlin23'
+liteAccess.py -i "acnlin23;9700::" # same for port 9700, 
 liteAccess.py -i :server:   # show info of all parameter os device 'server'
 liteAccess.py -i :dev1:     # show info of all parameter os device 'dev1'
 liteAccess.py :dev1:frequency # get dev1:frequency
@@ -45,6 +47,15 @@ liteAccess.py :dev2:image   # get numpy array of an image
 liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 
 """
+#``````````````````Python2/3 compatibility````````````````````````````````````
+from __future__ import print_function
+from __future__ import unicode_literals
+import sys
+Python3 = sys.version_info.major == 3
+if Python3:
+    basestring = str
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+
 #__version__ = 'v01 2018-12-17'# created
 #__version__ = 'v02 2018-12-17'# python3 compatible
 #__version__ = 'v03 2018-12-19'#
@@ -67,11 +78,13 @@ liteAccess.py :dev1:frequency=2 # set frequency of dev2 to 2
 #__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
 #__version__ = 'v21 2019-09-23'#
 #__version__ = 'v22 2019-11-07'# --period
-__version__ = 'v23 2019-11-10'# reconnection
+#__version__ = 'v23 2019-11-10'# reconnection
+#__version__ = 'v24 2019-11-10'# Python2/3 compatible
+__version__ = 'v25 2019-11-10'# numpy array correctly decoded in multi-parameter requests
 
-import sys, os, time, socket, traceback
+import os, time, socket, traceback
 from timeit import default_timer as timer
-Python3 = sys.version_info.major == 3
+import numpy as np
 import ubjson
 
 #````````````````````````````Globals``````````````````````````````````````````
@@ -93,6 +106,7 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
+import struct
 def recvUdp(socket,socketSize):
     """Receive chopped UDP data"""
     chunks = []
@@ -101,7 +115,11 @@ def recvUdp(socket,socketSize):
     while tryMore:
         buf, addr = socket.recvfrom(socketSize)        
         size = len(buf) - PrefixLength
-        offset = int.from_bytes(buf[:PrefixLength],'big')
+        #offset = int.from_bytes(buf[:PrefixLength],'big')# python3
+        offset = struct.unpack(">I",buf[:PrefixLength])[0]
+        #print('prefix', repr(buf[:PrefixLength]))
+        #print('offset',offset)
+        
         if size > 0:
             printd('chunk received '+str((offset,size)))
             chunks.append((offset,size,buf[PrefixLength:]))
@@ -156,7 +174,27 @@ def parsePVname(txt):
     except: 
         par = pp[0]
         props = ''
-    return  hostPort,dev,par,props  
+    return  hostPort,dev,par,props
+    
+def extract_old(pardict,key):
+    try:    item = pardict[key]
+    except: 
+        printe('key missing: '+str[key])
+        return None
+    v = item['value']
+    try:    
+        shape,dtype = item['numpy']
+        return    np.frombuffer(v,dtype).reshape(shape) 
+    except:
+        return v[0]
+        
+def decode_pardict(pardict):
+    v = pardict['value']
+    try:    
+        shape,dtype = pardict['numpy']
+        return    np.frombuffer(v,dtype).reshape(shape) 
+    except:
+        return v
 
 class Channel():
     '''Provides connection to host'''
@@ -205,32 +243,12 @@ class Channel():
         printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)+':')
         #printd(str(data.decode())) # don't print it here, could be utf8 issue
         decoded = ubjson.loadb(data)
-        printd(str(decoded)[:200]+'...')
-        try:
-            # assume the dictionary is ordered, take the first value
-            parDict = list(decoded.values())[0]
-        except:
+        printd('decoded:'+str(decoded)[:200]+'...')
+        if not isinstance(decoded,dict):
             return decoded
-        if not isinstance(parDict,dict):
-            return decoded
-        try: # assume it is numpy array
-            shape,dtype = parDict['numpy']
-        except Exception as e: # it is not numpy array, 
-            #print('not np',e)
-            return decoded # standard stuff timestamp and value, no further conversion
-        
-        # additional decoding of numpy arrays.
-        import numpy as np
-        # this section is fast, 18us for 56Kbytes
-        #shape,dtype = parDict['numpy']
-        parName = list(decoded)[0]
-        ndarray = np.frombuffer(parDict['value'],dtype)
-        # replace value in the decoded dict
-        #converted = {parName}
-        #try: converted = {parName:{'timestamp':parDict['timestamp']}
-        #except: pass
-        #converted['value'] = ndarray.reshape(shape)}}
-        decoded[parName]['value'] = ndarray.reshape(shape)
+        # items could by numpy arrays, the following should decode everything:
+        for key,item in decoded.items():
+            decoded[key] = decode_pardict(item)
         return decoded
 
     def sendDictio(self,dictio):
@@ -267,15 +285,16 @@ class PV():
             hostDevsPars += [['']]
         try:    hostPort, self.devs, self.pars = hostDevsPars
         except: expectedArgWrong()
-        if not isinstance(hostPort,str): 
+        print('hostPort',hostPort,type(hostPort))
+        if not isinstance(hostPort,basestring): 
             expectedArgWrong()
         if not isinstance(self.devs,(list,tuple)):
             self.devs = [self.devs]
-        if not all(isinstance(i,str) for i in self.devs): 
+        if not all(isinstance(i,basestring) for i in self.devs): 
             expectedArgWrong()
         if not isinstance(self.pars,(list,tuple)):
             self.pars = [self.pars]
-        if not all(isinstance(i,str) for i in self.pars):
+        if not all(isinstance(i,basestring) for i in self.pars):
             expectedArgWrong()
                 
         self.name = str(self.devs)+':'+str(self.pars) # used for diagnostics
@@ -305,7 +324,7 @@ class PV():
                 #raise BrokenPipeError('ERROR: '+msg)
                 return
             print('WARNING: timeout %f'%timeout+' too small')
-        isText = isinstance(decoded,str) if Python3 else isinstance(decoded,unicode)
+        isText = isinstance(decoded,basestring)
         if isText:
             msg = 'from liteServer: ' + decoded
             printe(msg)
@@ -377,6 +396,7 @@ if __name__ == "__main__":
             try:    pvname,val = parval.split('=',1)
             except: pvname = parval
             hdpe = parsePVname(pvname)
+            print('hdpe: '+str(hdpe))
             pvPropVals.append((PV(hdpe[:3],timeout=pargs.timeout,dbg=pargs.dbg)\
             ,hdpe[3],val))
         return pvPropVals
