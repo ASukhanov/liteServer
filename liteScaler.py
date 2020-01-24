@@ -12,7 +12,11 @@
 #__version__ = 'v10 2019-06-08'# timestamping
 #__version__ = 'v11 2019-06-09'# numpy array support
 #__version__ = 'v12 2019-06-17'# release
-__version__ = 'v13 2019-11-10'# better dbg, new PV: time with overridden update_value and parent
+#__version__ = 'v13 2019-11-10'# better dbg, new PV: time with overridden update_value and parent
+#__version__ = 'v14 2019-11-13'# removed 'R' from non-monitored parameters
+#__version__ = 'v15 2019-11-30'# test legalValues of the 'command' parameter
+#__version__ = 'v16 2019-12-01'# 'pause' parameter removed, 'command' is better suited for the purpose
+__version__ = 'v17 2019-12-08'# update timestamp for PV time, timestamp is not list
 
 import sys, time, threading
 import numpy as np
@@ -34,6 +38,7 @@ class PVt(PV):
     # override data updater
     def update_value(self):
         self.value = [time.time()]
+        self.timestamp = time.time()
 
 class Scaler(Device):
     """ Derived from liteServer.Device.
@@ -51,16 +56,21 @@ class Scaler(Device):
         img = bigImg if bigImage else smallImg    
         pars = {
           'counters':   PV('R','%i of counters'%len(initials),initials),
-          'increments': PV('RW','Increments of the individual counters'\
+          'increments': PV('W','Increments of the individual counters'\
                         ,[-1]+[1]*(pargs.nCounters-1)),
-          'frequency':  PV('RW','Update frequency of all counters',[1.]\
+          'frequency':  PV('W','Update frequency of all counters',[1.]\
                         ,opLimits=(0,10)),
-          'pause':      PV('RW','Pause all counters',[False]), 
+          # 'pause' is boolean because it is readable
+          #'pause':      PV('RW','Pause all counters',[False]),
+          # 'reset' is action because it is not readable 
           'reset':      PV('W','Reset all counters',[False]\
                         ,setter=self.reset),
+          'command':    PV('RW','Command to execute',['Started']\
+                        ,legalValues=['Start','Stop'],setter=self.command_set),
           'image':      PV('R','Image',[img]),
           'time':       PVt('R','Current time',[0.],parent=self),#parent is for testing
         }
+        self._pause = False
         super().__init__(name,pars)
         #print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
@@ -71,20 +81,30 @@ class Scaler(Device):
         print('resetting scalers of %s'%self._name)
         for i in range(len(self.counters.value)):
             self.counters.value[i] = 0
+  
+    def command_set(self,pv):
+        print('command',str(self.command.value))
+        if self.command.value[0] == 'Start':
+            self.command.value[0] = 'Started'
+            self._pause = False
+        else:
+            self.command.value[0] = 'Stopped'
+            self._pause = True
         
     def _state_machine(self):
         self._cycle = 0
         ns = len(self.counters.value)
         while not EventExit.is_set():
             EventExit.wait(1./self.frequency.value[0])
-            if self.pause.value[0]:
+            #print('self.pause',self.pause.value)
+            if self._pause:
                 continue
 
             # increment counters individually
             for i,increment in enumerate(self.increments.value[:ns]):
                 #print(instance+': c,i='+str((self.counters.value[i],increment)))
                 self.counters.value[i] += increment
-                self.counters.timestamp = [time.time()]
+                self.counters.timestamp = time.time()
                 
             # increment pixels in the image
             # this is very time consuming:
@@ -98,7 +118,7 @@ class Scaler(Device):
 # parse arguments
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-d','--dbg', action='store_true', help='debugging')
+parser.add_argument('-d','--dbg', type=int, help='debugging level')
 parser.add_argument('-b','--bigImage', action='store_true', help=\
 'generate big image >64kB')
 parser.add_argument('-s','--scalers', type=int, default=2,help=\

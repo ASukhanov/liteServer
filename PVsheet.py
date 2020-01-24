@@ -25,7 +25,8 @@
 #__version__ = 'v20 2019-06-21'#
 #__version__ = 'v21 2019-06-27'# right click fixed, config file OK
 #__version__ = 'v22 2019-06-28'# table created with initial values, not titles
-__version__ = 'v23 2019-09-15'#
+#__version__ = 'v23 2019-09-15'#
+__version__ = 'v24 2019-11-21'#
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -146,7 +147,8 @@ class Window(QtWidgets.QWidget):
             # the object is PV
             pv = obj
             #val = pv.v
-            initialValue = pv.initialValue[0]
+            printd('pv.initialValue of %s:'%pv.name+str(pv.initialValue))
+            initialValue = pv.initialValue['value'][0]
             #print( 'initialValue',initialValue)
             pvTable.par2pos[pv] = row,colOut
             try:
@@ -159,7 +161,7 @@ class Window(QtWidgets.QWidget):
             #print('ok',item)
             #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
-                if pv.is_bool():
+                if pv.guiType == 'bool':
                     #print( 'PV %s is boolean:'%pv.name+str(initialValue))
                     #item.setText(pv.name.split(':')[1])
                     item.setText(pv.name.split(':',1)[1])
@@ -170,7 +172,7 @@ class Window(QtWidgets.QWidget):
                     self.table.setCellWidget(row, colOut, item)
                     continue
                     
-                elif pv.is_spinbox():
+                elif pv.guiType == 'spinbox':
                     printd('it is spinbox:'+pv.title())
                     spinbox = QDoubleSpinBoxPV(pv)
                     # using other ways is more complicated as it is not trivial
@@ -222,7 +224,7 @@ class Window(QtWidgets.QWidget):
         if isinstance(pv,str):
             return
         try:
-            if pv.is_bool():
+            if pv.guiType =='bool':
                 checked = item.checkState() == QtCore.Qt.Checked
                 printd('bool clicked '+pv.name+':'+str(checked))
                 pv.v = checked # change server's pv
@@ -255,7 +257,8 @@ class Window(QtWidgets.QWidget):
         #print('attributes:%s'%str(attributes)[:100])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
-            vv = v if isinstance(v,str) else list(v)[0]
+            #vv = v if isinstance(v,str) else list(v)[0]
+            vv = v if isinstance(v,str) else list(v)
             if vv is None:
                 continue
             if isinstance(vv,list):
@@ -285,18 +288,17 @@ def MySlot(a):
             printw('logic error')
             continue
         try:
-            val = pv.v
-            #print('pv.v',val)
+            val = pv.v['value']
             printd('val:%s'%str(val)[:100])
             if isinstance(val,list):
-                if pv.is_bool():
+                if pv.guiType =='bool':
                     #print('PV '+pv.name+' is bool = '+str(val))
                     state = window.table.item(*rowCol).checkState()
                     if val[0] != (state != 0):
                         printd('flip')
                         window.table.item(*rowCol).setCheckState(val[0])
                     continue
-                elif pv.is_spinbox():
+                elif pv.guiType == 'spinbox':
                     continue
                 # standard PV
                 #print('PV '+pv.name+' is list[%i] of '%len(val)\
@@ -310,6 +312,7 @@ def MySlot(a):
                 txt = '%s: %s'%(val.shape,str(val))
             else:
                 txt = 'Unknown type of '+pv.name+'='+str(type(val))
+                printw(txt+':'+str(val))
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
@@ -350,21 +353,24 @@ class PV():
         #print('pv vars:'+str(vars(self.pv)))
         self.initialValue = self.v # use getter to store initial value
         self.t = 0.
-        self._spinbox, self._bool = None,None        
-        # creating standard attributes from remote ones
+        # creating attributes from remote ones
         self.attr = self.pv.info()[self.key]
-        printd('attrs %s'%self.attr)
-        for attribute,v in self.attr.items():
-            if attribute not in ['count', 'features', 'opLimits']:
-                continue
-            printd('Creating attribute %s.%s = '%(name,attribute)+str(v))
-            setattr(self,attribute,v)
+        print('attrs %s'%self.attr)
+        #for attribute,v in self.attr.items():
+        #    if attribute not in ['count', 'features', 'opLimits']:                
+        #        continue
+        #    print('Creating attribute %s.%s = '%(name,attribute)+str(v))
+        #    setattr(self,attribute,v)
+        self.guiType = self.gui_type()
+        print('type of %s:'%self.name+str(self.guiType))
             
     @property
     def v(self): # getter
         # return values and store timestamp
-        printd('getter of %s called'%self.name)
-        return(self.pv.value[self.key]['value'])
+        #v = self.pv.value[self.key]['value']
+        v = self.pv.value[self.key]
+        printd('getter of %s called, value type:'%self.name+str(type(v)))
+        return(v)
 
     @v.setter
     def v(self, value):
@@ -377,35 +383,26 @@ class PV():
         del self.initialValue
 
     def title(self): return self.name
-    
-    def is_bool(self):
-        if self._bool is not None:
-            return self._bool
-        self._bool = False
-        #print('iv',self.name,str(self.initialValue)[:60])
-        #if isinstance(self.initialValue,list):
-        if len(self.initialValue) == 1:
-            if isinstance(self.initialValue[0],bool):
-                 self._bool = True
-        #print('is bool ',self._bool)
-        return self._bool
+
+    def gui_type(self):
+        iv = self.initialValue['value']
+        print('iv',self.name,str(iv)[:60])
+        if len(iv) != 1:
+            return None
+            
+        if isinstance(iv[0],bool):
+            return 'bool'
+
+        if self.is_writable():
+            if type(iv[0]) in (float,int):
+                return 'spinbox'                
+            if 'legalValues' in self.attr:
+                return 'combobox'
+        return None
         
     def is_writable(self):
-        return 'W' in self.features
-    
-    def is_spinbox(self):
-        if self._spinbox is not None:
-            #print('is_spinbox %s'%str(self._spinbox))
-            return self._spinbox
-        self._spinbox = False
-        if self.is_writable():
-            try:        
-                if len(self.initialValue) == 1:
-                    if type(self.initialValue[0]) in (float,int):
-                        self._spinbox = True
-            except: pass
-        return self._spinbox
-        
+        return 'W' in self.attr['features']
+            
     def attributes(self):
         return self.attr
 
@@ -443,7 +440,7 @@ class PVTable():
                 cols = line.split(',')
                 nCols = len(cols)
                 for col,token in enumerate(cols):
-                  try:
+                  if True:#try:
                     #print( 'token:'+str(token))
                     if len(token) == 0:
                         obj = ''
@@ -472,14 +469,14 @@ class PVTable():
                     #    if obj[-1] == ']': obj = obj[:-1]
                     else: # the cell is PV
                         #print( 'the "%s" is pv'%token)
-                        try:
+                        if True:#try:
                             obj = PV(token)
-                        except Exception as e:
+                        else:#except Exception as e:
                             txt = 'Cannot create PV %s:'%token+str(e)
                             raise NameError(txt)
                     self.pos2obj[(row,col)] = obj
                     #print(row,col,type(obj))
-                  except Exception as e:
+                  else:#except Exception as e:
                     printw(str(e))
                     self.pos2obj[(row,col)] = '?'
 
@@ -507,17 +504,18 @@ class PVTable():
     def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'
         print('>build_temporary_pvfile')
-        devices = LA.PV([pargs.host]).info()
-        printd('devs:'+str(devices))
+        pvServerInfo = LA.PV([pargs.host]).info()
+        deviceSet = {i.split(':')[0] for i in pvServerInfo.keys()}
+        printd('devs:'+str(deviceSet))
         f = open(fname,'w')
-        for dev in devices:
-            f.write("[,'____Device: %s____',]\n"%dev)
-            pars = LA.PV([pargs.host,dev]).info().keys()
-            printd('pars:'+str(pars))
-            for par in pars:
-                devPar = pargs.host+':'+par
-                #print(devPar)
-                f.write("'%s',%s\n"%(par,devPar))
+        #for dev in deviceSet:
+        curDev = ''
+        for devParName,pardict in pvServerInfo.items():
+            dev,parName = devParName.split(':')
+            if dev != curDev:
+                curDev = dev
+                f.write("[,'____Device: %s____',]\n"%dev)
+            f.write("'%s',%s\n"%(parName,devParName))
         f.close()
         print('PV spreadsheet config file generated: %s'%fname)
         return fname
