@@ -80,7 +80,8 @@ transaction time of LdoPars is ~3 ms
 To enable debugging: LA.LdoPars.Dbg = True
 """
 #__version__ = 'v36 2020-02-06'# full re-design
-__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good. 
+#__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
+__version__ = 'v38 2020-02-10 '# set() raising exceptions on failures
 
 print('liteAccess '+__version__)
 
@@ -378,7 +379,12 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
             return channel._transaction('read')
 
     def set(self,value):
-        self.channels[0]._transaction('set',value)
+        print('>set',value)
+        r = self.channels[0]._transaction('set',value)
+        #print('<set:',r)# do not print here
+        if isinstance(r,str):
+            raise RuntimeError(r)
+        return r
 
     #``````````````subscribtion request```````````````````````````````````````
     def subscribe(self, callback):
