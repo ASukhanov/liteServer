@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
-__version__ = 'v25 2020-02-10'# most of the essential suff is working
+#__version__ = 'v25 2020-02-10'# most of the essential suff is working
+__version__ = 'v26 2020-02-10'# spinboxes OK
+
 #TODO: drop $ substitution, leave it for YAML
 
 import threading, socket, subprocess, sys, time
@@ -33,21 +35,29 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
     def __init__(self,ldo):
         super().__init__()
         self.ldo = ldo
+        ss = 1
+        opl = (0.,100.)
         try:    opl = self.ldo.opLimits['values']
-        except: pass
+        except:
+            printw(' no oplimits') 
+            pass
         else:
-            self.setRange(*opl)
+            #self.setRange(*opl)
             ss = (opl[1]-opl[0])/100.
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
-            self.setSingleStep(ss)
+        self.setRange(*opl)
+        print('singlestep',ss)
+        self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
         #print('instantiated %s'%self.ldo.title())
         
     def handle_value_changed(self):
-        #print('handle_value_changed')
+        print('handle_value_changed to '+str(self.value()))
         #print('changing %s to '%self.ldo.title()+str(self.value()))
         try:
-            self.ldo.v = self.value()
+            #TODO:something is not right here
+            #self.ldo.set(self.value())
+            pass
         except Exception as e:
             print(e)
             
@@ -125,9 +135,8 @@ class Window(QtWidgets.QWidget):
             # the object is LDO
             ldo = obj
             #val = ldo.v
-            printd('ldo.initialValue of %s:'%ldo.name+str(ldo.initialValue))
-            initialValue = ldo.initialValue
-            #print( 'initialValue',initialValue)
+            initialValue = ldo.initialValue[0]
+            printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
             pvTable.par2pos[ldo] = row,colOut
             try:
                 item = QtWidgets.QTableWidgetItem(ldo.title())
@@ -151,8 +160,9 @@ class Window(QtWidgets.QWidget):
                     continue
                     
                 elif ldo.guiType == 'spinbox':
-                    printd('it is spinbox:'+ldo.title())
+                    print('it is spinbox:'+ldo.title())
                     spinbox = QDoubleSpinBoxLDO(ldo)
+                    print(spinbox)
                     # using other ways is more complicated as it is not trivial
                     # to transfer argument to the method
                     #spinbox = QtWidgets.QDoubleSpinBox(self\
@@ -160,11 +170,13 @@ class Window(QtWidgets.QWidget):
                     
                     spinbox.setValue(float(initialValue))
                     self.table.setCellWidget(row, colOut, spinbox)
+                    #print('table set for spinbox',row, colOut, spinbox)
                     continue
             except Exception as e:
                 #printw('in is_bool '+ldo.title()+':'+str(e))
                 pass
             self.table.setItem(row, col, item)
+            #print('table set',row, col, item)
 
         #self.table.itemClicked.connect(self.handleItemClicked)
         #self.table.itemPressed.connect(self.handleItemPressed)
@@ -205,7 +217,7 @@ class Window(QtWidgets.QWidget):
             if ldo.guiType =='bool':
                 checked = item.checkState() == QtCore.Qt.Checked
                 print('bool clicked '+ldo.name+':'+str(checked))
-                ldo.v = checked # change server's ldo
+                ldo.set(checked) # change server's ldo
             else:
                 d = QtWidgets.QDialog(self)
                 d.setWindowTitle("Info")
@@ -261,22 +273,28 @@ def MySlot(a):
             printw('logic error')
             continue
         try:
-            val = ldo.v
+            val = ldo.get()
             printd('val:%s'%str(val)[:100])
             if isinstance(val,list):
+                printd('val list')
                 if ldo.guiType =='bool':
+                    printd('val bool')
                     state = window.table.item(*rowCol).checkState()
-                    #print('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
+                    printd('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
                     if val[0] != (state != 0):
                         #print('flip')
                         window.table.item(*rowCol).setCheckState(val[0])
                     continue
                 elif ldo.guiType == 'spinbox':
+                    #print('val spinbox '+str(val[0]))
+                    #print(str(window.table.cellWidget(*rowCol).value()))
+                    window.table.cellWidget(*rowCol).setValue(float(val[0]))
                     continue
                 # standard LDO
                 #print('LDO '+ldo.name+' is list[%i] of '%len(val)\
                 #+str(type(val[0])))
-                txt = str(val)[1:-1] #avoid brackets
+                #txt = str(val)[1:-1] #avoid brackets
+                txt = str(val)
             elif isinstance(val,str):
                 printd('LDO '+ldo.name+' is text')
                 txt = val
@@ -337,26 +355,14 @@ class LDO():
         #    print('Creating attribute %s.%s = '%(name,attribute)+str(v))
         #    setattr(self,attribute,v)
         self.guiType = self.gui_type()
-        #print('type of %s:'%self.name+str(self.guiType))
-            
-    @property
-    def v(self): # getter
-        # return values and store timestamp
-        #print('>v')
-        v = self.ldo.value[0]
-        #print('v='+str(v))
-        #print('getter of %s called, value type:'%self.name+str(type(v)))
-        return(v)
+        #print('type of %s:'%self.name+str(self.guiType)
 
-    @v.setter
-    def v(self, value):
-        printd('setter of %s'%self.name+' called to change LDO to '+str(value))
-        self.ldo.value = [value]
+    def set(self,value):
+        r = self.ldo.set([value])
+        #print('<set',r)
 
-    @v.deleter
-    def v(self):
-        print("deleter of v called")
-        del self.initialValue
+    def get(self):
+        return self.ldo.value[0]
 
     def title(self): return self.name
 
@@ -448,7 +454,7 @@ class LDOTable():
     def print_LDO_at(self,row,col):
         try:
             ldo = self.pos2obj[row,col]
-            v = ldo.v
+            v = ldo.get()
             txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
             print('Table[%i,%i]:'%(row,col)+ldo.name+' = '+txt)
         except Exception as e:
