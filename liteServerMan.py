@@ -3,26 +3,6 @@
 ADO manager, which accepts all variables of a given liteServer and post them
 in an ADO.
 '''
-#__version__ = 'v01 2018-12-31'# created
-#__version__ = 'v02 2018-12-31'# reaction to returned string in periodic_update
-#__version__ = 'v03 2019-01-02'# 'features' handled
-#__version__ = 'v04 2019-01-03'# timestamp stripped out from data
-#__version__ = 'v05 2019-01-03'# set method is working, it is implemented using Setter class, which keeps the parameter and manager objects
-#__version__ = 'v06 2019-01-04'# action parameter is OK,
-#__version__ = 'v07 2019-01-05'# check in line 110
-#__version__ = 'v08 2019-01-06'# default timeout = 0.1
-#__version__ = 'v09 2019-01-15'# shrinked printout for lengthy parameters
-#__version__ = 'v10 2019-01-17'# floating length of all vector parameters
-#__version__ = 'v11a 2019-03-14'# better error handling
-#__version__ = 'v12 2019-04-25'# better exception handling if server is dead 
-#__version__ = 'v13 2019-04-30'# updatePeriodS added
-#__version__ = 'v14 2019-11-26'# re-designed for new liteServer,liteAccess
-#__version__ = 'v15 2019-11-26'# srict check of server reply, debugging
-#__version__ = 'v16 2019-11-27'# exception handling for pvAccess.firstValue(), adoStatus cleanup
-#__version__ = 'v17 2019-11-30'# establish the setting action, 'W' translates to 'CNSF_WE'
-#__version__ = 'v18 2019-12-03'# legal values handled, shebang for python3
-#__version__ = 'v19 2019-12-09'# numpy arrays supported, they have 'shape' feature
-#__version__ = 'v20 2019-12-09'# PV['host'].info() now returns info on all PVs 
 __version__ = 'v21 2019-12-10'# if not measurements: return
 
 #TODO: discrete parameters

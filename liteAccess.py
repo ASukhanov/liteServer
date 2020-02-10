@@ -70,7 +70,7 @@ LA.LdoPars([['scaler0.dev0','frequency'],['scaler0.dev1','frequency']]).get()
 LA.LdoPars(['scaler1.dev0','frequency']).value
 
 #v38
-    #TODO: test with two servers, whta happens if devices have same name?
+    #TODO: test with two servers, what happens if devices have same name?
 LA.LdoPars([['scaler0.dev0','frequency'],['scaler1.dev0','frequency']]).get()
     #TODO: 
 LA.LdoPars(['scaler0.dev0','frequency']).set(property=('oplimits',[-1,11])
@@ -102,7 +102,7 @@ def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
 def printd(msg):
-    if LdoPars.Dbg: print('dbg: '+msg)
+    if LdoPars.Dbg: print('LADbg: '+msg)
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -301,7 +301,7 @@ class Channel():
         ts = timer()
         self._sendCmd(cmd,value)
         r = self._recvDictio()
-        print('transaction time: %.5f'%(timer()-ts))
+        #print('transaction time: %.5f'%(timer()-ts))
         return r
     
 class LdoPars(object): #inheritance from object is needed in python2 for properties to work
@@ -355,8 +355,8 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
         firstDict = self.channels[0]._transaction('get')
         firstValsTDict = list(firstDict.values())[0]
         ValsT = list(firstValsTDict.values())[:2]
-        try:     return (ValsT[0][0], ValsT[1])
-        except:  return (ValsT[0][0],)
+        try:     return (ValsT[0], ValsT[1])
+        except:  return (ValsT[0],)
 
     #``````````````Property 'value````````````````````````````````````````````
     # It is for frequently needed get/set access to a single parameter
@@ -369,8 +369,7 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
     @value.setter
     def value(self,value):
         """Send command to set the value to the first item of the LdoPars"""
-        ch = self.channels[0]
-        return r
+        return self.set(value)
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 
     def read(self):

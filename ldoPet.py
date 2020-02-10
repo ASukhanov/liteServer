@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Spreadsheet view of process variables from a remote liteServer."""
-__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
+#__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
+__version__ = 'v25 2020-02-10'# most of the essential suff is working
 #TODO: drop $ substitution, leave it for YAML
 
 import threading, socket, subprocess, sys, time
@@ -29,10 +30,10 @@ def ip_address():
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
     """Spinbox, which stores associated LDO""" 
-    def __init__(self,pv):
+    def __init__(self,ldo):
         super().__init__()
-        self.pv = pv
-        try:    opl = self.pv.opLimits['values']
+        self.ldo = ldo
+        try:    opl = self.ldo.opLimits['values']
         except: pass
         else:
             self.setRange(*opl)
@@ -40,20 +41,20 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
             self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
-        #print('instantiated %s'%self.pv.title())
+        #print('instantiated %s'%self.ldo.title())
         
     def handle_value_changed(self):
         #print('handle_value_changed')
-        #print('changing %s to '%self.pv.title()+str(self.value()))
+        #print('changing %s to '%self.ldo.title()+str(self.value()))
         try:
-            self.pv.v = self.value()
+            self.ldo.v = self.value()
         except Exception as e:
             print(e)
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        print('RightClick at spinbox with LDO %s'%self.pv.name)
-        mainWidget.rightClick(self.pv)
+        print('RightClick at spinbox with LDO %s'%self.ldo.name)
+        mainWidget.rightClick(self.ldo)
         pass
 
 class myTableWidget(QtWidgets.QTableWidget):
@@ -65,11 +66,11 @@ class myTableWidget(QtWidgets.QTableWidget):
         except:
             return
         if button == 2: # right button
-            try:
-                pv = pvTable.pos2obj[(row,col)]
-                #print('RightClick at LDO %s.'%pv.name)
-                mainWidget.rightClick(pv)
-            except:
+            if True:#try:
+                ldo = pvTable.pos2obj[(row,col)]
+                print('RightClick at LDO %s.'%ldo.name)
+                mainWidget.rightClick(ldo)
+            else:#except:
                 pass
         else:
             super().mousePressEvent(*args)
@@ -122,26 +123,26 @@ class Window(QtWidgets.QWidget):
                 spanStart = None
                 
             # the object is LDO
-            pv = obj
-            #val = pv.v
-            printd('pv.initialValue of %s:'%pv.name+str(pv.initialValue))
-            initialValue = pv.initialValue['value'][0]
+            ldo = obj
+            #val = ldo.v
+            printd('ldo.initialValue of %s:'%ldo.name+str(ldo.initialValue))
+            initialValue = ldo.initialValue
             #print( 'initialValue',initialValue)
-            pvTable.par2pos[pv] = row,colOut
+            pvTable.par2pos[ldo] = row,colOut
             try:
-                item = QtWidgets.QTableWidgetItem(pv.title())
+                item = QtWidgets.QTableWidgetItem(ldo.title())
             except Exception as e:
                 printw('could not define Table[%i,%i]'%(row,colOut))
                 print(str(e))
                 print('Traceback: '+repr(traceback.format_exc()))
                 continue
             #print('ok',item)
-            #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
+            #print('pvTable [%i,%i] is %s %s'%(row,colOut,ldo.title(),type(ldo)))
             try:
-                if pv.guiType == 'bool':
-                    #print( 'LDO %s is boolean:'%pv.name+str(initialValue))
-                    #item.setText(pv.name.split(':')[1])
-                    item.setText(pv.name.split(':',1)[1])
+                if ldo.guiType == 'bool':
+                    #print( 'LDO %s is boolean:'%ldo.name+str(initialValue))
+                    #item.setText(ldo.name.split(':')[1])
+                    item.setText(ldo.name.split(':',1)[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
                     state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
@@ -149,9 +150,9 @@ class Window(QtWidgets.QWidget):
                     self.table.setCellWidget(row, colOut, item)
                     continue
                     
-                elif pv.guiType == 'spinbox':
-                    printd('it is spinbox:'+pv.title())
-                    spinbox = QDoubleSpinBoxLDO(pv)
+                elif ldo.guiType == 'spinbox':
+                    printd('it is spinbox:'+ldo.title())
+                    spinbox = QDoubleSpinBoxLDO(ldo)
                     # using other ways is more complicated as it is not trivial
                     # to transfer argument to the method
                     #spinbox = QtWidgets.QDoubleSpinBox(self\
@@ -161,7 +162,7 @@ class Window(QtWidgets.QWidget):
                     self.table.setCellWidget(row, colOut, spinbox)
                     continue
             except Exception as e:
-                #printw('in is_bool '+pv.title()+':'+str(e))
+                #printw('in is_bool '+ldo.title()+':'+str(e))
                 pass
             self.table.setItem(row, col, item)
 
@@ -197,24 +198,24 @@ class Window(QtWidgets.QWidget):
     def handleCellClicked(self, row,column):
         item = self.table.item(row,column)
         printd('cell clicked[%i,%i]:'%(row,column))
-        pv = pvTable.pos2obj[row,column]
-        if isinstance(pv,str):
+        ldo = pvTable.pos2obj[row,column]
+        if isinstance(ldo,str):
             return
-        try:
-            if pv.guiType =='bool':
+        if True:#try:
+            if ldo.guiType =='bool':
                 checked = item.checkState() == QtCore.Qt.Checked
-                printd('bool clicked '+pv.name+':'+str(checked))
-                pv.v = checked # change server's pv
+                print('bool clicked '+ldo.name+':'+str(checked))
+                ldo.v = checked # change server's ldo
             else:
                 d = QtWidgets.QDialog(self)
                 d.setWindowTitle("Info")
-                pname = pv.title()
+                pname = ldo.title()
                 ql = QtWidgets.QLabel(pname,d)
                 qte = QtWidgets.QTextEdit(item.text(),d)
                 qte.move(0,20)
                 #d.setWindowModality(Qt.ApplicationModal)
                 d.show()
-        except Exception as e:
+        else:#except Exception as e:
             printe('exception in handleCellClicked: '+str(e))
 
     def update(self,a):
@@ -225,22 +226,17 @@ class Window(QtWidgets.QWidget):
         except Exception as e:
             printw('in tableItem.setText:'+str(e))
             
-    def rightClick(self,pv):
-        #print('mainWidget. RightClick on %s'%pv.name)
+    def rightClick(self,ldo):
+        print('mainWidget. RightClick on %s'%ldo.name)
         d = QtWidgets.QDialog(self)
-        pname = pv.title()
+        pname = ldo.title()
         d.setWindowTitle("Info on LDO %s"%pname)
-        attributes = pv.attributes()
-        #print('attributes:%s'%str(attributes)[:100])
+        attributes = ldo.attributes()
+        print('attributes:%s'%str(attributes)[:200])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
-            #vv = v if isinstance(v,str) else list(v)[0]
-            vv = v if isinstance(v,str) else list(v)
-            if vv is None:
-                continue
-            if isinstance(vv,list):
-                vv = vv[:100]
-            txt += attr+':\t'+str(vv)+'\n'
+            vv = str(v)[:100]
+            txt += attr+':\t'+vv+'\n'
         qte = QtWidgets.QLabel(txt,d)
         qte.setWordWrap(True)
         d.resize(300,150)
@@ -259,37 +255,38 @@ def MySlot(a):
     if mainWidget is None:
         printe('mainWidget not defined yet')
         return
-    for pv,rowCol in pvTable.par2pos.items():
-        printd('updating LDO '+pv.name)
-        if isinstance(pv,str):
+    for ldo,rowCol in pvTable.par2pos.items():
+        printd('updating LDO '+ldo.name)
+        if isinstance(ldo,str):
             printw('logic error')
             continue
         try:
-            val = pv.v['value']
+            val = ldo.v
             printd('val:%s'%str(val)[:100])
             if isinstance(val,list):
-                if pv.guiType =='bool':
-                    #print('LDO '+pv.name+' is bool = '+str(val))
+                if ldo.guiType =='bool':
                     state = window.table.item(*rowCol).checkState()
+                    #print('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
                     if val[0] != (state != 0):
-                        printd('flip')
+                        #print('flip')
                         window.table.item(*rowCol).setCheckState(val[0])
                     continue
-                elif pv.guiType == 'spinbox':
+                elif ldo.guiType == 'spinbox':
                     continue
                 # standard LDO
-                #print('LDO '+pv.name+' is list[%i] of '%len(val)\
+                #print('LDO '+ldo.name+' is list[%i] of '%len(val)\
                 #+str(type(val[0])))
                 txt = str(val)[1:-1] #avoid brackets
             elif isinstance(val,str):
-                printd('LDO '+pv.name+' is text')
+                printd('LDO '+ldo.name+' is text')
                 txt = val
                 #continue
             elif isinstance(val,np.ndarray):
                 txt = '%s: %s'%(val.shape,str(val))
             else:
-                txt = 'Unknown type of '+pv.name+'='+str(type(val))
-                printw(txt+':'+str(val))
+                #txt = 'Unknown type of '+ldo.name+'='+str(type(val))
+                #printw(txt+':'+str(val))
+                txt = str(val)
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
@@ -323,36 +320,38 @@ class LDO():
     """Process Variable object, provides getter and setter"""
     def __init__(self,name):
         self.name = name
-        printd('pv name: '+str(name))
-        self.pv = LA.LdoPars(name.split(':'))
-        self.key = list(self.pv.info())[0]
+        #print('ldo name: '+str(name))
+        self.ldo = LA.LdoPars(name.split(':'))
+        #print('ldo info for %s: '%name+str(self.ldo.info()))
+        self.key = list(self.ldo.info())[0]
         printd('key:'+str(self.key))
-        #print('pv vars:'+str(vars(self.pv)))
-        self.initialValue = self.v # use getter to store initial value
+        #print('ldo vars:'+str(vars(self.ldo)))
+        self.initialValue = self.ldo.value[0]
         self.t = 0.
         # creating attributes from remote ones
-        self.attr = self.pv.info()[self.key]
-        print('attrs %s'%self.attr)
+        self.attr = self.ldo.info()[self.key]
+        #print('attrs %s'%self.attr)
         #for attribute,v in self.attr.items():
         #    if attribute not in ['count', 'features', 'opLimits']:                
         #        continue
         #    print('Creating attribute %s.%s = '%(name,attribute)+str(v))
         #    setattr(self,attribute,v)
         self.guiType = self.gui_type()
-        print('type of %s:'%self.name+str(self.guiType))
+        #print('type of %s:'%self.name+str(self.guiType))
             
     @property
     def v(self): # getter
         # return values and store timestamp
-        #v = self.pv.value[self.key]['value']
-        v = self.pv.value[self.key]
-        printd('getter of %s called, value type:'%self.name+str(type(v)))
+        #print('>v')
+        v = self.ldo.value[0]
+        #print('v='+str(v))
+        #print('getter of %s called, value type:'%self.name+str(type(v)))
         return(v)
 
     @v.setter
     def v(self, value):
         printd('setter of %s'%self.name+' called to change LDO to '+str(value))
-        self.pv.value = value
+        self.ldo.value = [value]
 
     @v.deleter
     def v(self):
@@ -362,7 +361,7 @@ class LDO():
     def title(self): return self.name
 
     def gui_type(self):
-        iv = self.initialValue['value']
+        iv = self.initialValue
         print('iv',self.name,str(iv)[:60])
         if len(iv) != 1:
             return None
@@ -418,7 +417,7 @@ class LDOTable():
                     for old,new in config['dict'].items():
                         cell = cell.replace(old,new)
                     if cell[0] == '$':# the cell is LDO
-                        printd( 'the "%s" is pv'%cell[1:])
+                        printd( 'the "%s" is ldo'%cell[1:])
                         if True:#try:
                             self.pos2obj[(row,col)] = LDO(cell[1:])
                             continue
@@ -448,17 +447,17 @@ class LDOTable():
 
     def print_LDO_at(self,row,col):
         try:
-            pv = self.pos2obj[row,col]
-            v = pv.v
+            ldo = self.pos2obj[row,col]
+            v = ldo.v
             txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
-            print('Table[%i,%i]:'%(row,col)+pv.name+' = '+txt)
+            print('Table[%i,%i]:'%(row,col)+ldo.name+' = '+txt)
         except Exception as e:
             printw('in print_LDO:'+str(e))
 
-    def print_loc_of_LDO(self,pv):
+    def print_loc_of_LDO(self,ldo):
         try:
-            row,col = self.par2pos[pv]
-            print('Parameter '+pv.name+' is located at Table[%i,%i]:'%(row,col))
+            row,col = self.par2pos[ldo]
+            print('Parameter '+ldo.name+' is located at Table[%i,%i]:'%(row,col))
         except Exception as e:
             printw('in print_loc:'+str(e))
 
@@ -496,6 +495,8 @@ if __name__ == '__main__':
     parser.add_argument('ldo', nargs='?', 
       help='LDOs: lite data objects')
     pargs = parser.parse_args()
+    #LA.LdoPars.Dbg = pargs.dbg# transfer dbg flag to liteAccess
+
     if pargs.file:
         print('Monitoring LDO as defined in '+pargs.file)
     else:
@@ -508,12 +509,8 @@ if __name__ == '__main__':
 
     # define GUI
     window = Window(*pvTable.shape)
-    try:
-        title = 'LDOs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
-    except:
-        title = 'LDOs from '+pargs.host
     #print(title)
-    window.setWindowTitle(title)
+    window.setWindowTitle('ldoPet')
     window.resize(350, 300)
     window.show()
     mainWidget = window
