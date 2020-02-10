@@ -1,0 +1,22 @@
+# Example of the lpet definition table
+#
+# Substitution dictionary
+dict:
+  SERVER:   scaler0.server
+  DEV1:     scaler0.dev1
+  DEV2:     scaler0.dev2
+
+# Table definition
+rows:
+  - [0,Test of the table view of a Process Variable server,2,3,4]
+  - ['Server description:', $SERVER:version`desc, 'version:',$SERVER:version]
+  - [['',Test,''],$DEV1:frequency,$DEV1:frequency`opLimits]
+  -
+  - ['',____________________________________________________________________,'','','']
+  - [First set of,$DEV1:counters`count,['',$DEV1.counters,'']]
+  - ['',$DEV1:frequency,['',':Update frequency [Hz]. Range:',''],$DEV1:frequency`opLimits]
+  - ['',$DEV1:increments,['',':Individual increments','']]
+  - ['Counters:',$DEV1:counters,$reset]
+  -
+  - ['Shell cmd:',xterm;launch:xterm]
+

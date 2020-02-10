@@ -1,0 +1,127 @@
+#``````````````````liteAccess`````````````````````````````````````````````````
+#``````````````````Python2/3 compatibility````````````````````````````````````
+from __future__ import print_function
+from __future__ import unicode_literals
+import sys
+Python2 = sys.version_info.major == 2
+if not Python2:
+    basestring = str
+    unicode = str
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+#__version__ = 'v01 2018-12-17'# created
+#__version__ = 'v02 2018-12-17'# python3 compatible
+#__version__ = 'v03 2018-12-19'#
+#__version__ = 'v04 2018-12-26'# release
+#__version__ = 'v05 2018-12-31'# timeout interception for sock.recvfrom
+#__version__ = 'v06 2019-01-04'# socketSize increased
+#__version__ = 'v07 2019-01-04'# -t timeout argument
+#__version__ = 'v08 2019-01-06'# more detailed printing on timeout
+#__version__ = 'v09 2019-01-17'# socket size set to UDP max (64k), timeout 0.1,
+#__version__ = 'v10 2019-02-04'# bug fixed in main
+#__version__ = 'v11 2019-05-21'# abridged printing
+#__version__ = 'v12 2019-06-07'# TCP OK, debugging OK
+#__version__ = 'v13 2019-06-07'# get(), set() info()
+#__version__ = 'v14 2019-06-09'# numpy array support
+#__version__ = 'v15 2019-06-10'# socket timeout defaulted to None. Be carefull with this setting 
+#__version__ = 'v16 2019-06-10'# UDP Acknowledge
+#__version__ = 'v17 2019-06-11'# chunking OK
+#__version__ = 'v18 2019-06-17'# release, generic access to multiple or single items
+#__version__ = 'v19 2019-06-28'# Dbg behavior fixed 
+#__version__ = 'v20 2019-09-18'# try/except on pwd, avoid exception on default start
+#__version__ = 'v21 2019-09-23'#
+#__version__ = 'v22 2019-11-07'# --period
+#__version__ = 'v23 2019-11-10'# reconnection
+#__version__ = 'v24 2019-11-10'# Python2/3 compatible
+#__version__ = 'v25 2019-11-10'# numpy array correctly decoded in multi-parameter requests
+#__version__ = 'v26 2019-11-25'# get() returns {timestamp,value}, numpy decoding fixed 
+#__version__ = 'v27a 2019-11-25'# firstValue()
+#__version__ = 'v28 2019-11-27'# catch exception in execute_cmd
+#__version__ = 'v29 2019-12-03'# firstValue python2/3 compatibility
+#__version__ = 'v30 2019-12-06'# fix except: expectedArgWrong()
+#__version__ = 'v31 2019-12-09'# socket timeout defaulted to 5
+#__version__ = 'v32a 2019-12-10'# measurements() method for requesting only measurable parameters
+
+#``````````````````liteServer`````````````````````````````````````````````````
+#__version__ = 'v01 2018-12-14' # Created
+#__version__ = 'v02 2018-12-15' # Simplified greatly using ubjson
+#__version__ = 'v03 2018-12-17' # moved out the user-defined PVs, PV_all fixed
+#__version__ = 'v04 2018-12-17' # python3
+#__version__ = 'v05 2018-12-17'# more pythonic, using getattr,setattr
+#__version__ = 'v06 2018-12-17'# get/set/info works, TODO: conserve type for set
+#__version__ = 'v07 2018-12-21'# python2 compatibility, Device is method-less.
+#__version__ = 'v08 2018-12-26'# python2 not supported, 
+#__version__ = 'v09 2018-12-28'# PV.__init__ accepts parent, 
+#Server.__init__ accepts host, port. No arguments in Server.loop().
+#__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
+#__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
+#__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
+#__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
+#__version__ = 'v14 2019-05-23'# opLimits
+#__version__ = 'v15 2019-05-31'# count is array 
+#__version__ = 'v16 2019-06-01'# Device 'server' incorporated
+#__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
+#__version__ = 'v19 2019-06-09'# numpy array support
+#__version__ = 'v20 2019-06-10'# UDP Acknowledge
+#__version__ = 'v20 2019-06-10'# framing works 
+#__version__ = 'v21 2019-06-10'# chunking OK
+#__version__ = 'v22a 2019-06-17'# release
+#__version__ = 'v23a 2019-06-21'# redesign
+#__version__ = 'v24 2019-11-07'# release
+#__version__ = 'v25 2019-11-08'# PV.parent removed, it conflicts with json
+#__version__ = 'v26 2019-11-10'# Dbg and devDict are Server attributes
+#__version__ = 'v27 2019-11-25'# timestamp returned on get(), 'R' removed from server.host, server.version
+#__version__ = 'v28 2019-12-01'# legalValues served
+#__version__ = 'v29 2019-12-01'# Call setter if it is defined.
+#__version__ = 'v30 2019-12-01'# removed Special treatment of the boolean and action parameters
+#__version__ = 'v31a 2019-12-06'# catch exception in del self.server.ackCounts
+#__version__ = 'v32 2019-12-08'# 'measure' command returns only measurable parameters, timestamp is not a list
+#__version__ = 'v33 2019-12-09'# PV([host]).info() returns info on all devs,pars
+#__version__ = 'v33a 2019-12-10'# if not timestamp: timestamp = time.time()
+
+#``````````````````liteScaler`````````````````````````````````````````````````
+#__version__ = 'v01 2018-12-17'# created
+#__version__ = 'v02 2018-12-19'# multiple devices
+#__version__ = 'v03 2018-12-20'#
+#__version__ = 'v04 2018-12-23'# cloned from pvUser
+#__version__ = 'v05 2019-01-02'# feature 'R' for monitored parameters
+#__version__ = 'v06 2019-01-02'# action parameter is OK
+#__version__ = 'v07 2019-01-08'# super() corrected for python2
+#__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
+#__version__ = 'v09 2019-05-21'# version parameter, includes description
+#__version__ = 'v10 2019-06-08'# timestamping
+#__version__ = 'v11 2019-06-09'# numpy array support
+#__version__ = 'v12 2019-06-17'# release
+#__version__ = 'v13 2019-11-10'# better dbg, new PV: time with overridden update_value and parent
+#__version__ = 'v14 2019-11-13'# removed 'R' from non-monitored parameters
+#__version__ = 'v15 2019-11-30'# test legalValues of the 'command' parameter
+#__version__ = 'v16 2019-12-01'# 'pause' parameter removed, 'command' is better suited for the purpose
+#__version__ = 'v17 2019-12-08'# update timestamp for PV time, timestamp is not list
+
+#`````````````````ldoPet``````````````````````````````````````````````````````
+#__version__ = 'v00 2019-05-06' # it is just sceleton, pvview.pvv is not processed
+#__version__ = 'v01 2019-05-06' # using pg.TableWidget()
+#__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
+#__version__ = 'v03 2019-05-21' # LDOTable,
+#__version__ = 'v04 2019-05-22' # bool LDOs treated as checkboxes
+#__version__ = 'v05 2019-05-29' # spinboxes in table
+#__version__ = 'r06 2019-05-29' # first release
+#__version__ = 'r07 2019-05-30' # cell spanning is OK
+#__version__ = 'r08 2019-05-31' # release 08
+#__version__ = 'v09 2019-05-31' # detection of right click
+#__version__ = 'v10 2019-06-01' # pargs.file
+#__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
+#__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
+#TODO 1) discrete parameters, set array
+#__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
+#__version__ = 'v14 2019-06-07' # dbg corrected
+#__version__ = 'v15 2019-06-07' # pv.values is dict
+#__version__ = 'v16 2019-06-09'# numpy array support
+#__version__ = 'v18 2019-06-09'# spinbox fixed
+#__version__ = 'v19 2019-06-21'# redesign
+#TODO: not very reliable on wifi (wide network)
+#__version__ = 'v20 2019-06-21'#
+#__version__ = 'v21 2019-06-27'# right click fixed, config file OK
+#__version__ = 'v22 2019-06-28'# table created with initial values, not titles
+#__version__ = 'v23 2019-09-15'#
+#__version__ = 'v24 2019-11-21'#
+

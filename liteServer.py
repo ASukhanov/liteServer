@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
-"""Very lightweight base class of the Process Variable Server.
-It hosts the process variables and responds to get/set/monitor/info commands.
+"""Very lightweight base class of the Lite Data Object Server.
+It hosts the Lite Data Objects and responds to get/set/monitor/info commands.
 
 Transport protocol: UDP with handshaking and re-transmission. 
 
@@ -10,14 +9,18 @@ Dependecies: py-ubjson, very simple and efficient data serialization protocol
 
 Performance: liteServer is fastest possible python access to parameters over ethernet.
 
+message format:
+  {'cmd':[command,[[dev1,dev2,...],[arg1,arg2,...]]],
+  'user':user,...}
+
 Supported commands:
-- info      reply with information of PVs
-- get       reply with values of PVs
-- measure   reply with values of readable PVs only, 
-            readable PV have 'R' in their feature, 
-- set       set values of PVs
+- info      reply with information of LDOs
+- get       reply with values of LDOs
+- read      reply with values of readable LDOs only, 
+            readable LDO have 'R' in their feature, 
+- set       set values of LDOs
 - ACK       internal, response from a client on server reply
-- subscribe not implemented yet, send reply when PV has changed.
+- subscribe not implemented yet, send reply when LDO has changed.
 
 Example usage:
 - start liteServer for 2 Scalers on a remote host:
@@ -25,47 +28,15 @@ liteScaler.py
 - get list of devices on a remote host:
 liteAccess.py -i host::
 - simple GUI to control remote liteServer on a host:
-PVsheet.py -Hhost
+LDOsheet.py -Hhost
 
 Known issues:
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-#__version__ = 'v01 2018-12-14' # Created
-#__version__ = 'v02 2018-12-15' # Simplified greatly using ubjson
-#__version__ = 'v03 2018-12-17' # moved out the user-defined PVs, PV_all fixed
-#__version__ = 'v04 2018-12-17' # python3
-#__version__ = 'v05 2018-12-17'# more pythonic, using getattr,setattr
-#__version__ = 'v06 2018-12-17'# get/set/info works, TODO: conserve type for set
-#__version__ = 'v07 2018-12-21'# python2 compatibility, Device is method-less.
-#__version__ = 'v08 2018-12-26'# python2 not supported, 
-#__version__ = 'v09 2018-12-28'# PV.__init__ accepts parent, 
-#Server.__init__ accepts host, port. No arguments in Server.loop().
-#__version__ = 'v10 2019-01-03'# force parameters to be iterable, it simplifies the usage
-#__version__ = 'v11 2019-01-17'# Device.__init__ checks if parameter is list.
-#__version__ = 'v12 2019-05-23'# Raising extention, instead of printing. Special treatment of action parameters
-#__version__ = 'v13 2019-05-23'# Tuple, tried use tuple for non writable, it does not work  
-#__version__ = 'v14 2019-05-23'# opLimits
-#__version__ = 'v15 2019-05-31'# count is array 
-#__version__ = 'v16 2019-06-01'# Device 'server' incorporated
-#__version__ = 'v17 2019-06-02'# DevDict is OrderedDict
-#__version__ = 'v19 2019-06-09'# numpy array support
-#__version__ = 'v20 2019-06-10'# UDP Acknowledge
-#__version__ = 'v20 2019-06-10'# framing works 
-#__version__ = 'v21 2019-06-10'# chunking OK
-#__version__ = 'v22a 2019-06-17'# release
-#__version__ = 'v23a 2019-06-21'# redesign
-#__version__ = 'v24 2019-11-07'# release
-#__version__ = 'v25 2019-11-08'# PV.parent removed, it conflicts with json
-#__version__ = 'v26 2019-11-10'# Dbg and devDict are Server attributes
-#__version__ = 'v27 2019-11-25'# timestamp returned on get(), 'R' removed from server.host, server.version
-#__version__ = 'v28 2019-12-01'# legalValues served
-#__version__ = 'v29 2019-12-01'# Call setter if it is defined.
-#__version__ = 'v30 2019-12-01'# removed Special treatment of the boolean and action parameters
-#__version__ = 'v31a 2019-12-06'# catch exception in del self.server.ackCounts
-#__version__ = 'v32 2019-12-08'# 'measure' command returns only measurable parameters, timestamp is not a list
-#__version__ = 'v33 2019-12-09'# PV([host]).info() returns info on all devs,pars
-__version__ = 'v33a 2019-12-10'# if not timestamp: timestamp = time.time()
+#__version__ = 'v34 2020-02-07'# wildcarding with *
+#__version__ = 'v35 2020-02-08'# 'read' instead of 'measure'
+__version__ = 'v36 2020-02-09'# PV replaced with LDO
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -124,7 +95,7 @@ def _send_UDP(buf,socket,addr):
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
     """Device object has unique _name, its members are parameters (objects,
-    derived from PV class)."""
+    derived from LDO class)."""
     def __init__(self,name='?',pars=None):
         self._name = name
         #print('Dbg',Dbg)
@@ -140,8 +111,8 @@ class Device():
             #setattr(par,'_name',p)
             par._name = p
         
-class PV():
-    """Base class for Process Variables. Standard properties:
+class LDO():
+    """Base class for Lite Data Objects. Standard properties:
     value, count, timestamp, features, decription.
     value should be iterable! It simplifies internal logic.
     The type and count is determined from default value.
@@ -149,7 +120,7 @@ class PV():
     More properties can be added in derived classes"""
     def __init__(self,features='RW', desc='', value=[0], opLimits=None\
         , legalValues=None, setter=None, parent=None):
-        printd('>PV: '+str((features,desc,value,opLimits,parent)))
+        printd('>LDO: '+str((features,desc,value,opLimits,parent)))
         self._name = None # assighned in device.__init__. 
         # name is not really needed, as it is keyed in the dictionary
         self.timestamp = None
@@ -173,7 +144,7 @@ class PV():
         #self.numpy = numpy# for numpy array it is: (shape,dtype)
         
     def __str__(self):
-        print('PV object desc: %s at %s'%(self.desc,id(self)))
+        print('LDO object desc: %s at %s'%(self.desc,id(self)))
 
     def update_value(self):
         """Overridable getter"""
@@ -186,7 +157,7 @@ class PV():
     def set(self,vals,prop='value'):
         #print('features %s:%s'%(self._name,str(self.features)))
         if not self.is_writable():
-            raise PermissionError('PV is not writable')
+            raise PermissionError('LDO is not writable')
         try: # pythonic way for testing if object is iterable
             test = vals[0]
         except:
@@ -202,8 +173,6 @@ class PV():
             + str(type(self.value[0])))
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
             + str(type(self.value[0])))
-            #printw('Assigning different type for %s:'%self._name+str(type(vals[0]))+' to '\
-            #+ str(type(self.value[0])))
             
         if self.opLimits is not None:
             printd('checking for opLimits')
@@ -219,13 +188,13 @@ class PV():
 
         self.value = vals
 
-        # call PV setting method with new value
+        # call LDO setting method with new value
         #print('self._setter of %s is %s'%(self._name,self._setter))
         if self._setter is not None:
             self._setter(self) # (self) is important!
         
     def subscribe(self,callback):
-        raise NotImplementedError('PV.subscribe() is not implemented yet')
+        raise NotImplementedError('LDO.subscribe() is not implemented yet')
 
     def info(self):
         # list all members which are not None and not prefixed with '_'
@@ -234,44 +203,51 @@ class PV():
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
-class _PV_Handler(SocketServer.BaseRequestHandler):
+class _LDO_Handler(SocketServer.BaseRequestHandler):
 
     def _reply(self,serverMsg):
         #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
         printd('>_reply')
-        try:
-            cmd,args = serverMsg['cmd']
-            devs = args[0]
-            if len(devs[0]) == 0:
+        try:    replyCmd =  serverMsg['cmd']
+        except: raise  KeyError("'cmd' key missing in request")
+        try:    cmd,args = replyCmd
+        except: 
+            #cmd,args = replyCmd[0],[['']]
+            print('replyCmd',replyCmd)
+            if replyCmd[0] == 'info':
                 devs = [i[0] for i in list(Server.DevDict.items())]
-                #if cmd == 'info' and  len(args[1][0])+len(args[2][0]) == 0:
-                #    return devs
-        except Exception as e:
-            raise ValueError('serverMsg:%s, exc:'%str(serverMsg)+str(e))
-        #printd('devs:'+str(devs))
+                return devs
+            else:   raise ValueError('expect cmd,args')
+        printd('cmd,args: '+str((cmd,args)))
         returnedDict = {}
-        for devName in devs:
-          parNames = args[1]
-          if len(parNames[0]) == 0:
+
+        for devParPropVal in args:
+          devName,parPropValNames = devParPropVal
+          parNames = parPropValNames[0]
+          if len(parPropValNames) > 1:
+            propNames = parPropValNames[1]
+          else:   
+            propNames = propNames = ['*'] if cmd == 'info' else ['value']
+          printd('devNm,parNm,propNm:'+str((devName,parNames,propNames)))
+          if parNames[0][0] == '*':
             # replace parNames with a list of all parameters
             dev = Server.DevDict[devName]
             parNames = [i for i in vars(dev) if not i.startswith('_')]
-          #printd('parNames:'+str(parNames))
+          printd('parNames:'+str(parNames))
           for parName in parNames:
-            parName = parName
             pv = getattr(Server.DevDict[devName],parName)
             features = getattr(pv,'features','')
-            if cmd == 'measure' and 'R' not in features:
+            if cmd == 'read' and 'R' not in features:
                 #print('par %s is not readable, it will not be replied.'%parName)
                 continue
             devParName = devName+':'+parName
             parDict = {}
             returnedDict[devParName] = parDict
-            if cmd in ('get','measure'):
+            if cmd in ('get','read'):
                 #if Server.Dbg: 
                 ts = timer()
                 pv.update_value()
-                value = getattr(pv,'value')
+                value = getattr(pv,propNames[0])
                 printd('value of %s=%s, timing=%.6f'%(devParName,str(value)[:100],timer()-ts))
                 try:
                     # if value is numpy array:
@@ -288,20 +264,16 @@ class _PV_Handler(SocketServer.BaseRequestHandler):
                 if not timestamp: timestamp = time.time()
                 parDict['timestamp'] = timestamp
             elif cmd == 'set':
-                try:    val = args[3]
-                except:
-                    raise NameError('expected host,dev,par,prop,value, got '+str(args))
+                try:    val = parPropValNames[2]
+                except:   raise NameError('set value missing')
                 if not isinstance(val,list):
                     val = [val]
                 pv.set(val)
                 printd('set: %s=%s'%(parName,str(val)))
             elif cmd == 'info':
-                try:    propNames = args[2]
-                #except: propNames[0] == ['*']
-                except: propNames[0] == ['']
                 printd('info (%s.%s)'%(parName,str(propNames)))
-                #if propNames[0] == '*':
-                if len(propNames[0]) == 0:
+                #if len(propNames[0]) == 0:
+                if propNames[0][0] == '*':
                     propNames = pv.info()
                 printd('propNames of %s: %s'%(pv._name,str(propNames)))
                 for propName in propNames:
@@ -312,6 +284,7 @@ class _PV_Handler(SocketServer.BaseRequestHandler):
                         pv = getattr(Server.DevDict[devName],parName)
                         propVal = getattr(pv,propName)
                         parDict[propName] = propVal
+            else:   raise ValueError('accepted commands: info,get,set,read')
         return returnedDict
                 
     def handle(self):
@@ -384,17 +357,19 @@ class Server():
     DevDict = None
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Instantiation``````````````````````````````````````````````
-    def __init__(self,devices,host=None,port=PORT,dbg=False):
+    def __init__(self,devices,host=None,port=PORT,dbg=False,serverPars=True):
         print('Server,Dbg',Server.Dbg)
         # create Device 'server'
-        dev = [Device('server',{\
-          'version':PV('','liteServer',[__version__]),
-          'host':   PV('','Host name',[socket.gethostname()]),
-          'status': PV('R','Messages from liteServer',['']),
-          'debug':  PV('W','debugging level: 14:ERROR, 13:WARNING, 12:INFO, 11-1:DEBUG, bits[15:4] are for user needs'\
-          ,[Server.Dbg],setter=self._debug_set),
-          'tstInt': PV('W','test integer variables',[1,2],setter=self.par_set),
-        })]
+        if serverPars:
+            dev = [Device('server',{\
+              'version':LDO('','liteServer',[__version__]),
+              'host':   LDO('','Host name',[socket.gethostname()]),
+              'status': LDO('R','Messages from liteServer',['']),
+              'debug':  LDO('W','debugging level: 14:ERROR, 13:WARNING, 12:INFO, 11-1:DEBUG, bits[15:4] are for user needs'\
+              ,[Server.Dbg],setter=self._debug_set),
+              'tstInt': LDO('W','test integer variables',[1,2],setter=self.par_set),
+            })]
+        else: dev = []
         
         # create global dictionary of all devices
         devs = dev + list(devices)
@@ -406,7 +381,7 @@ class Server():
         self.host = host if host else ip_address()
         self.port = port
         s = _myUDPServer if UDP else SocketServer.TCPServer
-        self.server = s((self.host, self.port), _PV_Handler)#, False)
+        self.server = s((self.host, self.port), _LDO_Handler)#, False)
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()

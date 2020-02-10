@@ -1,28 +1,12 @@
 #!/usr/bin/env python3
-"""Example of user-defined Process Variables"""
-#__version__ = 'v01 2018-12-17'# created
-#__version__ = 'v02 2018-12-19'# multiple devices
-#__version__ = 'v03 2018-12-20'#
-#__version__ = 'v04 2018-12-23'# cloned from pvUser
-#__version__ = 'v05 2019-01-02'# feature 'R' for monitored parameters
-#__version__ = 'v06 2019-01-02'# action parameter is OK
-#__version__ = 'v07 2019-01-08'# super() corrected for python2
-#__version__ = 'v08 2019-01-19'# flexible number of scalers, random initialization
-#__version__ = 'v09 2019-05-21'# version parameter, includes description
-#__version__ = 'v10 2019-06-08'# timestamping
-#__version__ = 'v11 2019-06-09'# numpy array support
-#__version__ = 'v12 2019-06-17'# release
-#__version__ = 'v13 2019-11-10'# better dbg, new PV: time with overridden update_value and parent
-#__version__ = 'v14 2019-11-13'# removed 'R' from non-monitored parameters
-#__version__ = 'v15 2019-11-30'# test legalValues of the 'command' parameter
-#__version__ = 'v16 2019-12-01'# 'pause' parameter removed, 'command' is better suited for the purpose
-__version__ = 'v17 2019-12-08'# update timestamp for PV time, timestamp is not list
-
+"""Example of user-defined Lite Data Objects"""
+__version__ = 'v18 2020-02-09'# PV replaced with LDO
+ 
 import sys, time, threading
 import numpy as np
 
 import liteServer
-PV = liteServer.PV
+LDO = liteServer.LDO
 Device = liteServer.Device
 EventExit = liteServer.EventExit
 
@@ -32,9 +16,9 @@ def printe(msg): print('ERROR: '+msg)
 def printd(msg): 
     if pargs.dbg:
         print('dbgScaler: '+str(msg))
-#````````````````````````````Process Variables````````````````````````````````
-class PVt(PV):
-    '''PV, returning current time.''' 
+#````````````````````````````Lite Data Objects````````````````````````````````
+class LDOt(LDO):
+    '''LDO, returning current time.''' 
     # override data updater
     def update_value(self):
         self.value = [time.time()]
@@ -55,20 +39,20 @@ class Scaler(Device):
         bigImg = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
         img = bigImg if bigImage else smallImg    
         pars = {
-          'counters':   PV('R','%i of counters'%len(initials),initials),
-          'increments': PV('W','Increments of the individual counters'\
+          'counters':   LDO('R','%i of counters'%len(initials),initials),
+          'increments': LDO('W','Increments of the individual counters'\
                         ,[-1]+[1]*(pargs.nCounters-1)),
-          'frequency':  PV('W','Update frequency of all counters',[1.]\
+          'frequency':  LDO('W','Update frequency of all counters',[1.]\
                         ,opLimits=(0,10)),
           # 'pause' is boolean because it is readable
-          #'pause':      PV('RW','Pause all counters',[False]),
+          #'pause':      LDO('RW','Pause all counters',[False]),
           # 'reset' is action because it is not readable 
-          'reset':      PV('W','Reset all counters',[False]\
+          'reset':      LDO('W','Reset all counters',[False]\
                         ,setter=self.reset),
-          'command':    PV('RW','Command to execute',['Started']\
+          'command':    LDO('RW','Command to execute',['Started']\
                         ,legalValues=['Start','Stop'],setter=self.command_set),
-          'image':      PV('R','Image',[img]),
-          'time':       PVt('R','Current time',[0.],parent=self),#parent is for testing
+          'image':      LDO('R','Image',[img]),
+          'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
         }
         self._pause = False
         super().__init__(name,pars)
@@ -118,7 +102,7 @@ class Scaler(Device):
 # parse arguments
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-d','--dbg', type=int, help='debugging level')
+parser.add_argument('-d','--dbg', action='store_true', help='Debugging mode')
 parser.add_argument('-b','--bigImage', action='store_true', help=\
 'generate big image >64kB')
 parser.add_argument('-s','--scalers', type=int, default=2,help=\

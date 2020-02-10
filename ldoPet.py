@@ -1,37 +1,14 @@
 #!/usr/bin/env python3
 """Spreadsheet view of process variables from a remote liteServer."""
-
-#__version__ = 'v00 2019-05-06' # it is just sceleton, pvview.pvv is not processed
-#__version__ = 'v01 2019-05-06' # using pg.TableWidget()
-#__version__ = 'v02 2019-05-20' # using QTableWidget, with checkboxes
-#__version__ = 'v03 2019-05-21' # PVTable,
-#__version__ = 'v04 2019-05-22' # bool PVs treated as checkboxes
-#__version__ = 'v05 2019-05-29' # spinboxes in table
-#__version__ = 'r06 2019-05-29' # first release
-#__version__ = 'r07 2019-05-30' # cell spanning is OK
-#__version__ = 'r08 2019-05-31' # release 08
-#__version__ = 'v09 2019-05-31' # detection of right click
-#__version__ = 'v10 2019-06-01' # pargs.file
-#__version__ = 'v11 2019-06-02' # automatic generation of the pvsheet.tmp
-#__version__ = 'v12 2019-06-02' # boolean action is OK: don't set checkbox to the same state 
-#TODO 1) discrete parameters, set array
-#__version__ = 'v13 2019-06-03' # is_spinbox check for writable, is_bool
-#__version__ = 'v14 2019-06-07' # dbg corrected
-#__version__ = 'v15 2019-06-07' # pv.values is dict
-#__version__ = 'v16 2019-06-09'# numpy array support
-#__version__ = 'v18 2019-06-09'# spinbox fixed
-#__version__ = 'v19 2019-06-21'# redesign
-#TODO: not very reliable on wifi (wide network)
-#__version__ = 'v20 2019-06-21'#
-#__version__ = 'v21 2019-06-27'# right click fixed, config file OK
-#__version__ = 'v22 2019-06-28'# table created with initial values, not titles
-#__version__ = 'v23 2019-09-15'#
-__version__ = 'v24 2019-11-21'#
+__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
+#TODO: drop $ substitution, leave it for YAML
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
 from collections import OrderedDict as OD
 from PyQt5 import QtCore, QtGui, QtWidgets
+import yaml
+from pprint import pprint
 import numpy as np
 import traceback
 import liteAccess as LA
@@ -50,8 +27,8 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-class QDoubleSpinBoxPV(QtWidgets.QDoubleSpinBox):
-    """Spinbox, which stores associated PV""" 
+class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
+    """Spinbox, which stores associated LDO""" 
     def __init__(self,pv):
         super().__init__()
         self.pv = pv
@@ -75,7 +52,7 @@ class QDoubleSpinBoxPV(QtWidgets.QDoubleSpinBox):
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        print('RightClick at spinbox with PV %s'%self.pv.name)
+        print('RightClick at spinbox with LDO %s'%self.pv.name)
         mainWidget.rightClick(self.pv)
         pass
 
@@ -90,7 +67,7 @@ class myTableWidget(QtWidgets.QTableWidget):
         if button == 2: # right button
             try:
                 pv = pvTable.pos2obj[(row,col)]
-                #print('RightClick at PV %s.'%pv.name)
+                #print('RightClick at LDO %s.'%pv.name)
                 mainWidget.rightClick(pv)
             except:
                 pass
@@ -116,9 +93,9 @@ class Window(QtWidgets.QWidget):
                 continue
             colOut = col - colSkip
 
-            # check if not a PV object
+            # check if not a LDO object
             #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
-            if not isinstance(obj,PV):
+            if not isinstance(obj,LDO):
                 if isinstance(obj,str):
                     if len(obj) == 0: continue
                     if obj[0] == '[':
@@ -144,7 +121,7 @@ class Window(QtWidgets.QWidget):
             if spanStart is not None:
                 spanStart = None
                 
-            # the object is PV
+            # the object is LDO
             pv = obj
             #val = pv.v
             printd('pv.initialValue of %s:'%pv.name+str(pv.initialValue))
@@ -162,7 +139,7 @@ class Window(QtWidgets.QWidget):
             #print('pvTable [%i,%i] is %s %s'%(row,colOut,pv.title(),type(pv)))
             try:
                 if pv.guiType == 'bool':
-                    #print( 'PV %s is boolean:'%pv.name+str(initialValue))
+                    #print( 'LDO %s is boolean:'%pv.name+str(initialValue))
                     #item.setText(pv.name.split(':')[1])
                     item.setText(pv.name.split(':',1)[1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
@@ -174,7 +151,7 @@ class Window(QtWidgets.QWidget):
                     
                 elif pv.guiType == 'spinbox':
                     printd('it is spinbox:'+pv.title())
-                    spinbox = QDoubleSpinBoxPV(pv)
+                    spinbox = QDoubleSpinBoxLDO(pv)
                     # using other ways is more complicated as it is not trivial
                     # to transfer argument to the method
                     #spinbox = QtWidgets.QDoubleSpinBox(self\
@@ -197,7 +174,7 @@ class Window(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
         self._list = []
-        monitor = PVMonitor()
+        monitor = LDOMonitor()
 
     def closeEvent(self,*args):
         # Called when the window is closed
@@ -252,7 +229,7 @@ class Window(QtWidgets.QWidget):
         #print('mainWidget. RightClick on %s'%pv.name)
         d = QtWidgets.QDialog(self)
         pname = pv.title()
-        d.setWindowTitle("Info on PV %s"%pname)
+        d.setWindowTitle("Info on LDO %s"%pname)
         attributes = pv.attributes()
         #print('attributes:%s'%str(attributes)[:100])
         txt = '    Attributes:\n'
@@ -283,7 +260,7 @@ def MySlot(a):
         printe('mainWidget not defined yet')
         return
     for pv,rowCol in pvTable.par2pos.items():
-        printd('updating PV '+pv.name)
+        printd('updating LDO '+pv.name)
         if isinstance(pv,str):
             printw('logic error')
             continue
@@ -292,7 +269,7 @@ def MySlot(a):
             printd('val:%s'%str(val)[:100])
             if isinstance(val,list):
                 if pv.guiType =='bool':
-                    #print('PV '+pv.name+' is bool = '+str(val))
+                    #print('LDO '+pv.name+' is bool = '+str(val))
                     state = window.table.item(*rowCol).checkState()
                     if val[0] != (state != 0):
                         printd('flip')
@@ -300,12 +277,12 @@ def MySlot(a):
                     continue
                 elif pv.guiType == 'spinbox':
                     continue
-                # standard PV
-                #print('PV '+pv.name+' is list[%i] of '%len(val)\
+                # standard LDO
+                #print('LDO '+pv.name+' is list[%i] of '%len(val)\
                 #+str(type(val[0])))
                 txt = str(val)[1:-1] #avoid brackets
             elif isinstance(val,str):
-                printd('PV '+pv.name+' is text')
+                printd('LDO '+pv.name+' is text')
                 txt = val
                 #continue
             elif isinstance(val,np.ndarray):
@@ -320,12 +297,12 @@ def MySlot(a):
     myslotBusy = False
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
-class PVMonitor(QtCore.QThread): 
+class LDOMonitor(QtCore.QThread): 
     # inheritance from QtCore.QThread is needed for qt signals
     SignalSourceDataReady = QtCore.pyqtSignal(object)
     def __init__(self):
         # for signal/slot paradigm we need to call the parent init
-        super(PVMonitor,self).__init__()
+        super(LDOMonitor,self).__init__()
         #...
         thread = threading.Thread(target=self.thread_proc)
         thread.start()
@@ -342,12 +319,12 @@ class PVMonitor(QtCore.QThread):
         #print('cb:',args)
         self.SignalSourceDataReady.emit(args)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-class PV():
+class LDO():
     """Process Variable object, provides getter and setter"""
     def __init__(self,name):
         self.name = name
         printd('pv name: '+str(name))
-        self.pv = LA.PV(name.split(':'))
+        self.pv = LA.LdoPars(name.split(':'))
         self.key = list(self.pv.info())[0]
         printd('key:'+str(self.key))
         #print('pv vars:'+str(vars(self.pv)))
@@ -374,7 +351,7 @@ class PV():
 
     @v.setter
     def v(self, value):
-        printd('setter of %s'%self.name+' called to change PV to '+str(value))
+        printd('setter of %s'%self.name+' called to change LDO to '+str(value))
         self.pv.value = value
 
     @v.deleter
@@ -416,66 +393,50 @@ class QPushButtonCmd(QtWidgets.QPushButton):
         #print('clicked',self.cmd)
         p = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, shell=True)
 
-class PVTable():
-    """PV table maps: parameter to (row,col) and (row,col) to object"""
+class LDOTable():
+    """LDO table maps: parameter to (row,col) and (row,col) to object"""
     def __init__(self,fileName):
         
         self.par2pos = OD()
         self.pos2obj = OD()
         maxcol = 0
-        if pargs.pvfile is None:
-            pargs.pvfile = self.build_temporary_pvfile()
-        with open(pargs.pvfile,'r') as infile:
-            row = 0
-            for line in infile:
-                #line = line[:-1]# remove eol
-                line = line.rstrip()
-                if len(line) == 0:  continue
-                if line[0] == '#':  continue
-                if line[0] == '!':
-                    self.pos2obj[(row,0)] = None
-                    row += 1  
+        with open(fileName,'r') as infile:
+            config = yaml.load(infile,Loader=yaml.FullLoader) 
+            pprint(('config:',config))
+            for row,rlist in enumerate(config['rows']):
+                if rlist is None:
                     continue
-                printd('%3i:'%row+line)
-                cols = line.split(',')
-                nCols = len(cols)
-                for col,token in enumerate(cols):
+                pprint(('row,rlist',row,rlist))
+                nCols = len(rlist)
+                for col,cell in enumerate(rlist):
                   if True:#try:
-                    #print( 'token:'+str(token))
-                    if len(token) == 0:
-                        obj = ''
-                    elif token in '[]':
-                        obj = token
-                    elif token[0] in ('"',"'"):
-                        blank,txt,attributeString = token.split(token[0],2)
-                        if len(attributeString) == 0:
-                            printd('cell is text')
-                            obj = txt
-                        else: # the cell is text with attributes
-                            #print( 'cell is text with attributes') 
-                            action,cmd = attributeString.split(':',1)
-                            action = action[1:]
-                            if action == 'launch':
-                                #print('pushButton created with cmd:%s'%cmd)
-                                obj = QPushButtonCmd(txt,cmd)
-                    elif '`' in token: # PV's attribute
-                        raise NotImplementedError('syntax quotation ` is not supported yet in '+token)
-                    #    printd('check for attribute '+token)
-                    #    pvname,attrib = token.split('`')
-                    #    pv = PV(pvname,access)
-                    #    printd('temporary PV %s created'%pvname)
-                    #    obj = str(getattr(pv,attrib))
-                    #    if obj[0] == '[': obj = obj[1:]
-                    #    if obj[-1] == ']': obj = obj[:-1]
-                    else: # the cell is PV
-                        #print( 'the "%s" is pv'%token)
+                    #print( 'cell:'+str(cell))
+                    if not isinstance(cell,str):
+                        self.pos2obj[(row,col)] = cell
+                        continue
+                    # process string cell
+                    for old,new in config['dict'].items():
+                        cell = cell.replace(old,new)
+                    if cell[0] == '$':# the cell is LDO
+                        printd( 'the "%s" is pv'%cell[1:])
                         if True:#try:
-                            obj = PV(token)
+                            self.pos2obj[(row,col)] = LDO(cell[1:])
+                            continue
                         else:#except Exception as e:
-                            txt = 'Cannot create PV %s:'%token+str(e)
+                            txt = 'Cannot create LDO %s:'%cell+str(e)
                             raise NameError(txt)
-                    self.pos2obj[(row,col)] = obj
-                    #print(row,col,type(obj))
+                    # the cell is string, separate attributes
+                    txtlist =  cell.split(';')
+                    if len(txtlist) == 1:
+                        self.pos2obj[(row,col)] = txtlist[0]
+                        continue
+                    # the cell contains attribute
+                    attrVal = txtlist[1].split(':')
+                    if attrVal[0] == 'launch':
+                        self.pos2obj[(row,col)]\
+                        = QPushButtonCmd(txtlist[0],attrVal[1])
+                        continue
+                    printe('cell[%i,%i]=%s not recognized'%(row,col,str(cell))) 
                   else:#except Exception as e:
                     printw(str(e))
                     self.pos2obj[(row,col)] = '?'
@@ -485,16 +446,16 @@ class PVTable():
         self.shape = row,maxcol
         print('table created, shape: '+str(self.shape))
 
-    def print_PV_at(self,row,col):
+    def print_LDO_at(self,row,col):
         try:
             pv = self.pos2obj[row,col]
             v = pv.v
             txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
             print('Table[%i,%i]:'%(row,col)+pv.name+' = '+txt)
         except Exception as e:
-            printw('in print_PV:'+str(e))
+            printw('in print_LDO:'+str(e))
 
-    def print_loc_of_PV(self,pv):
+    def print_loc_of_LDO(self,pv):
         try:
             row,col = self.par2pos[pv]
             print('Parameter '+pv.name+' is located at Table[%i,%i]:'%(row,col))
@@ -504,7 +465,7 @@ class PVTable():
     def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'
         print('>build_temporary_pvfile')
-        pvServerInfo = LA.PV([pargs.host]).info()
+        pvServerInfo = LA.LdoPars([pargs.host]).info()
         deviceSet = {i.split(':')[0] for i in pvServerInfo.keys()}
         printd('devs:'+str(deviceSet))
         f = open(fname,'w')
@@ -517,7 +478,7 @@ class PVTable():
                 f.write("[,'____Device: %s____',]\n"%dev)
             f.write("'%s',%s\n"%(parName,devParName))
         f.close()
-        print('PV spreadsheet config file generated: %s'%fname)
+        print('LDO spreadsheet config file generated: %s'%fname)
         return fname
 #`````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
@@ -528,28 +489,29 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
-    parser.add_argument('-p','--port',default='9999',
-      help='Port number')
-    parser.add_argument('-H','--host',default=ip_address(),nargs='?',
-      help='Hostname')
+    parser.add_argument('-f','--file', help=\
+    'Config file')
     parser.add_argument('-t','--timeout',type=float,default=None,
       help='timeout of the receiving socket')
-    parser.add_argument('pvfile', nargs='?', 
-      help='PV list description file')
+    parser.add_argument('ldo', nargs='?', 
+      help='LDOs: lite data objects')
     pargs = parser.parse_args()
-    printd('Monitoring of PVs at '+pargs.host+':%s'%pargs.port)
-
+    if pargs.file:
+        print('Monitoring LDO as defined in '+pargs.file)
+    else:
+        print('Monitoring LDOs: '+str(pargs.ldo))
+        pargs.file = self.build_temporary_pvfile()
     app = QtWidgets.QApplication(sys.argv)
 
     # read config file
-    pvTable = PVTable(pargs.pvfile)
+    pvTable = LDOTable(pargs.file)
 
     # define GUI
     window = Window(*pvTable.shape)
     try:
-        title = 'PVs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
+        title = 'LDOs from '+socket.gethostbyaddr(pargs.host)[0].split('.')[0]
     except:
-        title = 'PVs from '+pargs.host
+        title = 'LDOs from '+pargs.host
     #print(title)
     window.setWindowTitle(title)
     window.resize(350, 300)
