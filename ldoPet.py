@@ -2,7 +2,8 @@
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
 #__version__ = 'v25 2020-02-10'# most of the essential suff is working
-__version__ = 'v26 2020-02-10'# spinboxes OK
+#__version__ = 'v26 2020-02-10'# spinboxes OK
+__version__ = 'v27 2020-02-11'# lite cleanup
 
 #TODO: drop $ substitution, leave it for YAML
 
@@ -46,7 +47,6 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             ss = (opl[1]-opl[0])/100.
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
         self.setRange(*opl)
-        print('singlestep',ss)
         self.setSingleStep(ss)
         self.valueChanged.connect(self.handle_value_changed)
         #print('instantiated %s'%self.ldo.title())
@@ -59,7 +59,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             #self.ldo.set(self.value())
             pass
         except Exception as e:
-            print(e)
+            printw('in handle_value_changed :'+str(e))
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
@@ -162,7 +162,6 @@ class Window(QtWidgets.QWidget):
                 elif ldo.guiType == 'spinbox':
                     print('it is spinbox:'+ldo.title())
                     spinbox = QDoubleSpinBoxLDO(ldo)
-                    print(spinbox)
                     # using other ways is more complicated as it is not trivial
                     # to transfer argument to the method
                     #spinbox = QtWidgets.QDoubleSpinBox(self\
@@ -308,7 +307,7 @@ def MySlot(a):
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
-            print('Traceback: '+repr(traceback.format_exc()))
+            #print('Traceback: '+repr(traceback.format_exc()))
     myslotBusy = False
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
