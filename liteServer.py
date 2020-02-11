@@ -222,7 +222,12 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         returnedDict = {}
 
         for devParPropVal in args:
-          devName,parPropValNames = devParPropVal
+          try:
+            devName,parPropValNames = devParPropVal
+          except Exception as e:
+            msg = 'ERR in _reply for '+str(replyCmd)
+            print(msg)
+            raise TypeError(msg) from e
           parNames = parPropValNames[0]
           if len(parPropValNames) > 1:
             propNames = parPropValNames[1]

@@ -3,7 +3,7 @@
 #__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
 #__version__ = 'v25 2020-02-10'# most of the essential suff is working
 #__version__ = 'v26 2020-02-10'# spinboxes OK
-__version__ = 'v27 2020-02-11'# lite cleanup, decoding in mySlot improved
+__version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
 
 #TODO: drop $ substitution, leave it for YAML
 
@@ -273,6 +273,11 @@ def MySlot(a):
         try:
             val = ldo.get()
             printd('val:%s'%str(val)[:100])
+            if val is None:
+                try:
+                    window.table.item(*rowCol).setText('none')
+                except:  pass
+                continue
             if ldo.guiType == 'spinbox':
                 printd('LDO '+ldo.name+' is spinbox '+str(val[0]))
                 #print(str(window.table.cellWidget(*rowCol).value()))
@@ -286,6 +291,7 @@ def MySlot(a):
                     #print('flip')
                     window.table.item(*rowCol).setCheckState(val[0])
                 continue
+            #print('LDO '+ldo.name+' is '+str(type(val)))
             if isinstance(val,np.ndarray):
                 printd('LDO '+ldo.name+' is ndarray')
                 txt = '%s: %s'%(val.shape,str(val))
@@ -338,6 +344,7 @@ class LDO():
         #print('ldo name: '+str(name))
         self.ldo = LA.LdoPars(name.split(':'))
         #print('ldo info for %s: '%name+str(self.ldo.info()))
+        info = self.ldo.info()
         self.key = list(self.ldo.info())[0]
         printd('key:'+str(self.key))
         #print('ldo vars:'+str(vars(self.ldo)))
@@ -411,7 +418,7 @@ class LDOTable():
                 #pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
-                  if True:#try:
+                  try:
                     #print( 'cell:'+str(cell))
                     if not isinstance(cell,str):
                         self.pos2obj[(row,col)] = cell
@@ -421,7 +428,7 @@ class LDOTable():
                         cell = cell.replace(old,new)
                     if cell[0] == '$':# the cell is LDO
                         printd( 'the "%s" is ldo'%cell[1:])
-                        if True:#try:
+                        if True:# Do not catch exception here!#try:
                             self.pos2obj[(row,col)] = LDO(cell[1:])
                             continue
                         else:#except Exception as e:
@@ -439,9 +446,10 @@ class LDOTable():
                         = QPushButtonCmd(txtlist[0],attrVal[1])
                         continue
                     printe('cell[%i,%i]=%s not recognized'%(row,col,str(cell))) 
-                  else:#except Exception as e:
-                    printw(str(e))
-                    self.pos2obj[(row,col)] = '?'
+                  except RuntimeError as e:
+                    printe('Could not create table due to '+str(e))
+                    sys.exit() 
+                    #self.pos2obj[(row,col)] = '?'
 
                 maxcol = max(maxcol,nCols)
                 row += 1
@@ -493,12 +501,12 @@ if __name__ == '__main__':
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
     parser.add_argument('-f','--file', help=\
     'Config file')
-    parser.add_argument('-t','--timeout',type=float,default=None,
+    parser.add_argument('-t','--timeout',type=float,default=10,
       help='timeout of the receiving socket')
     parser.add_argument('ldo', nargs='?', 
       help='LDOs: lite data objects')
     pargs = parser.parse_args()
-    #LA.LdoPars.Dbg = pargs.dbg# transfer dbg flag to liteAccess
+    LA.LdoPars.Dbg = pargs.dbg# transfer dbg flag to liteAccess
 
     if pargs.file:
         print('Monitoring LDO as defined in '+pargs.file)

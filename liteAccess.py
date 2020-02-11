@@ -82,7 +82,7 @@ To enable debugging: LA.LdoPars.Dbg = True
 #__version__ = 'v36 2020-02-06'# full re-design
 #__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
 #__version__ = 'v38 2020-02-10 '# set() raising exceptions on failures
-__version__ = 'v39 2020-02-11 '# better error handling
+__version__ = 'v39b 2020-02-11 '# better error and timeout handling
 
 print('liteAccess '+__version__)
 
@@ -101,8 +101,8 @@ Dev,Par = 0,1
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Helper functions`````````````````````````````````
 def printi(msg): print('info: '+msg)
-def printw(msg): print('WARNING: '+msg)
-def printe(msg): print('ERROR: '+msg)
+def printw(msg): print('LAWARNING: '+msg)
+def printe(msg): print('LAERROR: '+msg)
 def printd(msg):
     if LdoPars.Dbg: print('LADbg: '+msg)
 
@@ -134,7 +134,14 @@ def _recvUdp(socket,socketSize):
     tryMore = 5
     ts = timer()
     while tryMore:
-        buf, addr = socket.recvfrom(socketSize)        
+        try:
+            buf, addr = socket.recvfrom(socketSize)
+        except Exception as e:
+            msg = 'LATimeout'
+            #printw('in recvfrom '+str(e))
+            buf = None
+        if buf is None:
+            raise RuntimeError(msg)
         size = len(buf) - PrefixLength
         offset = int.from_bytes(buf[:PrefixLength],'big')# python3
         #print('prefix', repr(buf[:PrefixLength]))
@@ -209,14 +216,19 @@ class Channel():
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
             self.sock.settimeout(timeout)
-        printd('%s client of %s, timeout %s'
+        print('%s client of %s, timeout %s'
         %(('TCP','UDP')[UDP],str((self.sHost,self.sPort)),str(timeout)))
 
     def _recvDictio(self):
         if UDP:
             #data, addr = self.sock.recvfrom(socketSize)
             printd('>_recvUdp')
-            data, addr = _recvUdp(self.sock,socketSize)
+            try:
+                data, addr = _recvUdp(self.sock,socketSize)
+            except RuntimeError as e:
+                print('RuntimeError in _recvUdp: '+str(e))
+                raise RuntimeError(str(e)+' waiting for reply for: '\
+                +str(self.lastDictio))
             printd('<_recvUdp')
             # acknowledge the receiving
             self.sock.sendto(b'ACK', (self.sHost, self.sPort))
@@ -353,10 +365,12 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
             return channel._transaction('get')
 
     def _firstValueAndTime(self):
-        firstDict = self.channels[0]._transaction('get')
         try:
+            firstDict = self.channels[0]._transaction('get')
             firstValsTDict = list(firstDict.values())[0]
-        except: return (None,)
+        except Exception as e:
+            printw('in _firstValueAndTime: '+str(e))
+            return (None,)
         ValsT = list(firstValsTDict.values())[:2]
         try:     return (ValsT[0], ValsT[1])
         except:  return (ValsT[0],)
