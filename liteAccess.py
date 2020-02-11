@@ -81,7 +81,8 @@ To enable debugging: LA.LdoPars.Dbg = True
 """
 #__version__ = 'v36 2020-02-06'# full re-design
 #__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
-__version__ = 'v38 2020-02-10 '# set() raising exceptions on failures
+#__version__ = 'v38 2020-02-10 '# set() raising exceptions on failures
+__version__ = 'v39 2020-02-11 '# better error handling
 
 print('liteAccess '+__version__)
 
@@ -227,13 +228,23 @@ class Channel():
                 addr = (self.lHost,self.lPort)
             else:#except Exception as e:
                 printw('in sock.recv:'+str(e))
-                return None
+                return {}
         printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)\
         +':')
         
         # decode received data
         # allow exception here, it willl be caught in execute_cmd
-        decoded = ubjson.loadb(data)
+        if len(data) == 0:
+            printw('empty reply for: '+str(self.lastDictio))
+            return {}
+        try:
+            decoded = ubjson.loadb(data)
+        except Exception as e:
+            msg = 'exception in ubjson.load: %s'%str(e)
+            print(msg+'. Data:')
+            print(data)
+            #raise ValueError('in _recvDictio: '+msg)
+            return {}
         
         printd('_recvDictio decoded:'+str(decoded)[:200]+'...')
         if not isinstance(decoded,dict):
@@ -252,7 +263,8 @@ class Channel():
         return decoded
 
     def _sendDictio(self,dictio):
-        """for test purposes only"""
+        """low level send"""
+        self.lastDictio = dictio.copy()
         printd('executing: '+str(dictio))
         dictio['username'] = self.username
         dictio['program'] = self.program
@@ -282,20 +294,8 @@ class Channel():
         devParList = list(devParDict.items())
         #print('devParList',devParList)
         dictio = {'cmd':(cmd,devParList)}
-        dictio['username'] = self.username
-        dictio['program'] = self.program
         printd('sending cmd: '+str(dictio))
-        encoded = ubjson.dumpb(dictio)
-        if UDP:
-            self.sock.sendto(encoded, (self.sHost, self.sPort))
-        else:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                self.sock.connect((self.lHost,self.lPort))
-            except Exception as e:
-                printe('in sock.connect:'+str(e))
-                sys.exit()
-            self.sock.sendall(encoded)
+        self._sendDictio(dictio)
 
     def _transaction(self,cmd,value=None):
         # normal transaction: send command, receive response
@@ -354,7 +354,9 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
 
     def _firstValueAndTime(self):
         firstDict = self.channels[0]._transaction('get')
-        firstValsTDict = list(firstDict.values())[0]
+        try:
+            firstValsTDict = list(firstDict.values())[0]
+        except: return (None,)
         ValsT = list(firstValsTDict.values())[:2]
         try:     return (ValsT[0], ValsT[1])
         except:  return (ValsT[0],)
