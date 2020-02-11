@@ -3,7 +3,7 @@
 #__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
 #__version__ = 'v25 2020-02-10'# most of the essential suff is working
 #__version__ = 'v26 2020-02-10'# spinboxes OK
-__version__ = 'v27 2020-02-11'# lite cleanup
+__version__ = 'v27 2020-02-11'# lite cleanup, decoding in mySlot improved
 
 #TODO: drop $ substitution, leave it for YAML
 
@@ -134,7 +134,6 @@ class Window(QtWidgets.QWidget):
                 
             # the object is LDO
             ldo = obj
-            #val = ldo.v
             initialValue = ldo.initialValue[0]
             printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
             pvTable.par2pos[ldo] = row,colOut
@@ -274,36 +273,35 @@ def MySlot(a):
         try:
             val = ldo.get()
             printd('val:%s'%str(val)[:100])
-            if isinstance(val,list):
-                printd('val list')
-                if ldo.guiType =='bool':
-                    printd('val bool')
-                    state = window.table.item(*rowCol).checkState()
-                    printd('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
-                    if val[0] != (state != 0):
-                        #print('flip')
-                        window.table.item(*rowCol).setCheckState(val[0])
-                    continue
-                elif ldo.guiType == 'spinbox':
-                    #print('val spinbox '+str(val[0]))
-                    #print(str(window.table.cellWidget(*rowCol).value()))
-                    window.table.cellWidget(*rowCol).setValue(float(val[0]))
-                    continue
-                # standard LDO
-                #print('LDO '+ldo.name+' is list[%i] of '%len(val)\
-                #+str(type(val[0])))
-                #txt = str(val)[1:-1] #avoid brackets
-                txt = str(val)
-            elif isinstance(val,str):
-                printd('LDO '+ldo.name+' is text')
-                txt = val
-                #continue
-            elif isinstance(val,np.ndarray):
+            if ldo.guiType == 'spinbox':
+                printd('LDO '+ldo.name+' is spinbox '+str(val[0]))
+                #print(str(window.table.cellWidget(*rowCol).value()))
+                window.table.cellWidget(*rowCol).setValue(float(val[0]))
+                continue
+            elif ldo.guiType =='bool':
+                printd('LDO '+ldo.name+' is bool')
+                state = window.table.item(*rowCol).checkState()
+                printd('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
+                if val[0] != (state != 0):
+                    #print('flip')
+                    window.table.item(*rowCol).setCheckState(val[0])
+                continue
+            if isinstance(val,np.ndarray):
+                printd('LDO '+ldo.name+' is ndarray')
                 txt = '%s: %s'%(val.shape,str(val))
             else:
-                #txt = 'Unknown type of '+ldo.name+'='+str(type(val))
-                #printw(txt+':'+str(val))
-                txt = str(val)
+                if len(val) > 1:
+                    printd('LDO '+ldo.name+' is list')
+                    txt = str(val)
+                else:
+                    val = val[0]
+                    printd('LDO '+ldo.name+' is '+str(type(val)))
+                    if type(val) in (float,int,str):
+                        txt = str(val)
+                    else:
+                        txt = 'Unknown type of '+ldo.name+'='+str(type(val))
+                        printw(txt+':'+str(val))
+                        txt = str(val)
             window.table.item(*rowCol).setText(txt)
         except Exception as e:
             printw('updating [%i,%i]:'%rowCol+str(e))
@@ -344,6 +342,7 @@ class LDO():
         printd('key:'+str(self.key))
         #print('ldo vars:'+str(vars(self.ldo)))
         self.initialValue = self.ldo.value[0]
+        print('iv',self.name,str(self.initialValue)[:60])
         self.t = 0.
         # creating attributes from remote ones
         self.attr = self.ldo.info()[self.key]
@@ -367,7 +366,6 @@ class LDO():
 
     def gui_type(self):
         iv = self.initialValue
-        print('iv',self.name,str(iv)[:60])
         if len(iv) != 1:
             return None
             
@@ -410,7 +408,7 @@ class LDOTable():
             for row,rlist in enumerate(config['rows']):
                 if rlist is None:
                     continue
-                pprint(('row,rlist',row,rlist))
+                #pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
                   if True:#try:

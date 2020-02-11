@@ -12,10 +12,10 @@ define:
 # Table definition
 rows:
   - [0,Test of the table view of a Process Variable server,2,3,4]
-  - ['version:',$SERVER:version]
-  - [First set of counters,$DEV1:counters,$DEV1:reset,$DEV1:command,'S1 Freq,time:',$DEV1:frequency,$DEV1:time,]
+  - ['version:',$SERVER:version,Reset,Command,Frequency,Time]
+  - [First set of counters,$DEV1:counters,$DEV1:reset,$DEV1:command,$DEV1:frequency,$DEV1:time,]
   - [MultiDimensional,$DEV1:image]
-  - [Second set of counters,$DEV2:counters,$DEV2:reset,$DEV2:command,'S2 Freq,time:',$DEV2:frequency,$DEV2:time]
+  - [Second set of counters,$DEV2:counters,$DEV2:reset,$DEV2:command,$DEV2:frequency,$DEV2:time]
   - [MultiDimensional,$DEV2:image] 
   - [' ',' ','Shell cmd:',xterm;launch:xterm]
  
