@@ -42,6 +42,8 @@ implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, 
    - network-based using a dedicated liteServer  (not commissioned yet)
  - Basic spreadsheet-based GUI: **ldoPet.py**
  - Architectures. It is 100% python. Tested on linux and Windows.
+ - Supported applications
+   - [Image analysis](https://github.com/ASukhanov/Imagin)
 
 ### Status
 Final development of a second release
