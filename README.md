@@ -7,7 +7,7 @@ fast and efficient.
 
 User responsibility is to provide private methods for connecting process variables to physical devices.
 
-## Motivation
+### Motivation
 Provide control for devices connected to non-linux machines. 
 The simplicity of the protocol makes it possible to implement in CPU-less FPGA device.
 
@@ -16,17 +16,17 @@ manipulated using liteAccess.py.
 
 The liteAccess.py is the base class for accessing the server parameters.
 
-## Bridged usage
+### Bridged usage
 To monitor and control liteServer-served devices from an existing architecture one can use or build a simple bridge:
-### For RHIC ADO Control architecture: liteServerMan.py
+#### For RHIC ADO Control architecture: liteServerMan.py
     liteServerMan.py -HmyHost myADO 
 An ADO manager liteServerMan.py connects to a liteServer, running on myHost and creates the myADO. 
   - all input objects of the lite servers are translated to myADO input parameters
   - all output parameters of the myADO are translated to the liteServer objects
-### For EPICS Control architecture
+#### For EPICS Control architecture
 The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example (https://nsls-ii.github.io/caproto/ "caproto")
 
-## Features
+### Features
  - Simplicity. The network protocol is **UDP**, error correction of late/missing/mangled data is
 implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, provides all JSON features. All this makes it possible to implement liteServer on a CPU-less FPGA.
  - Supported requests:
@@ -42,7 +42,7 @@ implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, 
  - Basic spreadsheet-based GUI: **ldoPet.py**
  - Architectures. It is 100% python. Tested on linux and Windows.
 
-## Status
+### Status
 Final development of a second release
 
 ## Examples
