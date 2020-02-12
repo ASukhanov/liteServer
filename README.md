@@ -17,14 +17,30 @@ manipulated using liteAccess.py.
 The liteAccess.py is the base class for accessing the server parameters.
 
 ## Bridged usage
-To monitor and control liteServer-served devices from existing architecture one can use or build simple bridge:
-### For RHIC ADO architecture:
+To monitor and control liteServer-served devices from an existing architecture one can use or build a simple bridge:
+### For RHIC ADO Control architecture: liteServerMan.py
     liteServerMan.py -HmyHost myADO 
 An ADO manager liteServerMan.py connects to a liteServer, running on myHost and creates the myADO. 
   - all input objects of the lite servers are translated to myADO input parameters
   - all output parameters of the myADO are translated to the liteServer objects
-### EPICS
+### For EPICS Control architecture
 The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example (https://nsls-ii.github.io/caproto/ "caproto")
+
+## Features
+ - Simplicity. The network protocol is **UDP**, error correction of late/missing/mangled data is
+implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, provides all JSON features. All this makes it possible to implement liteServer on a CPU-less FPGA.
+ - Supported requests:
+   - info
+   - get
+   - set
+   - subscribe (not commissioned yet)
+ - Multidimensional data (numpy arrays) are supported.
+ - Access control info (username, program name) supplied in every request
+ - Name service
+   - file-based
+   - network-based using a dedicated liteServer  (not commissioned yet)
+ - Basic spreadsheet-based GUI: **ldoPet.py**
+ - Architectures. It is 100% python. Tested on linux and Windows.
 
 ## Status
 Final development of a second release
@@ -32,11 +48,10 @@ Final development of a second release
 ## Examples
 ### liteScaler.py
 Test server, providing two multi-channel scalers and a multi-dimesional array.
-
-To start the server:
-
+  To start the server:
+  
     litescaler.py
-To show and control liteScaler parameters using pre-configured spreadsheet liteScaler.yaml:
+  To show and control liteScaler parameters using pre-configured spreadsheet liteScaler.yaml:
 
     ldoPet.py -f liteScaler.yaml
   
