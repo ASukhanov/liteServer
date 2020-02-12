@@ -24,7 +24,8 @@ An ADO manager liteServerMan.py connects to a liteServer, running on myHost and 
   - all input objects of the lite servers are translated to myADO input parameters
   - all output parameters of the myADO are translated to the liteServer objects
 #### For EPICS Control architecture
-The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example (https://nsls-ii.github.io/caproto/ "caproto")
+The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example:
+[caproto](https://nsls-ii.github.io/caproto/)
 
 ### Features
  - Simplicity. The network protocol is **UDP**, error correction of late/missing/mangled data is
