@@ -24,7 +24,7 @@ An ADO manager liteServerMan.py connects to a liteServer, running on myHost and 
   - all input objects of the lite servers are translated to myADO input parameters
   - all output parameters of the myADO are translated to the liteServer objects
 ### EPICS
-The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example [ caproto] (https://nsls-ii.github.io/caproto/)
+The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example (https://nsls-ii.github.io/caproto/ "caproto")
 
 ## Status
 Final development of a second release
@@ -34,7 +34,9 @@ Final development of a second release
 Test server, providing two multi-channel scalers and a multi-dimesional array.
 
 To start the server:
+
     litescaler.py
 To show and control liteScaler parameters using pre-configured spreadsheet liteScaler.yaml:
+
     ldoPet.py -f liteScaler.yaml
   
