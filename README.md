@@ -21,3 +21,4 @@ Released
 
 ### Examples
 - liteScaler.py # test server, providing two multi-channel scalers and a multi-dimesional array.
+  -- run
