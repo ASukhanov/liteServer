@@ -17,7 +17,7 @@ manipulated using liteAccess.py.
 The liteAccess.py is the base class for accessing the server parameters.
 
 ## Bridged usage
-To monitor and control liteServer-served devices from existing architecture one can use or build simple bridges:
+To monitor and control liteServer-served devices from existing architecture one can use or build simple bridge:
 ### For RHIC ADO architecture:
     liteServerMan.py -HmyHost myADO 
 An ADO manager liteServerMan.py connects to a liteServer, running on myHost and creates the myADO. 
