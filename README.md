@@ -32,10 +32,11 @@ The bridge liteServer-EPICS can be developed using a python-based implementation
 implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, provides all JSON features. All this makes it possible to implement liteServer on a CPU-less FPGA.
  - Low latency, connection-less.
  - Supported requests:
-   - info
-   - get
-   - set
-   - subscribe (not commissioned yet)
+   - **info()**, returns dictionary with information on requested LDOs and parameters
+   - **get()**, returns dictionary of values of requested LDOs and parameters
+   - **read()**, returns dictionary of all readable (non-constant) parameters of requested LDO
+   - **set()**, set values or attributes of requested LDO parameters
+   - **subscribe()** (not commissioned yet)
  - Multidimensional data (numpy arrays) are supported.
  - Access control info (username, program name) supplied in every request
  - Name service
