@@ -16,9 +16,25 @@ manipulated using liteAccess.py.
 
 The liteAccess.py is the base class for accessing the server parameters.
 
-## Status
-Released
+## Bridged usage
+To monitor and control liteServer-served devices from existing architecture one can use or build simple bridges:
+### For RHIC ADO architecture:
+    liteServerMan.py -HmyHost myADO 
+An ADO manager liteServerMan.py connects to a liteServer, running on myHost and creates the myADO. 
+  - all input objects of the lite servers are translated to myADO input parameters
+  - all output parameters of the myADO are translated to the liteServer objects
+### EPICS
+The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example [ caproto] (https://nsls-ii.github.io/caproto/)
 
-### Examples
-- liteScaler.py # test server, providing two multi-channel scalers and a multi-dimesional array.
-  -- run
+## Status
+Final development of a second release
+
+## Examples
+### liteScaler.py
+Test server, providing two multi-channel scalers and a multi-dimesional array.
+
+To start the server:
+    litescaler.py
+To show and control liteScaler parameters using pre-configured spreadsheet liteScaler.yaml:
+    ldoPet.py -f liteScaler.yaml
+  
