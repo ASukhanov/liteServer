@@ -43,12 +43,12 @@ implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, 
    - file-based
    - network-based using a dedicated liteServer  (not commissioned yet)
  - Basic spreadsheet-based GUI: **ldoPet.py**
- - Architectures. It is 100% python. Tested on linux and Windows.
- - Supported applications
+ - Architectures. All programs are 100% python. Tested on Linux and Windows.
+ - Supported applications:
    - [Image analysis](https://github.com/ASukhanov/Imagin)
 
 ### Status
-Final development of a second release
+Commissioning of the second release.
 
 ## Examples
 ### liteScaler.py
