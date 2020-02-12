@@ -2,10 +2,11 @@
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
 #__version__ = 'v25 2020-02-10'# most of the essential suff is working
+#TODO: drop $ substitution, leave it for YAML
 #__version__ = 'v26 2020-02-10'# spinboxes OK
 __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
-
-#TODO: drop $ substitution, leave it for YAML
+#TODO: discard LDOTable, do table creation in Window
+__version__ = 'v28 2020-02-11'# merged cell supported
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -93,8 +94,10 @@ class Window(QtWidgets.QWidget):
         for row in range(rows):
           spanStart,spanFilled = None, False
           self.table.setRowHeight(row,20)
-          if pvTable.pos2obj[(row,0)] is None:
-            continue
+          try:  
+            if pvTable.pos2obj[(row,0)] is None:
+                    continue
+          except:   continue
           colSkip = 0
           for col in range(columns):
             #print('row,col',(row,col))
@@ -122,6 +125,13 @@ class Window(QtWidgets.QWidget):
                         spanFilled = True
                         colOut = spanStart
                     item = QtWidgets.QTableWidgetItem(str(obj))
+                    item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
+                    self.table.setItem(row, colOut, item)
+                elif isinstance(obj,list):
+                    span = len(obj)
+                    print('merging %i cells starting at %i,%i'%(span,row,col))
+                    self.table.setSpan(row,col,1,col+span)
+                    item = QtWidgets.QTableWidgetItem(str(obj[0]))
                     item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
                     self.table.setItem(row, colOut, item)
                 elif isinstance(obj,QPushButtonCmd):
@@ -211,7 +221,7 @@ class Window(QtWidgets.QWidget):
         ldo = pvTable.pos2obj[row,column]
         if isinstance(ldo,str):
             return
-        if True:#try:
+        try:
             if ldo.guiType =='bool':
                 checked = item.checkState() == QtCore.Qt.Checked
                 print('bool clicked '+ldo.name+':'+str(checked))
@@ -225,7 +235,7 @@ class Window(QtWidgets.QWidget):
                 qte.move(0,20)
                 #d.setWindowModality(Qt.ApplicationModal)
                 d.show()
-        else:#except Exception as e:
+        except Exception as e:
             printe('exception in handleCellClicked: '+str(e))
 
     def update(self,a):
@@ -339,11 +349,11 @@ class LDOMonitor(QtCore.QThread):
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class LDO():
     """Process Variable object, provides getter and setter"""
-    def __init__(self,name):
-        self.name = name
-        #print('ldo name: '+str(name))
-        self.ldo = LA.LdoPars(name.split(':'))
-        #print('ldo info for %s: '%name+str(self.ldo.info()))
+    def __init__(self,ldoName,parName='*',attribute='value'):
+        self.name = ldoName+':'+parName
+        print('ldo name: '+str(self.name))
+        self.ldo = LA.LdoPars((ldoName,parName))
+        print('ldo info for %s: '%self.name+str(self.ldo.info()))
         info = self.ldo.info()
         self.key = list(self.ldo.info())[0]
         printd('key:'+str(self.key))
@@ -357,7 +367,7 @@ class LDO():
         #for attribute,v in self.attr.items():
         #    if attribute not in ['count', 'features', 'opLimits']:                
         #        continue
-        #    print('Creating attribute %s.%s = '%(name,attribute)+str(v))
+        #    print('Creating attribute %s.%s = '%(self.name,attribute)+str(v))
         #    setattr(self,attribute,v)
         self.guiType = self.gui_type()
         #print('type of %s:'%self.name+str(self.guiType)
@@ -415,37 +425,37 @@ class LDOTable():
             for row,rlist in enumerate(config['rows']):
                 if rlist is None:
                     continue
-                #pprint(('row,rlist',row,rlist))
+                pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
                   try:
-                    #print( 'cell:'+str(cell))
-                    if not isinstance(cell,str):
+                    print( 'cell:'+str(cell))
+                    if isinstance(cell,str):
                         self.pos2obj[(row,col)] = cell
                         continue
-                    # process string cell
-                    for old,new in config['dict'].items():
-                        cell = cell.replace(old,new)
-                    if cell[0] == '$':# the cell is LDO
-                        printd( 'the "%s" is ldo'%cell[1:])
-                        if True:# Do not catch exception here!#try:
-                            self.pos2obj[(row,col)] = LDO(cell[1:])
-                            continue
-                        else:#except Exception as e:
-                            txt = 'Cannot create LDO %s:'%cell+str(e)
-                            raise NameError(txt)
-                    # the cell is string, separate attributes
-                    txtlist =  cell.split(';')
-                    if len(txtlist) == 1:
-                        self.pos2obj[(row,col)] = txtlist[0]
+                    if not isinstance(cell,list):
+                        # print('accepting only strings and lists')
                         continue
-                    # the cell contains attribute
-                    attrVal = txtlist[1].split(':')
-                    if attrVal[0] == 'launch':
-                        self.pos2obj[(row,col)]\
-                        = QPushButtonCmd(txtlist[0],attrVal[1])
+                    # cell is list
+                    try:    cellIsLdo = cell[0][0] == '$'# the cell is LDO,par
+                    except: cellIsLdo = False
+                    if not cellIsLdo:
+                        print('merged non-ldo cells: '+str(cell))
+                        self.pos2obj[(row,col)] = cell
                         continue
-                    printe('cell[%i,%i]=%s not recognized'%(row,col,str(cell))) 
+                    print('cell[0][0]',cell[0][0])
+                    # cell[:2] is LDO,par, optional cell[2] is cell property 
+                    try:    ldo,par = cell[0][1:],cell[1]
+                    except: NameError('expect LDO,par, got: '+str(cell))
+                    print( 'the cell[%i,%i] is ldo: %s,%s'%(row,col,ldo,par))
+                    if True:# Do not catch exception here!#try:
+                        self.pos2obj[(row,col)] = LDO(ldo,par)
+                        continue
+                    else:#except Exception as e:
+                        txt = 'Cannot create LDO %s:'%cell+str(e)
+                        raise NameError(txt)
+                    continue
+                    #printe('cell[%i,%i]=%s not recognized'%(row,col,str(cell))) 
                   except RuntimeError as e:
                     printe('Could not create table due to '+str(e))
                     sys.exit() 
@@ -455,22 +465,6 @@ class LDOTable():
                 row += 1
         self.shape = row,maxcol
         print('table created, shape: '+str(self.shape))
-
-    def print_LDO_at(self,row,col):
-        try:
-            ldo = self.pos2obj[row,col]
-            v = ldo.get()
-            txt = str(v) if len(v) <= 10 else str(v[:10])[:-1]+',...]'
-            print('Table[%i,%i]:'%(row,col)+ldo.name+' = '+txt)
-        except Exception as e:
-            printw('in print_LDO:'+str(e))
-
-    def print_loc_of_LDO(self,ldo):
-        try:
-            row,col = self.par2pos[ldo]
-            print('Parameter '+ldo.name+' is located at Table[%i,%i]:'%(row,col))
-        except Exception as e:
-            printw('in print_loc:'+str(e))
 
     def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'
