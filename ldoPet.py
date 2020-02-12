@@ -6,7 +6,8 @@
 #__version__ = 'v26 2020-02-10'# spinboxes OK
 __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
 #TODO: discard LDOTable, do table creation in Window
-__version__ = 'v28 2020-02-11'# merged cell supported
+#__version__ = 'v28 2020-02-11'# merged cell supported
+__version__ = 'v29 2020-02-12'# cell features
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -436,13 +437,22 @@ class LDOTable():
                     if not isinstance(cell,list):
                         # print('accepting only strings and lists')
                         continue
-                    # cell is list
-                    try:    cellIsLdo = cell[0][0] == '$'# the cell is LDO,par
+                        
+                    # cell is a list
+                    # is it LDO?
+                    try:    cellIsLdo = cell[0][0] == '$'
                     except: cellIsLdo = False
                     if not cellIsLdo:
-                        print('merged non-ldo cells: '+str(cell))
-                        self.pos2obj[(row,col)] = cell
+                        if isinstance(cell[0],str):
+                            print('merged non-ldo cells: '+str(cell))
+                            self.pos2obj[(row,col)] = cell
+                        else:
+                            print("cell[0] is probably a ['host;port',dev]: ")\
+                            +str(cell[0])
+                            print('Not supported yet')
                         continue
+
+                    # cell is LDO
                     print('cell[0][0]',cell[0][0])
                     # cell[:2] is LDO,par, optional cell[2] is cell property 
                     try:    ldo,par = cell[0][1:],cell[1]
