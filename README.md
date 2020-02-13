@@ -1,5 +1,6 @@
 # liteServer
-Very Lightweight Data Object Server. The basic principle is similar to an ADO manager. It hosts Lite Data Objects (**LDO**, analog of process variables in EPICS) and provides info/set/get/read/subscribe remote access to them using UDP protocol. 
+Very Lightweight Data Object Server. The basic principle is similar to the 
+pvAccess protocol of EPICS. It hosts Lite Data Objects (**LDO**, analog of process variables in EPICS) and provides info/set/get/read/subscribe remote access to them using UDP protocol. 
 Data encoding is implemented using UBJSON specification, which makes it very fast and efficient.
 
 User responsibility is to provide private methods for connecting process variables to physical devices.
