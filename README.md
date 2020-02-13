@@ -8,13 +8,11 @@ fast and efficient.
 User responsibility is to provide private methods for connecting process variables to physical devices.
 
 ### Motivation
-Provide control for devices connected to non-linux machines. 
-The simplicity of the protocol makes it possible to implement in CPU-less FPGA device.
-
-The server is running on a remote machine. Device parameters can be 
+- Provide control for devices connected to non-linux machines. 
+- The simplicity of the protocol makes it possible to implement in CPU-less FPGA device.
+- The server is running on a remote machine. Device parameters can be 
 manipulated using liteAccess.py.
-
-The liteAccess.py is the base class for accessing the server parameters.
+- The liteAccess.py is the base class for accessing the server parameters.
 
 ### Bridged usage
 To monitor and control liteServer-served devices from an existing architecture one can use or build a simple bridge:
@@ -26,6 +24,12 @@ An ADO manager liteServerMan.py connects to a liteServer, running on myHost and 
 #### For EPICS Control architecture
 The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example:
 [caproto](https://nsls-ii.github.io/caproto/)
+
+### Installation
+Prerequisites:
+- **python3**: preferrably python3.6+ (it keeps dictionaries sorted)
+- **py-ubjson**: versions 0.12+ provides greatly improved performance for multi-dimensional arrays
+- **pyQT4 or pyQT5**: for GUI
 
 ### Features
  - Simplicity. The network protocol is **UDP**, error correction of late/missing/mangled data is
@@ -55,7 +59,7 @@ Commissioning of the second release.
 Test server, providing two multi-channel scalers and a multi-dimesional array.
   To start the server:
   
-    litescaler.py
+    liteScaler.py
   To show and control liteScaler parameters using pre-configured spreadsheet liteScaler.yaml:
 
     ldoPet.py -f liteScaler.yaml
