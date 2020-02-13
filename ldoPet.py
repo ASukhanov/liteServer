@@ -7,7 +7,8 @@
 __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
 #TODO: discard LDOTable, do table creation in Window
 #__version__ = 'v28 2020-02-11'# merged cell supported
-__version__ = 'v29 2020-02-12'# cell features, merging supported
+#__version__ = 'v29 2020-02-12'# cell features, merging supported
+__version__ = 'v30 2020-02-13'# shell commands added
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -107,22 +108,18 @@ class Window(QtWidgets.QWidget):
         monitor = LDOMonitor()
 
     def process_pvTable(self,rows,columns):
-        rowOffset = 0
         for row in range(rows):
-          rowOut = row + rowOffset
           self.table.setRowHeight(row,20)
           try:  
             if pvTable.pos2obj[(row,0)][0] is None:
                     continue
           except:   continue
-          colOffset = 0
           for col in range(columns):
             #print('row,col',(row,col))
             try: obj,cellFeature = pvTable.pos2obj[(row,col)]
             except Exception as e:
                 printd('Not an object,{}:'+str(e))
                 continue
-            colOut = col + colOffset
 
             if isinstance(cellFeature,dict):
                 #print('handle cellFeatures(%i,%i) '%(row,col)+str(cellFeature))
@@ -130,39 +127,32 @@ class Window(QtWidgets.QWidget):
                     if feature == 'span':
                         try: spanCol,spanRow = value
                         except: spanRow,spanCol = 1,value
-                        # offsetting is not that easy
-                        #colOffset += spanCol
-                        #rowOffset += spanRow
-                        #print('merging %i,%i cells starting at %i,%i'%(*value,rowOut,col))
-                        self.table.setSpan(rowOut,col,spanRow,spanCol)
+                        #print('merging %i,%i cells starting at %i,%i'%(*value,row,col))
+                        self.table.setSpan(row,col,spanRow,spanCol)
 
             #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
             if not isinstance(obj,LDO):
                 if isinstance(obj,str):
                     item = QtWidgets.QTableWidgetItem(str(obj))
-                    self.setItem(rowOut, colOut, item, cellFeature, fgColor='darkBlue')
+                    self.setItem(row, col, item, cellFeature, fgColor='darkBlue')
                 elif isinstance(obj,list):
-                    # Take the first item, the last one is cellFeature
-                    item = QtWidgets.QTableWidgetItem(str(obj[0]))
-                    self.setItem(rowOut, colOut, item, cellFeature, fgColor='darkBlue')
-                elif isinstance(obj,QPushButtonCmd):
-                    printd('pushButton at [%i,%i]'%(rowOut, colOut))
-                    self.table.setCellWidget(rowOut, colOut, obj)
+                    #print('####rowCol(%i,%i) is list: '%(row,col) + str(obj))
+                    self.setItem(row, col, obj, cellFeature, fgColor='darkBlue')
                 continue
                 
             #``````the object is LDO``````````````````````````````````````````
             ldo = obj
             initialValue = ldo.initialValue[0]
             printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
-            pvTable.par2pos[ldo] = row,colOut
+            pvTable.par2pos[ldo] = row,col
             try:
                 item = QtWidgets.QTableWidgetItem(ldo.title())
             except Exception as e:
-                printw('could not define Table[%i,%i]'%(rowOut,colOut))
+                printw('could not define Table[%i,%i]'%(row,col))
                 print(str(e))
                 print('Traceback: '+repr(traceback.format_exc()))
                 continue
-            #print('pvTable [%i,%i] is %s %s'%(rowOut,colOut,ldo.title(),type(ldo)))
+            #print('pvTable [%i,%i] is %s %s'%(row,col,ldo.title(),type(ldo)))
             # deduct the cell type from LDO
             try:
                 if ldo.guiType == 'bool':
@@ -173,7 +163,7 @@ class Window(QtWidgets.QWidget):
                                   QtCore.Qt.ItemIsEnabled)
                     state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
                     item.setCheckState(state)
-                    self.setItem(rowOut, colOut, item, cellFeature)
+                    self.setItem(row, col, item, cellFeature)
                     continue
                     
                 elif ldo.guiType == 'spinbox':
@@ -185,25 +175,34 @@ class Window(QtWidgets.QWidget):
                     #,valueChanged=self.value_changed)
                     
                     spinbox.setValue(float(initialValue))
-                    self.table.setCellWidget(rowOut, colOut, spinbox)
-                    #print('table set for spinbox',rowOut, colOut, spinbox)
+                    self.table.setCellWidget(row, col, spinbox)
+                    #print('table set for spinbox',row, col, spinbox)
                     continue
             except Exception as e:
                 printw('in is_bool '+ldo.title()+':'+str(e))
                 pass
-            self.setItem(rowOut, col, item, cellFeature)
+            self.setItem(row, col, item, cellFeature)
             #print('table row set',row, col, item)
 
     def setItem(self,row,col,item,features={},fgColor=None):
+        if isinstance(item,list):
+            # Take the first item, the last one is cellFeature
+            cellName = str(item[0])
+            item = QtWidgets.QTableWidgetItem(cellName)
         if fgColor:
             item.setForeground(QtGui.QBrush(QtGui.QColor(fgColor)))
         for feature,value in features.items():
+            if feature == 'span': continue # span was served above
             if feature == 'color':
                 color = QtGui.QColor(*value) if isinstance(value,list)\
                   else QtGui.QColor(value)
                 #print('color of (%i,%i) is '%(row,col)+str(value))
                 item.setBackground(color)
-            elif feature == 'span': pass # span was served above
+            elif feature == 'launch':
+                widget = QPushButtonCmd(cellName,value)
+                #print('pushButton created with cmd:%s'%value)
+                self.table.setCellWidget(row, col, widget)
+                return
             else:
                 print('not supported feature(%i,%i):'%(row,col)+feature)
         self.table.setItem(row, col, item)

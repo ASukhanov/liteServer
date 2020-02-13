@@ -1,4 +1,5 @@
 # Example of the lpet definition table
+# version v02 2020-02-13
 #
 # Aliases
 define: 
@@ -19,7 +20,7 @@ define:
 # Table definition
 rows:
   - [[Test of the table view of liteServer at ,{span: [3,1],color: cyan,width: 6}],2,3,[*SERV,host,{span: [3,1]}]]
-  - ['Version:',[*SERV,version,oplimit,{width: 6}]]
+  - ['Version:',[*SERV,version,{span: 2}]]
   - *SEPARATOR
   - [[First set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,Frequency,Time]
   - ['Scaler1:',[*DEV1,counters],[*DEV1,reset],[*DEV1,command,{color: [200,200,200]}],
@@ -31,3 +32,5 @@ rows:
   [*DEV2,frequency],[*DEV2,time]]
   - [MultiDimensional,[*DEV2,image,*3x2Cells]]
   - []
+  - ['Shell command:',[xterm,{launch: xterm}]]
+
