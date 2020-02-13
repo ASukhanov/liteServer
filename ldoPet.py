@@ -7,7 +7,7 @@
 __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
 #TODO: discard LDOTable, do table creation in Window
 #__version__ = 'v28 2020-02-11'# merged cell supported
-__version__ = 'v29 2020-02-12'# cell features
+__version__ = 'v29 2020-02-12'# cell features, merging supported
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -79,7 +79,7 @@ class myTableWidget(QtWidgets.QTableWidget):
             return
         if button == 2: # right button
             if True:#try:
-                ldo = pvTable.pos2obj[(row,col)]
+                ldo = pvTable.pos2obj[(row,col)][0]
                 print('RightClick at LDO %s.'%ldo.name)
                 mainWidget.rightClick(ldo)
             else:#except:
@@ -92,101 +92,9 @@ class Window(QtWidgets.QWidget):
         QtWidgets.QWidget.__init__(self)
         self.table = myTableWidget(rows, columns, self)
         self.table.setShowGrid(False)
-        for row in range(rows):
-          spanStart,spanFilled = None, False
-          self.table.setRowHeight(row,20)
-          try:  
-            if pvTable.pos2obj[(row,0)] is None:
-                    continue
-          except:   continue
-          colSkip = 0
-          for col in range(columns):
-            #print('row,col',(row,col))
-            try: obj = pvTable.pos2obj[(row,col)]
-            except Exception as e:
-                printd('Not an object:'+str(e))
-                continue
-            colOut = col - colSkip
-
-            # check if not a LDO object
-            #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
-            if not isinstance(obj,LDO):
-                if isinstance(obj,str):
-                    if len(obj) == 0: continue
-                    if obj[0] == '[':
-                        spanStart = col
-                        #print('span starts at [%i,%i]:%s'%(row,spanStart,obj))
-                        continue
-                    elif obj[0] == ']':
-                        colSkip += 1
-                        #print('span ends at [%i,%i]'%(row, col))
-                        self.table.setSpan(row,spanStart,1,col-spanStart)
-                        continue
-                    if spanStart is not None and not spanFilled:
-                        spanFilled = True
-                        colOut = spanStart
-                    item = QtWidgets.QTableWidgetItem(str(obj))
-                    item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
-                    self.table.setItem(row, colOut, item)
-                elif isinstance(obj,list):
-                    span = len(obj)
-                    print('merging %i cells starting at %i,%i'%(span,row,col))
-                    self.table.setSpan(row,col,1,col+span)
-                    item = QtWidgets.QTableWidgetItem(str(obj[0]))
-                    item.setForeground(QtGui.QBrush(QtGui.QColor('darkBlue')))
-                    self.table.setItem(row, colOut, item)
-                elif isinstance(obj,QPushButtonCmd):
-                    printd('pushButton at [%i,%i]'%(row, colOut))
-                    self.table.setCellWidget(row, colOut, obj)
-                continue
-            
-            if spanStart is not None:
-                spanStart = None
-                
-            # the object is LDO
-            ldo = obj
-            initialValue = ldo.initialValue[0]
-            printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
-            pvTable.par2pos[ldo] = row,colOut
-            try:
-                item = QtWidgets.QTableWidgetItem(ldo.title())
-            except Exception as e:
-                printw('could not define Table[%i,%i]'%(row,colOut))
-                print(str(e))
-                print('Traceback: '+repr(traceback.format_exc()))
-                continue
-            #print('ok',item)
-            #print('pvTable [%i,%i] is %s %s'%(row,colOut,ldo.title(),type(ldo)))
-            try:
-                if ldo.guiType == 'bool':
-                    #print( 'LDO %s is boolean:'%ldo.name+str(initialValue))
-                    #item.setText(ldo.name.split(':')[1])
-                    item.setText(ldo.name.split(':',1)[1])
-                    item.setFlags(QtCore.Qt.ItemIsUserCheckable |
-                                  QtCore.Qt.ItemIsEnabled)
-                    state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
-                    item.setCheckState(state)
-                    self.table.setCellWidget(row, colOut, item)
-                    continue
-                    
-                elif ldo.guiType == 'spinbox':
-                    print('it is spinbox:'+ldo.title())
-                    spinbox = QDoubleSpinBoxLDO(ldo)
-                    # using other ways is more complicated as it is not trivial
-                    # to transfer argument to the method
-                    #spinbox = QtWidgets.QDoubleSpinBox(self\
-                    #,valueChanged=self.value_changed)
-                    
-                    spinbox.setValue(float(initialValue))
-                    self.table.setCellWidget(row, colOut, spinbox)
-                    #print('table set for spinbox',row, colOut, spinbox)
-                    continue
-            except Exception as e:
-                #printw('in is_bool '+ldo.title()+':'+str(e))
-                pass
-            self.table.setItem(row, col, item)
-            #print('table set',row, col, item)
-
+        print('```````````````````````Processing table`````````````````````')
+        self.process_pvTable(rows,columns)
+        print(',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,')
         #self.table.itemClicked.connect(self.handleItemClicked)
         #self.table.itemPressed.connect(self.handleItemPressed)
         #self.table.itemDoubleClicked.connect(self.handleItemDoubleClicked)
@@ -197,6 +105,108 @@ class Window(QtWidgets.QWidget):
         layout.addWidget(self.table)
         self._list = []
         monitor = LDOMonitor()
+
+    def process_pvTable(self,rows,columns):
+        rowOffset = 0
+        for row in range(rows):
+          rowOut = row + rowOffset
+          self.table.setRowHeight(row,20)
+          try:  
+            if pvTable.pos2obj[(row,0)][0] is None:
+                    continue
+          except:   continue
+          colOffset = 0
+          for col in range(columns):
+            #print('row,col',(row,col))
+            try: obj,cellFeature = pvTable.pos2obj[(row,col)]
+            except Exception as e:
+                printd('Not an object,{}:'+str(e))
+                continue
+            colOut = col + colOffset
+
+            if isinstance(cellFeature,dict):
+                #print('handle cellFeatures(%i,%i) '%(row,col)+str(cellFeature))
+                for feature,value in cellFeature.items():
+                    if feature == 'span':
+                        try: spanCol,spanRow = value
+                        except: spanRow,spanCol = 1,value
+                        # offsetting is not that easy
+                        #colOffset += spanCol
+                        #rowOffset += spanRow
+                        #print('merging %i,%i cells starting at %i,%i'%(*value,rowOut,col))
+                        self.table.setSpan(rowOut,col,spanRow,spanCol)
+
+            #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
+            if not isinstance(obj,LDO):
+                if isinstance(obj,str):
+                    item = QtWidgets.QTableWidgetItem(str(obj))
+                    self.setItem(rowOut, colOut, item, cellFeature, fgColor='darkBlue')
+                elif isinstance(obj,list):
+                    # Take the first item, the last one is cellFeature
+                    item = QtWidgets.QTableWidgetItem(str(obj[0]))
+                    self.setItem(rowOut, colOut, item, cellFeature, fgColor='darkBlue')
+                elif isinstance(obj,QPushButtonCmd):
+                    printd('pushButton at [%i,%i]'%(rowOut, colOut))
+                    self.table.setCellWidget(rowOut, colOut, obj)
+                continue
+                
+            #``````the object is LDO``````````````````````````````````````````
+            ldo = obj
+            initialValue = ldo.initialValue[0]
+            printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
+            pvTable.par2pos[ldo] = row,colOut
+            try:
+                item = QtWidgets.QTableWidgetItem(ldo.title())
+            except Exception as e:
+                printw('could not define Table[%i,%i]'%(rowOut,colOut))
+                print(str(e))
+                print('Traceback: '+repr(traceback.format_exc()))
+                continue
+            #print('pvTable [%i,%i] is %s %s'%(rowOut,colOut,ldo.title(),type(ldo)))
+            # deduct the cell type from LDO
+            try:
+                if ldo.guiType == 'bool':
+                    #print( 'LDO %s is boolean:'%ldo.name+str(initialValue))
+                    #item.setText(ldo.name.split(':')[1])
+                    item.setText(ldo.name.split(':',1)[1])
+                    item.setFlags(QtCore.Qt.ItemIsUserCheckable |
+                                  QtCore.Qt.ItemIsEnabled)
+                    state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
+                    item.setCheckState(state)
+                    self.setItem(rowOut, colOut, item, cellFeature)
+                    continue
+                    
+                elif ldo.guiType == 'spinbox':
+                    #print('it is spinbox:'+ldo.title())
+                    spinbox = QDoubleSpinBoxLDO(ldo)
+                    # using other ways is more complicated as it is not trivial
+                    # to transfer argument to the method
+                    #spinbox = QtWidgets.QDoubleSpinBox(self\
+                    #,valueChanged=self.value_changed)
+                    
+                    spinbox.setValue(float(initialValue))
+                    self.table.setCellWidget(rowOut, colOut, spinbox)
+                    #print('table set for spinbox',rowOut, colOut, spinbox)
+                    continue
+            except Exception as e:
+                printw('in is_bool '+ldo.title()+':'+str(e))
+                pass
+            self.setItem(rowOut, col, item, cellFeature)
+            #print('table row set',row, col, item)
+
+    def setItem(self,row,col,item,features={},fgColor=None):
+        if fgColor:
+            item.setForeground(QtGui.QBrush(QtGui.QColor(fgColor)))
+        for feature,value in features.items():
+            if feature == 'color':
+                color = QtGui.QColor(*value) if isinstance(value,list)\
+                  else QtGui.QColor(value)
+                #print('color of (%i,%i) is '%(row,col)+str(value))
+                item.setBackground(color)
+            elif feature == 'span': pass # span was served above
+            else:
+                print('not supported feature(%i,%i):'%(row,col)+feature)
+        self.table.setItem(row, col, item)
 
     def closeEvent(self,*args):
         # Called when the window is closed
@@ -219,7 +229,7 @@ class Window(QtWidgets.QWidget):
     def handleCellClicked(self, row,column):
         item = self.table.item(row,column)
         printd('cell clicked[%i,%i]:'%(row,column))
-        ldo = pvTable.pos2obj[row,column]
+        ldo = pvTable.pos2obj[row,column][0]
         if isinstance(ldo,str):
             return
         try:
@@ -426,40 +436,44 @@ class LDOTable():
             for row,rlist in enumerate(config['rows']):
                 if rlist is None:
                     continue
-                pprint(('row,rlist',row,rlist))
+                #pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
+                  cellFeatures = {}
                   try:
-                    print( 'cell:'+str(cell))
+                    #print( 'cell:'+str(cell))
                     if isinstance(cell,str):
-                        self.pos2obj[(row,col)] = cell
+                        self.pos2obj[(row,col)] = cell,cellFeatures
                         continue
                     if not isinstance(cell,list):
                         # print('accepting only strings and lists')
                         continue
                         
                     # cell is a list
-                    # is it LDO?
+                    # The last item could be a cell features
+                    if isinstance(cell[-1],dict):
+                        cellFeatures = cell[-1]
+                    # is the cell LDO?
                     try:    cellIsLdo = cell[0][0] == '$'
                     except: cellIsLdo = False
                     if not cellIsLdo:
                         if isinstance(cell[0],str):
-                            print('merged non-ldo cells: '+str(cell))
-                            self.pos2obj[(row,col)] = cell
+                            #print('merged non-ldo cells: '+str(cell))
+                            self.pos2obj[(row,col)] = cell,cellFeatures
                         else:
-                            print("cell[0] is probably a ['host;port',dev]: ")\
+                            print("cell[0] must be a ['host;port',dev]: ")\
                             +str(cell[0])
                             print('Not supported yet')
                         continue
 
                     # cell is LDO
-                    print('cell[0][0]',cell[0][0])
+                    #print('cell[0][0]',cell[0][0])
                     # cell[:2] is LDO,par, optional cell[2] is cell property 
                     try:    ldo,par = cell[0][1:],cell[1]
                     except: NameError('expect LDO,par, got: '+str(cell))
-                    print( 'the cell[%i,%i] is ldo: %s,%s'%(row,col,ldo,par))
+                    #print( 'the cell[%i,%i] is ldo: %s,%s'%(row,col,ldo,par))
                     if True:# Do not catch exception here!#try:
-                        self.pos2obj[(row,col)] = LDO(ldo,par)
+                        self.pos2obj[(row,col)] = LDO(ldo,par),cellFeatures
                         continue
                     else:#except Exception as e:
                         txt = 'Cannot create LDO %s:'%cell+str(e)
