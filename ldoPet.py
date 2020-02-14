@@ -195,13 +195,20 @@ class Window(QtWidgets.QWidget):
             if feature == 'span': continue # span was served above
             if feature == 'color':
                 color = QtGui.QColor(*value) if isinstance(value,list)\
-                  else QtGui.QColor(value)
+                      else QtGui.QColor(value)
                 #print('color of (%i,%i) is '%(row,col)+str(value))
                 item.setBackground(color)
             elif feature == 'launch':
-                widget = QPushButtonCmd(cellName,value)
+                pbutton = QPushButtonCmd(cellName,value)
+                try: 
+                    color = features['color']
+                    color = 'rgb(%i,%i,%i)'%tuple(color)\
+                      if isinstance(color,list) else str(color)
+                    pbutton.setStyleSheet('background-color:'+color)
+                except Exception as e:
+                    printw('in color '+str(e))
                 #print('pushButton created with cmd:%s'%value)
-                self.table.setCellWidget(row, col, widget)
+                self.table.setCellWidget(row, col, pbutton)
                 return
             else:
                 print('not supported feature(%i,%i):'%(row,col)+feature)

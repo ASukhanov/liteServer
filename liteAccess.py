@@ -82,12 +82,13 @@ To enable debugging: LA.LdoPars.Dbg = True
 #__version__ = 'v36 2020-02-06'# full re-design
 #__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
 #__version__ = 'v38 2020-02-10 '# set() raising exceptions on failures
-__version__ = 'v39b 2020-02-11 '# better error and timeout handling
+#__version__ = 'v39b 2020-02-11 '# better error and timeout handling
+__version__ = 'v40 2020-02-13 '# pid field added to request
 
 print('liteAccess '+__version__)
 
 import sys, time, socket
-from os import getuid
+from os import getuid,getpid
 from timeit import default_timer as timer
 from pprint import pformat, pprint
 from numpy import frombuffer
@@ -280,6 +281,7 @@ class Channel():
         printd('executing: '+str(dictio))
         dictio['username'] = self.username
         dictio['program'] = self.program
+        dictio['pid'] = getpid()
         encoded = ubjson.dumpb(dictio)
         if UDP:
             self.sock.sendto(encoded, (self.sHost, self.sPort))
@@ -365,10 +367,10 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
             return channel._transaction('get')
 
     def _firstValueAndTime(self):
-        try:
+        if True:#try:
             firstDict = self.channels[0]._transaction('get')
             firstValsTDict = list(firstDict.values())[0]
-        except Exception as e:
+        else:#except Exception as e:
             printw('in _firstValueAndTime: '+str(e))
             return (None,)
         ValsT = list(firstValsTDict.values())[:2]

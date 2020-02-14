@@ -21,6 +21,7 @@ define:
 rows:
   - [[Test of the table view of liteServer at ,{span: [3,1],color: cyan,width: 6}],2,3,[*SERV,host,{span: [3,1]}]]
   - ['Version:',[*SERV,version,{span: 2}]]
+  - ['Server performance: [nRq,MB,MB/s]:',[*SERV,perf,{span: 2}]]
   - *SEPARATOR
   - [[First set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,Frequency,Time]
   - ['Scaler1:',[*DEV1,counters],[*DEV1,reset],[*DEV1,command,{color: [200,200,200]}],
@@ -32,5 +33,6 @@ rows:
   [*DEV2,frequency],[*DEV2,time]]
   - [MultiDimensional,[*DEV2,image,*3x2Cells]]
   - []
-  - ['Shell command:',[xterm,{launch: xterm}]]
+  - ['Click:',[xterm,{launch: xterm}],[ldoPet,{span: [1,2],launch: './ldoPet.py -fliteScaler.yaml', color: [250,200,200]}]]
+  - [[to launch applications,{span: [2,1]}]]
 

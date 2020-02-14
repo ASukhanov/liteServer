@@ -36,7 +36,8 @@ Known issues:
 """
 #__version__ = 'v34 2020-02-07'# wildcarding with *
 #__version__ = 'v35 2020-02-08'# 'read' instead of 'measure'
-__version__ = 'v36 2020-02-09'# PV replaced with LDO
+#__version__ = 'v36 2020-02-09'# PV replaced with LDO
+__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -69,7 +70,11 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
       for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
+perfMBytes = 0
+perfSeconds = 0
+perfSends = 0
 def _send_UDP(buf,socket,addr):
+    global perfMBytes, perfSeconds, perfSends
     # send buffer via UDP socked, chopping it to smaller chunks
     lbuf = len(buf)
     #print('>_send_UDP %i bytes'%lbuf)
@@ -90,8 +95,13 @@ def _send_UDP(buf,socket,addr):
         time.sleep(ChunkSleep)
     dt = timer()-ts
     if lbuf > 1000:
-        print('sent %i bytes, perf: %.1f MB/s'%(lbuf,1e-6*len(buf)/dt))
-
+        mbytes = 1e-6*len(buf)
+        print('sent %i bytes, perf: %.1f MB/s'%(lbuf,mbytes/dt))
+        perfMBytes += mbytes
+        perfSeconds += dt
+        perfSends += 1
+        Server.DevDict['server'].perf.value = [perfSends, round(perfMBytes,3)\
+        ,round(perfMBytes/perfSeconds,1)]
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
     """Device object has unique _name, its members are parameters (objects,
@@ -204,7 +214,7 @@ class LDO():
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
 class _LDO_Handler(SocketServer.BaseRequestHandler):
-
+    lastPID = '?'
     def _reply(self,serverMsg):
         #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
         printd('>_reply')
@@ -306,9 +316,17 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
                 return
         else:
             data = self.request.recv(1024).strip()
+
         printd('Client %s wrote:'%str(self.client_address))
         cmd = ubjson.loadb(data)
         printd(str(cmd))
+
+        # retrieve previous source to server.lastPID LDO
+        Server.DevDict['server'].lastPID.value[0] = _LDO_Handler.lastPID
+        # remember current source 
+        _LDO_Handler.lastPID = '%s;%i %s %s'%(*self.client_address\
+        ,cmd['pid'], cmd['username'], )
+        #print('lastPID now',_LDO_Handler.lastPID)
         
         try:
             r = self._reply(cmd)
@@ -372,7 +390,10 @@ class Server():
               'status': LDO('R','Messages from liteServer',['']),
               'debug':  LDO('W','debugging level: 14:ERROR, 13:WARNING, 12:INFO, 11-1:DEBUG, bits[15:4] are for user needs'\
               ,[Server.Dbg],setter=self._debug_set),
+              'lastPID': LDO('','report source of the last request ',['?']),
               'tstInt': LDO('W','test integer variables',[1,2],setter=self.par_set),
+              'perf':   LDO('R','Server performance [RQ,MBytes,MBytes/s]'\
+                            ,[0.,0.,0.])
             })]
         else: dev = []
         
