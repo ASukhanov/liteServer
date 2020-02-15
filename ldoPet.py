@@ -8,7 +8,8 @@ __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, bett
 #TODO: discard LDOTable, do table creation in Window
 #__version__ = 'v28 2020-02-11'# merged cell supported
 #__version__ = 'v29 2020-02-12'# cell features, merging supported
-__version__ = 'v30 2020-02-13'# shell commands added
+#__version__ = 'v30 2020-02-13'# shell commands added
+__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -35,7 +36,7 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
-    """Spinbox, which stores associated LDO""" 
+    """Spinbox associated with LDO""" 
     def __init__(self,ldo):
         super().__init__()
         self.ldo = ldo
@@ -59,7 +60,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
         #print('changing %s to '%self.ldo.title()+str(self.value()))
         try:
             #TODO:something is not right here
-            #self.ldo.set(self.value())
+            self.ldo.set(self.value())
             pass
         except Exception as e:
             printw('in handle_value_changed :'+str(e))
@@ -69,6 +70,20 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
         print('RightClick at spinbox with LDO %s'%self.ldo.name)
         mainWidget.rightClick(self.ldo)
         pass
+
+class QComboBoxLDO(QtWidgets.QComboBox):
+    """ComboBox associated with LDO""" 
+    def __init__(self,ldo):
+        super().__init__()
+        self.ldo = ldo
+        lvs = ldo.attr['legalValues']
+        print('lvs',lvs)
+        for lv in lvs:
+            self.addItem(lv)
+        self.activated[str].connect(self.onComboChanged) 
+
+    def onComboChanged(self,txt):
+        self.ldo.set(txt)
 
 class myTableWidget(QtWidgets.QTableWidget):
     def mousePressEvent(self,*args):
@@ -134,14 +149,15 @@ class Window(QtWidgets.QWidget):
             if not isinstance(obj,LDO):
                 if isinstance(obj,str):
                     item = QtWidgets.QTableWidgetItem(str(obj))
-                    self.setItem(row, col, item, cellFeature, fgColor='darkBlue')
+                    self.setItem(row,col, item,cellFeature,fgColor='darkBlue')
                 elif isinstance(obj,list):
                     #print('####rowCol(%i,%i) is list: '%(row,col) + str(obj))
-                    self.setItem(row, col, obj, cellFeature, fgColor='darkBlue')
+                    self.setItem(row,col,obj, cellFeature, fgColor='darkBlue')
                 continue
                 
             #``````the object is LDO``````````````````````````````````````````
             ldo = obj
+            if ldo.guiType: cellFeature['widget'] = ldo.guiType
             initialValue = ldo.initialValue[0]
             printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
             pvTable.par2pos[ldo] = row,col
@@ -154,43 +170,17 @@ class Window(QtWidgets.QWidget):
                 continue
             #print('pvTable [%i,%i] is %s %s'%(row,col,ldo.title(),type(ldo)))
             # deduct the cell type from LDO
-            try:
-                if ldo.guiType == 'bool':
-                    #print( 'LDO %s is boolean:'%ldo.name+str(initialValue))
-                    #item.setText(ldo.name.split(':')[1])
-                    item.setText(ldo.name.split(':',1)[1])
-                    item.setFlags(QtCore.Qt.ItemIsUserCheckable |
-                                  QtCore.Qt.ItemIsEnabled)
-                    state = QtCore.Qt.Checked if initialValue else QtCore.Qt.Unchecked
-                    item.setCheckState(state)
-                    self.setItem(row, col, item, cellFeature)
-                    continue
-                    
-                elif ldo.guiType == 'spinbox':
-                    #print('it is spinbox:'+ldo.title())
-                    spinbox = QDoubleSpinBoxLDO(ldo)
-                    # using other ways is more complicated as it is not trivial
-                    # to transfer argument to the method
-                    #spinbox = QtWidgets.QDoubleSpinBox(self\
-                    #,valueChanged=self.value_changed)
-                    
-                    spinbox.setValue(float(initialValue))
-                    self.table.setCellWidget(row, col, spinbox)
-                    #print('table set for spinbox',row, col, spinbox)
-                    continue
-            except Exception as e:
-                printw('in is_bool '+ldo.title()+':'+str(e))
-                pass
-            self.setItem(row, col, item, cellFeature)
+            self.setItem(row, col, item, cellFeature, ldo)
             #print('table row set',row, col, item)
 
-    def setItem(self,row,col,item,features={},fgColor=None):
+    def setItem(self,row,col,item,features,ldo=None,fgColor=None):
         if isinstance(item,list):
             # Take the first item, the last one is cellFeature
             cellName = str(item[0])
             item = QtWidgets.QTableWidgetItem(cellName)
         if fgColor:
             item.setForeground(QtGui.QBrush(QtGui.QColor(fgColor)))
+        if ldo: iValue = ldo.initialValue[0]
         for feature,value in features.items():
             if feature == 'span': continue # span was served above
             if feature == 'color':
@@ -210,6 +200,32 @@ class Window(QtWidgets.QWidget):
                 #print('pushButton created with cmd:%s'%value)
                 self.table.setCellWidget(row, col, pbutton)
                 return
+            elif feature == 'widget':
+                print('widget feature: "%s"'%value)
+                if value == 'spinbox':
+                    print('it is spinbox:'+ldo.title())
+                    spinbox = QDoubleSpinBoxLDO(ldo)                
+                    spinbox.setValue(float(iValue))
+                    self.table.setCellWidget(row, col, spinbox)
+                    print('table set for spinbox',row, col, spinbox)
+                    return
+                elif value == 'combo':
+                    print('>combo')
+                    combo = QComboBoxLDO(ldo)
+                    self.table.setCellWidget(row, col, combo)
+                elif value == 'bool':
+                    print( 'LDO %s is boolean:'%ldo.name+str(iValue))
+                    #item.setText(ldo.name.split(':')[1])
+                    item.setText(ldo.name.split(':',1)[1])
+                    item.setFlags(QtCore.Qt.ItemIsUserCheckable |
+                                  QtCore.Qt.ItemIsEnabled)
+                    state = QtCore.Qt.Checked if iValue\
+                      else QtCore.Qt.Unchecked
+                    item.setCheckState(state)
+                    continue
+                else:
+                    print('not supported widget(%i,%i):'%(row,col)+value)
+                    return                  
             else:
                 print('not supported feature(%i,%i):'%(row,col)+feature)
         self.table.setItem(row, col, item)
@@ -293,7 +309,9 @@ def MySlot(a):
         printe('mainWidget not defined yet')
         return
     for ldo,rowCol in pvTable.par2pos.items():
-        printd('updating LDO '+ldo.name)
+        #print('updating LDO '+ldo.name)
+        if 'R' not in ldo.attr['features']:
+            continue
         if isinstance(ldo,str):
             printw('logic error')
             continue
@@ -370,27 +388,21 @@ class LDO():
         self.name = ldoName+':'+parName
         print('ldo name: '+str(self.name))
         self.ldo = LA.LdoPars((ldoName,parName))
-        print('ldo info for %s: '%self.name+str(self.ldo.info()))
         info = self.ldo.info()
-        self.key = list(self.ldo.info())[0]
+        print('ldo info for %s: '%self.name+str(info))
+        self.key = list(info)[0]
         printd('key:'+str(self.key))
         #print('ldo vars:'+str(vars(self.ldo)))
         self.initialValue = self.ldo.value[0]
         print('iv',self.name,str(self.initialValue)[:60])
-        self.t = 0.
+        #self.t = 0.
         # creating attributes from remote ones
-        self.attr = self.ldo.info()[self.key]
-        #print('attrs %s'%self.attr)
-        #for attribute,v in self.attr.items():
-        #    if attribute not in ['count', 'features', 'opLimits']:                
-        #        continue
-        #    print('Creating attribute %s.%s = '%(self.name,attribute)+str(v))
-        #    setattr(self,attribute,v)
-        self.guiType = self.gui_type()
-        #print('type of %s:'%self.name+str(self.guiType)
+        self.attr = info[self.key]
+        self.guiType = self._guiType()
+        print('type of %s: '%self.name+str(self.guiType))
 
-    def set(self,value):
-        r = self.ldo.set([value])
+    def set(self,val):
+        r = self.ldo.set([val])
         #print('<set',r)
 
     def get(self):
@@ -398,7 +410,7 @@ class LDO():
 
     def title(self): return self.name
 
-    def gui_type(self):
+    def _guiType(self):
         iv = self.initialValue
         if len(iv) != 1:
             return None
@@ -410,7 +422,7 @@ class LDO():
             if type(iv[0]) in (float,int):
                 return 'spinbox'                
             if 'legalValues' in self.attr:
-                return 'combobox'
+                return 'combo'
         return None
         
     def is_writable(self):

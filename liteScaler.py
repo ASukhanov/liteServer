@@ -42,14 +42,14 @@ class Scaler(Device):
           'counters':   LDO('R','%i of counters'%len(initials),initials),
           'increments': LDO('W','Increments of the individual counters'\
                         ,[-1]+[1]*(pargs.nCounters-1)),
-          'frequency':  LDO('W','Update frequency of all counters',[1.]\
+          'frequency':  LDO('RW','Update frequency of all counters',[1.]\
                         ,opLimits=(0,10)),
           # 'pause' is boolean because it is readable
           #'pause':      LDO('RW','Pause all counters',[False]),
           # 'reset' is action because it is not readable 
           'reset':      LDO('W','Reset all counters',[False]\
                         ,setter=self.reset),
-          'command':    LDO('RW','Command to execute',['Started']\
+          'command':    LDO('W','Command to execute',['Started']\
                         ,legalValues=['Start','Stop'],setter=self.command_set),
           'image':      LDO('R','Image',[img]),
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
