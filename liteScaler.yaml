@@ -20,7 +20,7 @@ define:
 # Table definition
 rows:
   - [[Test of the table view of liteServer at ,{span: [3,1],color: cyan,width: 6}],2,3,[*SERV,host,{span: [3,1]}]]
-  - ['Version:',[*SERV,version,{span: 2}]]
+  - ['Version:',[*SERV,version,{span: 2}],3,'last served:',[*SERV,lastPID,{span: 2}]]
   - ['Server performance: [nRq,MB,MB/s]:',[*SERV,perf,{span: 2}]]
   - *SEPARATOR
   - [[First set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,Frequency,Time]
@@ -33,6 +33,7 @@ rows:
   [*DEV2,frequency],[*DEV2,time]]
   - [MultiDimensional,[*DEV2,image,*3x2Cells]]
   - []
-  - ['Click:',[xterm,{launch: xterm}],[ldoPet,{span: [1,2],launch: './ldoPet.py -fliteScaler.yaml', color: [250,200,200]}]]
+  - []
+  - ['Click:',[xterm,{launch: xterm}],[ldoPet,{span: [1,2],launch: './ldoPet.py -fliteScaler.yaml', color: [250,200,200]}],[ipython,{launch: "xterm -e ipython3 -i -c'import liteAccess as LA'", color: [200,250,200], span: [1,2]}]]
   - [[to launch applications,{span: [2,1]}]]
 

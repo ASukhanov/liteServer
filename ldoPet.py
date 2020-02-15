@@ -9,7 +9,8 @@ __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, bett
 #__version__ = 'v28 2020-02-11'# merged cell supported
 #__version__ = 'v29 2020-02-12'# cell features, merging supported
 #__version__ = 'v30 2020-02-13'# shell commands added
-__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
+#__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
+__version__ = 'v32 2020-02-15'# added Window.bottomLabel for messages
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -104,6 +105,7 @@ class myTableWidget(QtWidgets.QTableWidget):
             super().mousePressEvent(*args)
 
 class Window(QtWidgets.QWidget):
+    bottomLabel = ''
     def __init__(self, rows, columns):
         QtWidgets.QWidget.__init__(self)
         self.table = myTableWidget(rows, columns, self)
@@ -111,14 +113,14 @@ class Window(QtWidgets.QWidget):
         print('```````````````````````Processing table`````````````````````')
         self.process_pvTable(rows,columns)
         print(',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,')
-        #self.table.itemClicked.connect(self.handleItemClicked)
-        #self.table.itemPressed.connect(self.handleItemPressed)
-        #self.table.itemDoubleClicked.connect(self.handleItemDoubleClicked)
         self.table.cellClicked.connect(self.handleCellClicked)
-        #self.table.cellDoubleClicked.connect(self.handleCellDoubleClicked)
         
+        Window.bottomLable = QtWidgets.QLabel(self)
+        Window.bottomLable.setText('Lite Objet Viewer version '+__version__)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
+        layout.addWidget(Window.bottomLable)
         self._list = []
         monitor = LDOMonitor()
 
@@ -158,8 +160,7 @@ class Window(QtWidgets.QWidget):
             #``````the object is LDO``````````````````````````````````````````
             ldo = obj
             if ldo.guiType: cellFeature['widget'] = ldo.guiType
-            initialValue = ldo.initialValue[0]
-            printd('ldo.initialValue of %s:'%ldo.name+str(initialValue))
+            #initialValue = ldo.initialValue[0]
             pvTable.par2pos[ldo] = row,col
             try:
                 item = QtWidgets.QTableWidgetItem(ldo.title())
@@ -174,13 +175,17 @@ class Window(QtWidgets.QWidget):
             #print('table row set',row, col, item)
 
     def setItem(self,row,col,item,features,ldo=None,fgColor=None):
+        if ldo: iValue = ldo.initialValue[0]        
         if isinstance(item,list):
             # Take the first item, the last one is cellFeature
             cellName = str(item[0])
             item = QtWidgets.QTableWidgetItem(cellName)
+        elif ldo: # this section is valid only for non-scalar ldoPars 
+            try:    item = QtWidgets.QTableWidgetItem(iValue)
+            except Exception as e: 
+                pass#printw('in re-item(%i,%i): '%(row,col)+str(e))
         if fgColor:
             item.setForeground(QtGui.QBrush(QtGui.QColor(fgColor)))
-        if ldo: iValue = ldo.initialValue[0]
         for feature,value in features.items():
             if feature == 'span': continue # span was served above
             if feature == 'color':
@@ -228,6 +233,7 @@ class Window(QtWidgets.QWidget):
                     return                  
             else:
                 print('not supported feature(%i,%i):'%(row,col)+feature)
+        #print('setting item(%i,%i): '%(row,col)+str(item))
         self.table.setItem(row, col, item)
 
     def closeEvent(self,*args):
@@ -439,6 +445,7 @@ class QPushButtonCmd(QtWidgets.QPushButton):
         
     def handleClicked(self):
         #print('clicked',self.cmd)
+        print('launching `%s`'%str(self.cmd))
         p = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, shell=True)
 
 class LDOTable():
