@@ -49,7 +49,7 @@ class Scaler(Device):
           # 'reset' is action because it is not readable 
           'reset':      LDO('W','Reset all counters',[False]\
                         ,setter=self.reset),
-          'command':    LDO('W','Command to execute',['Started']\
+          'command':    LDO('RW','Command to execute',['Started']\
                         ,legalValues=['Start','Stop'],setter=self.command_set),
           'image':      LDO('R','Image',[img]),
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing

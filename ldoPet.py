@@ -10,7 +10,12 @@ __version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, bett
 #__version__ = 'v29 2020-02-12'# cell features, merging supported
 #__version__ = 'v30 2020-02-13'# shell commands added
 #__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
-__version__ = 'v32 2020-02-15'# added Window.bottomLabel for messages
+#__version__ = 'v32 2020-02-15'# added Window.bottomLine for messages
+__version__ = 'v33 2020-02-15'# comboboxes are editable
+#TODO: change logic:
+# the ldo readout get's should be in the thread, filling a dictionary of 
+# updated data. MySlot should use this dictionary to update GUI.
+# It can check timestamps of all readable cells and color-code timeouts.
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -76,6 +81,7 @@ class QComboBoxLDO(QtWidgets.QComboBox):
     """ComboBox associated with LDO""" 
     def __init__(self,ldo):
         super().__init__()
+        self.setEditable(True)
         self.ldo = ldo
         lvs = ldo.attr['legalValues']
         print('lvs',lvs)
@@ -84,7 +90,11 @@ class QComboBoxLDO(QtWidgets.QComboBox):
         self.activated[str].connect(self.onComboChanged) 
 
     def onComboChanged(self,txt):
+        print('combo changed ',txt)
         self.ldo.set(txt)
+
+    def setText(self,txt):
+        self.lineEdit().setText(txt)
 
 class myTableWidget(QtWidgets.QTableWidget):
     def mousePressEvent(self,*args):
@@ -105,7 +115,7 @@ class myTableWidget(QtWidgets.QTableWidget):
             super().mousePressEvent(*args)
 
 class Window(QtWidgets.QWidget):
-    bottomLabel = ''
+    bottomLine = None
     def __init__(self, rows, columns):
         QtWidgets.QWidget.__init__(self)
         self.table = myTableWidget(rows, columns, self)
@@ -115,12 +125,12 @@ class Window(QtWidgets.QWidget):
         print(',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,')
         self.table.cellClicked.connect(self.handleCellClicked)
         
-        Window.bottomLable = QtWidgets.QLabel(self)
-        Window.bottomLable.setText('Lite Objet Viewer version '+__version__)
+        Window.bottomLine = QtWidgets.QLabel(self)
+        Window.bottomLine.setText('Lite Objet Viewer version '+__version__)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
-        layout.addWidget(Window.bottomLable)
+        layout.addWidget(Window.bottomLine)
         self._list = []
         monitor = LDOMonitor()
 
@@ -314,6 +324,7 @@ def MySlot(a):
     if mainWidget is None:
         printe('mainWidget not defined yet')
         return
+    errMsg = ''
     for ldo,rowCol in pvTable.par2pos.items():
         #print('updating LDO '+ldo.name)
         if 'R' not in ldo.attr['features']:
@@ -359,11 +370,19 @@ def MySlot(a):
                         txt = 'Unknown type of '+ldo.name+'='+str(type(val))
                         printw(txt+':'+str(val))
                         txt = str(val)
-            window.table.item(*rowCol).setText(txt)
+            #print('settext(%i,%i) %s'%(*rowCol,txt))
+            widget =  window.table.cellWidget(*rowCol)
+            if not widget:
+                widget = window.table.item(*rowCol)
+            widget.setText(txt)
         except Exception as e:
-            printw('updating [%i,%i]:'%rowCol+str(e))
+            errMsg = 'MySlot ' + str(e)
+            printw(errMsg)
             #print('Traceback: '+repr(traceback.format_exc()))
+            break
+
     myslotBusy = False
+    if errMsg:  Window.bottomLine.setText('WARNING: '+errMsg) #Issue, it could be long delay here
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
 class LDOMonitor(QtCore.QThread): 

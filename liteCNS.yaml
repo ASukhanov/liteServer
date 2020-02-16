@@ -1,7 +1,7 @@
 # Map of LDO to [host:port,device]
 
 define:
-  - &scalerMan0 localhost
+  - &scalerMan0 acnlin23 # or localhost
   - &scalerMan1 acnlin23;9701
   - &cnsMan '130.199.109.192;9699'#DNW:acnlin23;9699
 
