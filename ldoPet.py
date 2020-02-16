@@ -90,7 +90,7 @@ class QComboBoxLDO(QtWidgets.QComboBox):
         self.activated[str].connect(self.onComboChanged) 
 
     def onComboChanged(self,txt):
-        print('combo changed ',txt)
+        #print('combo changed ',txt)
         self.ldo.set(txt)
 
     def setText(self,txt):
