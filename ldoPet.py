@@ -73,7 +73,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        print('RightClick at spinbox with LDO %s'%self.ldo.name)
+        #print('RightClick at spinbox with LDO %s'%self.ldo.name)
         mainWidget.rightClick(self.ldo)
         pass
 
@@ -107,7 +107,7 @@ class myTableWidget(QtWidgets.QTableWidget):
         if button == 2: # right button
             if True:#try:
                 ldo = pvTable.pos2obj[(row,col)][0]
-                print('RightClick at LDO %s.'%ldo.name)
+                #print('RightClick at LDO %s.'%ldo.name)
                 mainWidget.rightClick(ldo)
             else:#except:
                 pass
@@ -126,7 +126,7 @@ class Window(QtWidgets.QWidget):
         self.table.cellClicked.connect(self.handleCellClicked)
         
         Window.bottomLine = QtWidgets.QLabel(self)
-        Window.bottomLine.setText('Lite Objet Viewer version '+__version__)
+        Window.bottomLine.setText('Lite Object Viewer, version '+__version__)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
@@ -296,12 +296,12 @@ class Window(QtWidgets.QWidget):
             printw('in tableItem.setText:'+str(e))
             
     def rightClick(self,ldo):
-        print('mainWidget. RightClick on %s'%ldo.name)
+        #print('mainWidget. RightClick on %s'%ldo.name)
         d = QtWidgets.QDialog(self)
         pname = ldo.title()
         d.setWindowTitle("Info on LDO %s"%pname)
         attributes = ldo.attributes()
-        print('attributes:%s'%str(attributes)[:200])
+        #print('attributes:%s'%str(attributes)[:200])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
             vv = str(v)[:100]
@@ -341,21 +341,21 @@ def MySlot(a):
                 except:  pass
                 continue
             if ldo.guiType == 'spinbox':
-                printd('LDO '+ldo.name+' is spinbox '+str(val[0]))
+                #printd('LDO '+ldo.name+' is spinbox '+str(val[0]))
                 #print(str(window.table.cellWidget(*rowCol).value()))
                 window.table.cellWidget(*rowCol).setValue(float(val[0]))
                 continue
             elif ldo.guiType =='bool':
-                printd('LDO '+ldo.name+' is bool')
+                #print('LDO '+ldo.name+' is bool')
                 state = window.table.item(*rowCol).checkState()
-                printd('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
+                #print('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
                 if val[0] != (state != 0):
                     #print('flip')
                     window.table.item(*rowCol).setCheckState(val[0])
                 continue
             #print('LDO '+ldo.name+' is '+str(type(val)))
             if isinstance(val,np.ndarray):
-                printd('LDO '+ldo.name+' is ndarray')
+                #printd('LDO '+ldo.name+' is ndarray')
                 txt = '%s: %s'%(val.shape,str(val))
             else:
                 if len(val) > 1:
