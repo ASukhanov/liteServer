@@ -330,28 +330,29 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
         if isinstance(ldoPars[0],str):
             ldoPars = [ldoPars]
             #print('standardized ldoPars',ldoPars)
+        self.name = ldoPars[0]
         
         # unpack arguments to hosRequest map
-        channelMap = {}
+        self.channelMap = {}
         for ldoPar in ldoPars:
-            #print('ldoPar',ldoPar)            
+            print('ldoPar',ldoPar)            
             ldo,pars = ldoPar
             if isinstance(pars,str): pars = [pars]
             ldoHost,dev = hostPortDev(ldo)
-            if ldoHost not in channelMap:
-                channelMap[ldoHost] = {dev:[pars]}
-                #print('created channelMap[%s]='%ldoHost\
-                #+ str(channelMap[ldoHost]))
+            if ldoHost not in self.channelMap:
+                self.channelMap[ldoHost] = {dev:[pars]}
+                print('created self.channelMap[%s]='%ldoHost\
+                + str(self.channelMap[ldoHost]))
             else:
                 try:
                     #print(('appending old dev %s%s with '%(ldoHost,dev)+str(pars[0]))
-                    channelMap[ldoHost][dev].append(pars[0])
+                    self.channelMap[ldoHost][dev][0].append(pars[0])
                 except:
                     #print(('creating new dev %s%s with '%(ldoHost,dev)+str(pars))
-                    channelMap[ldoHost][dev] = [pars]
-                #print(('updated channelMap[%s]='%ldoHost\
-                #+ str(channelMap[ldoHost]))
-        channelList = list(channelMap.items())
+                    self.channelMap[ldoHost][dev] = [pars]
+                #print(('updated self.channelMap[%s]='%ldoHost\
+                #+ str(self.channelMap[ldoHost]))
+        channelList = list(self.channelMap.items())
         printd('cnannelList constructed: '+pformat(channelList))
         self.channels = [Channel(*i) for i in channelList]
         return
