@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = 'v18 2020-02-09'# PV replaced with LDO
+#__version__ = 'v18 2020-02-09'# PV replaced with LDO
+__version__ = 'v19 2020-02-18'# reset drops after clearing
  
 import sys, time, threading
 import numpy as np
@@ -47,7 +48,7 @@ class Scaler(Device):
           # 'pause' is boolean because it is readable
           #'pause':      LDO('RW','Pause all counters',[False]),
           # 'reset' is action because it is not readable 
-          'reset':      LDO('W','Reset all counters',[False]\
+          'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
           'command':    LDO('RW','Command to execute',['Started']\
                         ,legalValues=['Start','Stop'],setter=self.command_set),
@@ -62,9 +63,10 @@ class Scaler(Device):
         thread.start()
         
     def reset(self,pv):
-        print('resetting scalers of %s'%self._name)
+        #print('resetting scalers of %s'%self._name)
         for i in range(len(self.counters.value)):
             self.counters.value[i] = 0
+        self.reset.value[0] = False# reset parameter
   
     def command_set(self,pv):
         print('command',str(self.command.value))
