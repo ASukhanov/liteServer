@@ -40,6 +40,12 @@ if not Python2:
 #__version__ = 'v30 2019-12-06'# fix except: expectedArgWrong()
 #__version__ = 'v31 2019-12-09'# socket timeout defaulted to 5
 #__version__ = 'v32a 2019-12-10'# measurements() method for requesting only measurable parameters
+#__version__ = 'v36 2020-02-06'# full re-design
+#__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
+#__version__ = 'v38 2020-02-10'# set() raising exceptions on failures
+#__version__ = 'v39b 2020-02-11'# better error and timeout handling
+#__version__ = 'v40 2020-02-13'# pid field added to request
+#__version__ = 'v41 2020-02-14'# bug in set() fixed, deepcopy needed
 
 #``````````````````liteServer`````````````````````````````````````````````````
 #__version__ = 'v01 2018-12-14' # Created
@@ -77,6 +83,12 @@ if not Python2:
 #__version__ = 'v32 2019-12-08'# 'measure' command returns only measurable parameters, timestamp is not a list
 #__version__ = 'v33 2019-12-09'# PV([host]).info() returns info on all devs,pars
 #__version__ = 'v33a 2019-12-10'# if not timestamp: timestamp = time.time()
+#__version__ = 'v34 2020-02-07'# wildcarding with *
+#__version__ = 'v35 2020-02-08'# 'read' instead of 'measure'
+#__version__ = 'v36 2020-02-09'# PV replaced with LDO
+#__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
+#__version__ = 'v38 2020-02-18'# time parameter added to server
+#__version__ = 'v39 2020-02-19'# cnsName
 
 #``````````````````liteScaler`````````````````````````````````````````````````
 #__version__ = 'v01 2018-12-17'# created
@@ -96,6 +108,8 @@ if not Python2:
 #__version__ = 'v15 2019-11-30'# test legalValues of the 'command' parameter
 #__version__ = 'v16 2019-12-01'# 'pause' parameter removed, 'command' is better suited for the purpose
 #__version__ = 'v17 2019-12-08'# update timestamp for PV time, timestamp is not list
+#__version__ = 'v18 2020-02-09'# PV replaced with LDO
+#__version__ = 'v19 2020-02-18'# reset drops after clearing
 
 #`````````````````ldoPet``````````````````````````````````````````````````````
 #__version__ = 'v00 2019-05-06' # it is just sceleton, pvview.pvv is not processed
@@ -124,6 +138,22 @@ if not Python2:
 #__version__ = 'v22 2019-06-28'# table created with initial values, not titles
 #__version__ = 'v23 2019-09-15'#
 #__version__ = 'v24 2019-11-21'#
+#__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
+#__version__ = 'v25 2020-02-10'# most of the essential suff is working
+#TODO: drop $ substitution, leave it for YAML
+#__version__ = 'v26 2020-02-10'# spinboxes OK
+__version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
+#TODO: discard DataAccessTable, do table creation in Window
+#__version__ = 'v28 2020-02-11'# merged cell supported
+#__version__ = 'v29 2020-02-12'# cell features, merging supported
+#__version__ = 'v30 2020-02-13'# shell commands added
+#__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
+#__version__ = 'v32 2020-02-15'# added Window.bottomLine for messages
+#__version__ = 'v33 2020-02-15'# comboboxes are editable
+#TODO: change logic:
+# the ldo readout get's should be in the thread, filling a dictionary of 
+# updated data. MySlot should use this dictionary to update GUI.
+# It can check timestamps of all readable cells and color-code timeouts.
 
 #`````````````````liteServerMan```````````````````````````````````````````````
 #__version__ = 'v01 2018-12-31'# created

@@ -1,17 +1,12 @@
 # Example of the lpet definition table
-# version v02 2020-02-13
-#
+# Test python3:  
+#pprint(yaml.load(open('liteScaler.yaml'),Loader=yaml.BaseLoader))
 # Aliases
 define: 
   # Names resolved using name service.
-  # The $ prefix means that the LDO,device names should be resolved using liteCNS.py
-  - &SERV $scaler0.server
-  - &DEV1 $scaler0.dev0
-  - &DEV2 $scaler0.dev1
-  # Explicit name resolution (prefix @).
-  # IP host;port and device name on the server are explicitly specified. 
-  #- &HD2  ['@localhost;9700', dev1] # with default liteCNS.py and liteCNS.yaml,
-  #, the *DEV2 and *HD2 points to the same LDO
+  - &SERV [$Scaler1, server]
+  - &DEV1 [$Scaler1, dev1]
+  - &DEV2 ['$set#1 of counters & image', dev2]
   - &SEPARATOR [[____________________________________________________________________,{span: [6,1]}]]
   - &LightGray  [220,220,220]
   - &LLGray     [240,240,240]
@@ -19,21 +14,28 @@ define:
 
 # Table definition
 rows:
-  - [[Test of the table view of liteServer at ,{span: [3,1],color: cyan,width: 6}],2,3,[*SERV,host,{span: [3,1]}]]
-  - ['Version:',[*SERV,version,{span: 2}],3,'last served:',[*SERV,lastPID,{span: 2}]]
+  - [[Test of the table view of liteServer at ,{span: [3,1],color: cyan}],2,3,
+        [*SERV,host,{span: [3,1]}]]
+  - ['Version:',[*SERV,version,{span: 2}],3,'last served:',
+        [*SERV,lastPID,{span: 2}]]
   - ['Server performance: [nRq,MB,MB/s]:',[*SERV,perf,{span: 2}]]
   - *SEPARATOR
-  - [[First set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,Frequency,Time]
-  - ['Scaler1:',[*DEV1,counters],[*DEV1,reset],[*DEV1,command,{color: [200,200,200]}],
-  [*DEV1,frequency],[*DEV1,time]]
+  - [[First set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,
+        Frequency,Time]
+  - ['Scaler1:',[*DEV1,counters],[*DEV1,reset],[*DEV1,command,
+        {color: [200,200,200]}],[*DEV1,frequency],[*DEV1,time]]
   - [MultiDimensional,[*DEV1,image,{span: [2,2],color: *LLGray}]]
-  - *SEPARATOR
-  - [[Second set of counters,{span: [2,1],color: *LightGray}],2,Reset,Command,Frequency,Time]
-  - ['Scaler2:',[*DEV2,counters],[*DEV2,reset],[*DEV2,command,{color: yellow}],
-  [*DEV2,frequency],[*DEV2,time]]
-  - [MultiDimensional,[*DEV2,image,*3x2Cells]]
+#  - *SEPARATOR
+#  - [[Second set of counters,{span: [2,1],color: *LightGray}],2,Reset,
+#        Command,Frequency,Time]
+#  - ['Scaler2:',[*DEV2,counters],[*DEV2,reset],[*DEV2,command,{color: yellow}],
+#        [*DEV2,frequency],[*DEV2,time]]
+#  - [MultiDimensional,[*DEV2,image,*3x2Cells]]
   - []
   - []
-  - ['Click:',[xterm,{launch: xterm}],[ldoPet,{span: [1,2],launch: './ldoPet.py -fliteScaler.yaml', color: [250,200,200]}],[ipython,{launch: "xterm -e ipython3 -i -c'import liteAccess as LA'", color: [200,250,200], span: [1,2]}]]
+  - ['Click:',[xterm,{launch: xterm}],[ldoPet,{span: [1,2],
+        launch: './ldoPet.py -fliteScaler.yaml', color: [250,200,200]}],
+        [ipython,{launch: "xterm -e ipython3 -i -c'import liteAccess as LA'", 
+        color: [200,250,200], span: [1,2]}]]
   - [[to launch applications,{span: [2,1]}]]
 

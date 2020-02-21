@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-#__version__ = 'v18 2020-02-09'# PV replaced with LDO
-#__version__ = 'v19 2020-02-18'# reset drops after clearing
 __version__ = 'v20 2020-02-21'# liteServer-rev3
  
 import sys, time, threading

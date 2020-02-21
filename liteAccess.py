@@ -48,12 +48,6 @@ LA.LdoPars([[['Scaler1','dev1'],'*']]).read()
 To enable debugging: LA.LdoPars.Dbg = True
 To enable transaction timing: LA.Channel.Perf = True  
 """
-#__version__ = 'v36 2020-02-06'# full re-design
-#__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
-#__version__ = 'v38 2020-02-10'# set() raising exceptions on failures
-#__version__ = 'v39b 2020-02-11'# better error and timeout handling
-#__version__ = 'v40 2020-02-13'# pid field added to request
-#__version__ = 'v41 2020-02-14'# bug in set() fixed, deepcopy needed
 __version__ = 'v42 2020-02-21'# liteServer-rev3.
 
 print('liteAccess '+__version__)
@@ -286,7 +280,7 @@ class Channel():
         if cmd == 'set':
             if len(devParDict) != 1:
                 raise ValueError('Set is supported for single device only')
-            #devParDict = copy.deepcopy(devParDict)# that is important!
+            devParDict = copy.deepcopy(devParDict)# that is IMPORTANT! otherwise setting in liteSceler.yaml is failing 
             #for key,value in zip(devParDict,values):
             #    devParDict[key] += 'v',value
             for key in devParDict:

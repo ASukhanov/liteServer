@@ -34,12 +34,6 @@ Known issues:
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-#__version__ = 'v34 2020-02-07'# wildcarding with *
-#__version__ = 'v35 2020-02-08'# 'read' instead of 'measure'
-#__version__ = 'v36 2020-02-09'# PV replaced with LDO
-#__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
-#__version__ = 'v38 2020-02-18'# time parameter added to server
-#__version__ = 'v39 2020-02-19'# cnsName
 __version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
 
 import sys, time, threading, math, traceback

@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
 """Spreadsheet view of process variables from a remote liteServer."""
-#__version__ = 'v25 2020-02-09'# replaced PV with LDO, need adjustments for new liteAccess
-#__version__ = 'v25 2020-02-10'# most of the essential suff is working
-#TODO: drop $ substitution, leave it for YAML
-#__version__ = 'v26 2020-02-10'# spinboxes OK
-__version__ = 'v27b 2020-02-11'# lite cleanup, decoding in mySlot improved, better timout handling
-#TODO: discard LDOTable, do table creation in Window
-#__version__ = 'v28 2020-02-11'# merged cell supported
-#__version__ = 'v29 2020-02-12'# cell features, merging supported
-#__version__ = 'v30 2020-02-13'# shell commands added
-#__version__ = 'v31 2020-02-14'# comboboxes, set fixed, color for widgets
-#__version__ = 'v32 2020-02-15'# added Window.bottomLine for messages
-__version__ = 'v33 2020-02-15'# comboboxes are editable
-#TODO: change logic:
-# the ldo readout get's should be in the thread, filling a dictionary of 
-# updated data. MySlot should use this dictionary to update GUI.
-# It can check timestamps of all readable cells and color-code timeouts.
+__version__ = 'v35 2020-02-16'# LS revision3
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -42,7 +27,7 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
-    """Spinbox associated with LDO""" 
+    """Spinbox associated with DataAccess""" 
     def __init__(self,ldo):
         super().__init__()
         self.ldo = ldo
@@ -62,8 +47,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
         #print('instantiated %s'%self.ldo.title())
         
     def handle_value_changed(self):
-        print('handle_value_changed to '+str(self.value()))
-        #print('changing %s to '%self.ldo.title()+str(self.value()))
+        #print('handle_value_changed to '+str(self.value()))
         try:
             #TODO:something is not right here
             self.ldo.set(self.value())
@@ -73,18 +57,18 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             
     def contextMenuEvent(self,event):
         # we don't need its contextMenu (activated on right click)
-        #print('RightClick at spinbox with LDO %s'%self.ldo.name)
+        print('RightClick at spinbox with DataAccess %s'%self.ldo.name)
         mainWidget.rightClick(self.ldo)
         pass
 
 class QComboBoxLDO(QtWidgets.QComboBox):
-    """ComboBox associated with LDO""" 
+    """ComboBox associated with DataAccess""" 
     def __init__(self,ldo):
         super().__init__()
         self.setEditable(True)
         self.ldo = ldo
         lvs = ldo.attr['legalValues']
-        print('lvs',lvs)
+        #print('lvs',lvs)
         for lv in lvs:
             self.addItem(lv)
         self.activated[str].connect(self.onComboChanged) 
@@ -106,8 +90,8 @@ class myTableWidget(QtWidgets.QTableWidget):
             return
         if button == 2: # right button
             if True:#try:
-                ldo = pvTable.pos2obj[(row,col)][0]
-                #print('RightClick at LDO %s.'%ldo.name)
+                ldo = daTable.pos2obj[(row,col)][0]
+                print('RightClick at LDO %s.'%ldo.name)
                 mainWidget.rightClick(ldo)
             else:#except:
                 pass
@@ -121,12 +105,12 @@ class Window(QtWidgets.QWidget):
         self.table = myTableWidget(rows, columns, self)
         self.table.setShowGrid(False)
         print('```````````````````````Processing table`````````````````````')
-        self.process_pvTable(rows,columns)
+        self.process_daTable(rows,columns)
         print(',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,')
         self.table.cellClicked.connect(self.handleCellClicked)
         
         Window.bottomLine = QtWidgets.QLabel(self)
-        Window.bottomLine.setText('Lite Object Viewer, version '+__version__)
+        Window.bottomLine.setText('Lite Objet Viewer version '+__version__)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
@@ -134,16 +118,15 @@ class Window(QtWidgets.QWidget):
         self._list = []
         monitor = LDOMonitor()
 
-    def process_pvTable(self,rows,columns):
+    def process_daTable(self,rows,columns):
         for row in range(rows):
           self.table.setRowHeight(row,20)
           try:  
-            if pvTable.pos2obj[(row,0)][0] is None:
+            if daTable.pos2obj[(row,0)][0] is None:
                     continue
           except:   continue
           for col in range(columns):
-            #print('row,col',(row,col))
-            try: obj,cellFeature = pvTable.pos2obj[(row,col)]
+            try: obj,cellFeature = daTable.pos2obj[(row,col)]
             except Exception as e:
                 printd('Not an object,{}:'+str(e))
                 continue
@@ -158,7 +141,7 @@ class Window(QtWidgets.QWidget):
                         self.table.setSpan(row,col,spanRow,spanCol)
 
             #print('obj[%i,%i]:'%(row,col)+str(type(obj)))
-            if not isinstance(obj,LDO):
+            if not isinstance(obj,DataAccess):
                 if isinstance(obj,str):
                     item = QtWidgets.QTableWidgetItem(str(obj))
                     self.setItem(row,col, item,cellFeature,fgColor='darkBlue')
@@ -167,30 +150,32 @@ class Window(QtWidgets.QWidget):
                     self.setItem(row,col,obj, cellFeature, fgColor='darkBlue')
                 continue
                 
-            #``````the object is LDO``````````````````````````````````````````
-            ldo = obj
-            if ldo.guiType: cellFeature['widget'] = ldo.guiType
-            #initialValue = ldo.initialValue[0]
-            pvTable.par2pos[ldo] = row,col
+            #``````the object is DataAccess```````````````````````````````````
+            dataAccess = obj
+            #print('DA object',dataAccess.name)
+            if dataAccess.guiType: cellFeature['widget'] = dataAccess.guiType
+            #initialValue = dataAccess.initialValue[0]
+            daTable.par2pos[dataAccess.name] = dataAccess,(row,col)
             try:
-                item = QtWidgets.QTableWidgetItem(ldo.title())
+                item = QtWidgets.QTableWidgetItem(dataAccess.title())
             except Exception as e:
                 printw('could not define Table[%i,%i]'%(row,col))
                 print(str(e))
                 print('Traceback: '+repr(traceback.format_exc()))
                 continue
-            #print('pvTable [%i,%i] is %s %s'%(row,col,ldo.title(),type(ldo)))
+            #print('daTable [%i,%i] is %s %s'%(row,col,dataAccess.title(),type(dataAccess)))
             # deduct the cell type from LDO
-            self.setItem(row, col, item, cellFeature, ldo)
+            self.setItem(row, col, item, cellFeature, dataAccess)
             #print('table row set',row, col, item)
+        #print('par2pos ',daTable.par2pos)
 
-    def setItem(self,row,col,item,features,ldo=None,fgColor=None):
-        if ldo: iValue = ldo.initialValue[0]        
+    def setItem(self,row,col,item,features,dataAccess=None,fgColor=None):
+        if dataAccess: iValue = dataAccess.initialValue[0]        
         if isinstance(item,list):
             # Take the first item, the last one is cellFeature
             cellName = str(item[0])
             item = QtWidgets.QTableWidgetItem(cellName)
-        elif ldo: # this section is valid only for non-scalar ldoPars 
+        elif dataAccess: # this section is valid only for non-scalar ldoPars 
             try:    item = QtWidgets.QTableWidgetItem(iValue)
             except Exception as e: 
                 pass#printw('in re-item(%i,%i): '%(row,col)+str(e))
@@ -211,27 +196,26 @@ class Window(QtWidgets.QWidget):
                       if isinstance(color,list) else str(color)
                     pbutton.setStyleSheet('background-color:'+color)
                 except Exception as e:
-                    printw('in color '+str(e))
+                    printw('Format error in cell(%i,%i): '%(row,col)+str(e))
                 #print('pushButton created with cmd:%s'%value)
                 self.table.setCellWidget(row, col, pbutton)
                 return
             elif feature == 'widget':
-                print('widget feature: "%s"'%value)
+                #print('widget feature: "%s"'%value)
                 if value == 'spinbox':
-                    print('it is spinbox:'+ldo.title())
-                    spinbox = QDoubleSpinBoxLDO(ldo)                
+                    #print('it is spinbox:'+dataAccess.title())
+                    spinbox = QDoubleSpinBoxLDO(dataAccess)                
                     spinbox.setValue(float(iValue))
                     self.table.setCellWidget(row, col, spinbox)
-                    print('table set for spinbox',row, col, spinbox)
+                    #print('table set for spinbox',row, col, spinbox)
                     return
                 elif value == 'combo':
-                    print('>combo')
-                    combo = QComboBoxLDO(ldo)
+                    #print('>combo')
+                    combo = QComboBoxLDO(dataAccess)
                     self.table.setCellWidget(row, col, combo)
                 elif value == 'bool':
-                    print( 'LDO %s is boolean:'%ldo.name+str(iValue))
-                    #item.setText(ldo.name.split(':')[1])
-                    item.setText(ldo.name.split(':',1)[1])
+                    print( 'LDO %s is boolean:'%dataAccess.name+str(iValue))
+                    item.setText(dataAccess.name.rsplit(',')[-1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
                     state = QtCore.Qt.Checked if iValue\
@@ -267,18 +251,18 @@ class Window(QtWidgets.QWidget):
     def handleCellClicked(self, row,column):
         item = self.table.item(row,column)
         printd('cell clicked[%i,%i]:'%(row,column))
-        ldo = pvTable.pos2obj[row,column][0]
-        if isinstance(ldo,str):
+        dataAccess = daTable.pos2obj[row,column][0]
+        if isinstance(dataAccess,str):
             return
         try:
-            if ldo.guiType =='bool':
+            if dataAccess.guiType =='bool':
                 checked = item.checkState() == QtCore.Qt.Checked
-                print('bool clicked '+ldo.name+':'+str(checked))
-                ldo.set(checked) # change server's ldo
+                print('bool clicked '+dataAccess.name+':'+str(checked))
+                dataAccess.set(checked) # change server's dataAccess
             else:
                 d = QtWidgets.QDialog(self)
                 d.setWindowTitle("Info")
-                pname = ldo.title()
+                pname = dataAccess.title()
                 ql = QtWidgets.QLabel(pname,d)
                 qte = QtWidgets.QTextEdit(item.text(),d)
                 qte.move(0,20)
@@ -295,13 +279,13 @@ class Window(QtWidgets.QWidget):
         except Exception as e:
             printw('in tableItem.setText:'+str(e))
             
-    def rightClick(self,ldo):
-        #print('mainWidget. RightClick on %s'%ldo.name)
+    def rightClick(self,dataAccess):
+        print('mainWidget. RightClick on %s'%dataAccess.name)
         d = QtWidgets.QDialog(self)
-        pname = ldo.title()
+        pname = dataAccess.title()
         d.setWindowTitle("Info on LDO %s"%pname)
-        attributes = ldo.attributes()
-        #print('attributes:%s'%str(attributes)[:200])
+        attributes = dataAccess.attributes()
+        print('attributes:%s'%str(attributes)[:200])
         txt = '    Attributes:\n'
         for attr,v in attributes.items():
             vv = str(v)[:100]
@@ -325,49 +309,50 @@ def MySlot(a):
         printe('mainWidget not defined yet')
         return
     errMsg = ''
-    for ldo,rowCol in pvTable.par2pos.items():
-        #print('updating LDO '+ldo.name)
-        if 'R' not in ldo.attr['features']:
+    if LDOMonitor.Perf: ts = timer()
+    for da,rowCol in daTable.par2pos.values():
+        #print('updating DA(%i,%i): '%rowCol, da.name, da.currentValue)
+        if 'R' not in da.attr['features']:
             continue
-        if isinstance(ldo,str):
+        if isinstance(da,str):
             printw('logic error')
             continue
         try:
-            val = ldo.get()
+            val = da.currentValue['v']
             printd('val:%s'%str(val)[:100])
             if val is None:
                 try:
                     window.table.item(*rowCol).setText('none')
                 except:  pass
                 continue
-            if ldo.guiType == 'spinbox':
-                #printd('LDO '+ldo.name+' is spinbox '+str(val[0]))
+            if da.guiType == 'spinbox':
+                printd('LDO '+da.name+' is spinbox '+str(val[0]))
                 #print(str(window.table.cellWidget(*rowCol).value()))
                 window.table.cellWidget(*rowCol).setValue(float(val[0]))
                 continue
-            elif ldo.guiType =='bool':
-                #print('LDO '+ldo.name+' is bool')
+            elif da.guiType =='bool':
+                printd('LDO '+da.name+' is bool')
                 state = window.table.item(*rowCol).checkState()
-                #print('LDO '+ldo.name+' is bool = '+str(val)+', state:'+str(state))
+                printd('LDO '+da.name+' is bool = '+str(val)+', state:'+str(state))
                 if val[0] != (state != 0):
                     #print('flip')
                     window.table.item(*rowCol).setCheckState(val[0])
                 continue
-            #print('LDO '+ldo.name+' is '+str(type(val)))
+            #print('LDO '+da.name+' is '+str(type(val)))
             if isinstance(val,np.ndarray):
-                #printd('LDO '+ldo.name+' is ndarray')
+                printd('LDO '+da.name+' is ndarray')
                 txt = '%s: %s'%(val.shape,str(val))
             else:
                 if len(val) > 1:
-                    printd('LDO '+ldo.name+' is list')
+                    printd('LDO '+da.name+' is list')
                     txt = str(val)
                 else:
                     val = val[0]
-                    printd('LDO '+ldo.name+' is '+str(type(val)))
+                    printd('LDO '+da.name+' is '+str(type(val)))
                     if type(val) in (float,int,str):
                         txt = str(val)
                     else:
-                        txt = 'Unknown type of '+ldo.name+'='+str(type(val))
+                        txt = 'Unknown type of '+da.name+'='+str(type(val))
                         printw(txt+':'+str(val))
                         txt = str(val)
             #print('settext(%i,%i) %s'%(*rowCol,txt))
@@ -380,18 +365,22 @@ def MySlot(a):
             printw(errMsg)
             #print('Traceback: '+repr(traceback.format_exc()))
             break
-
+    if LDOMonitor.Perf: print('GUI update time: %.4f'%(timer()-ts))    
     myslotBusy = False
     if errMsg:  Window.bottomLine.setText('WARNING: '+errMsg) #Issue, it could be long delay here
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
-class LDOMonitor(QtCore.QThread): 
+class LDOMonitor(QtCore.QThread):
+    Perf = True
     # inheritance from QtCore.QThread is needed for qt signals
     SignalSourceDataReady = QtCore.pyqtSignal(object)
     def __init__(self):
         # for signal/slot paradigm we need to call the parent init
         super(LDOMonitor,self).__init__()
         #...
+        self.hostLdos = {}
+        for host,longListOfLNames in daTable.hostRequest.items():
+            self.hostLdos[host] = LA.LdoPars(longListOfLNames)
         thread = threading.Thread(target=self.thread_proc)
         thread.start()
         self.SignalSourceDataReady.connect(MySlot)
@@ -399,32 +388,59 @@ class LDOMonitor(QtCore.QThread):
     def thread_proc(self):
         printd('>thread_proc')
         while not EventExit.isSet():
-            self.callback(None)
+            # collect data from all hosts and fill daTable with data
+            dataReceived = True
+            for host,aggregatedLdo in self.hostLdos.items():
+                #print('host,ldo',host,aggregatedLdo.name)
+                if LDOMonitor.Perf: ts = timer()
+                try:
+                    r = aggregatedLdo.get()
+                except Exception as e:
+                    msg = 'ERR.LP '+str(e)[:80]
+                    #print(msg)
+                    Window.bottomLine.setText(msg)
+                    dataReceived = False
+                    break
+                if LDOMonitor.Perf: print('retrieval time from %s = %.4fs'\
+                %(host,timer()-ts))
+                #pprint('got from %s \n'%host+str(r))
+                for hostDev,parDict in r.items():
+                    #print('update GUI objects of %s :'% hostDev + str(parDict))
+                    for par,valDict in parDict.items():
+                        hostDevPar = hostDev+','+par
+                        dataAccess = daTable.par2pos[hostDevPar][0]
+                        dataAccess.currentValue = valDict
+            if dataReceived:    self.SignalSourceDataReady.emit(None)
             EventExit.wait(2)
         print('<thread_proc')
-
-    def callback(self,*args):
-        #print('cb:',args)
-        self.SignalSourceDataReady.emit(args)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-class LDO():
+class DataAccess():
     """Process Variable object, provides getter and setter"""
-    def __init__(self,ldoName,parName='*',attribute='value'):
-        self.name = ldoName+':'+parName
-        print('ldo name: '+str(self.name))
-        self.ldo = LA.LdoPars((ldoName,parName))
+    def __init__(self,cnsNameDev,parName='*',attribute='value'):
+        self.cnsNameDev = cnsNameDev
+        self.name = ','.join(cnsNameDev+[parName])
+        print('ldo name: '+self.name)
+        self.ldo = LA.LdoPars([(self.cnsNameDev,parName)])
+
+        # process ldo info
         info = self.ldo.info()
         print('ldo info for %s: '%self.name+str(info))
-        self.key = list(info)[0]
-        printd('key:'+str(self.key))
-        #print('ldo vars:'+str(vars(self.ldo)))
-        self.initialValue = self.ldo.value[0]
-        print('iv',self.name,str(self.initialValue)[:60])
-        #self.t = 0.
+        # we don't care about cnsNameDev key, as only one entry expected
+        info = list(info.values())[0]
         # creating attributes from remote ones
+        self.key = list(info)[0]
+        print('key:'+str(self.key))
         self.attr = info[self.key]
+
+        # process initial value
+        v = self.ldo.value
+        print('v',v)
+        self.initialValue = self.ldo.value[0]
+        self.latestValueTS = None
+        print('iv of ',self.name,str(self.initialValue)[:60])
         self.guiType = self._guiType()
-        print('type of %s: '%self.name+str(self.guiType))
+        print('guiType of %s: '%self.name+str(self.guiType))
+        #self.t = 0.
 
     def set(self,val):
         r = self.ldo.set([val])
@@ -467,60 +483,73 @@ class QPushButtonCmd(QtWidgets.QPushButton):
         print('launching `%s`'%str(self.cmd))
         p = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, shell=True)
 
-class LDOTable():
-    """LDO table maps: parameter to (row,col) and (row,col) to object"""
+class DataAccessTable():
+    """DataAccess table maps: parameter to (row,col) and (row,col) to object"""
     def __init__(self,fileName):
         
         self.par2pos = OD()
         self.pos2obj = OD()
         maxcol = 0
+        self.hostRequest = {}# holds combined requests for each host
         with open(fileName,'r') as infile:
             config = yaml.load(infile,Loader=yaml.FullLoader) 
             pprint(('config:',config))
             for row,rlist in enumerate(config['rows']):
                 if rlist is None:
                     continue
-                #pprint(('row,rlist',row,rlist))
+                pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
                   cellFeatures = {}
                   try:
-                    #print( 'cell:'+str(cell))
+                    print( 'cell:'+str(cell))
                     if isinstance(cell,str):
                         self.pos2obj[(row,col)] = cell,cellFeatures
                         continue
                     if not isinstance(cell,list):
                         # print('accepting only strings and lists')
                         continue
-                        
                     # cell is a list
                     # The last item could be a cell features
                     if isinstance(cell[-1],dict):
                         cellFeatures = cell[-1]
                     # is the cell LDO?
-                    try:    cellIsLdo = cell[0][0] == '$'
+                    # it should be of the form: [['$...
+                    try:    cellIsLdo = cell[0][0][0] == '$'
                     except: cellIsLdo = False
                     if not cellIsLdo:
                         if isinstance(cell[0],str):
                             #print('merged non-ldo cells: '+str(cell))
                             self.pos2obj[(row,col)] = cell,cellFeatures
                         else:
-                            print("cell[0] must be a ['host;port',dev]: ")\
-                            +str(cell[0])
+                            print("cell[%i,%i] must be a ['host;port',dev]: "\
+                            %(row,col)+str(cell[0]))
                             print('Not supported yet')
                         continue
 
                     # cell is LDO
                     #print('cell[0][0]',cell[0][0])
-                    # cell[:2] is LDO,par, optional cell[2] is cell property 
-                    try:    ldo,par = cell[0][1:],cell[1]
+                    # cell[:2] is LDO,par, optional cell[2] is cell property
+                    print('cell[%i,%i] is LDO: '%(row,col)+str(cell))
+                    try:    cnsNameDev,par = cell[0],cell[1]
                     except: NameError('expect LDO,par, got: '+str(cell))
-                    #print( 'the cell[%i,%i] is ldo: %s,%s'%(row,col,ldo,par))
+                    #remove $ from the cnsName
+                    cnd = cnsNameDev.copy()
+                    cnd[0] = cnd[0][1:]
+                    print( 'the cell[%i,%i] is cnd: %s,%s'%(row,col,str(cnd),par))
                     if True:# Do not catch exception here!#try:
-                        self.pos2obj[(row,col)] = LDO(ldo,par),cellFeatures
+                        da = DataAccess(cnd,par)
+                        self.pos2obj[(row,col)] = da,cellFeatures
+                        # add to host request list
+                        #only one item expected
+                        chlist = list(da.ldo.channelMap.items())
+                        host = chlist[0][0]
+                        if host in self.hostRequest:
+                           self.hostRequest[host].append([cnd,par])
+                        else: self.hostRequest[host] = [[cnd,par]]
                         continue
                     else:#except Exception as e:
-                        txt = 'Cannot create LDO %s:'%cell+str(e)
+                        txt = 'Cannot create DataAccess %s:'%cell+str(e)
                         raise NameError(txt)
                     continue
                     #printe('cell[%i,%i]=%s not recognized'%(row,col,str(cell))) 
@@ -533,6 +562,8 @@ class LDOTable():
                 row += 1
         self.shape = row,maxcol
         print('table created, shape: '+str(self.shape))
+        pprint(self.pos2obj)
+        print('hostRequest',self.hostRequest)
 
     def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'
@@ -550,7 +581,7 @@ class LDOTable():
                 f.write("[,'____Device: %s____',]\n"%dev)
             f.write("'%s',%s\n"%(parName,devParName))
         f.close()
-        print('LDO spreadsheet config file generated: %s'%fname)
+        print('DataAccess spreadsheet config file generated: %s'%fname)
         return fname
 #`````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
@@ -571,17 +602,17 @@ if __name__ == '__main__':
     LA.LdoPars.Dbg = pargs.dbg# transfer dbg flag to liteAccess
 
     if pargs.file:
-        print('Monitoring LDO as defined in '+pargs.file)
+        print('Monitoring DataAccess as defined in '+pargs.file)
     else:
         print('Monitoring LDOs: '+str(pargs.ldo))
         pargs.file = self.build_temporary_pvfile()
     app = QtWidgets.QApplication(sys.argv)
 
     # read config file
-    pvTable = LDOTable(pargs.file)
+    daTable = DataAccessTable(pargs.file)
 
     # define GUI
-    window = Window(*pvTable.shape)
+    window = Window(*daTable.shape)
     #print(title)
     window.setWindowTitle('ldoPet')
     window.resize(350, 300)
