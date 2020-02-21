@@ -214,7 +214,7 @@ class Window(QtWidgets.QWidget):
                     combo = QComboBoxLDO(dataAccess)
                     self.table.setCellWidget(row, col, combo)
                 elif value == 'bool':
-                    print( 'LDO %s is boolean:'%dataAccess.name+str(iValue))
+                    #print( 'DA %s is boolean:'%dataAccess.name+str(iValue))
                     item.setText(dataAccess.name.rsplit(',')[-1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
@@ -419,27 +419,25 @@ class DataAccess():
     def __init__(self,cnsNameDev,parName='*',attribute='value'):
         self.cnsNameDev = cnsNameDev
         self.name = ','.join(cnsNameDev+[parName])
-        print('ldo name: '+self.name)
+        #print('DA name: '+self.name)
         self.ldo = LA.LdoPars([(self.cnsNameDev,parName)])
 
         # process ldo info
         info = self.ldo.info()
-        print('ldo info for %s: '%self.name+str(info))
+        #print('DA info for %s: '%self.name+str(info))
         # we don't care about cnsNameDev key, as only one entry expected
         info = list(info.values())[0]
         # creating attributes from remote ones
         self.key = list(info)[0]
-        print('key:'+str(self.key))
         self.attr = info[self.key]
 
         # process initial value
         v = self.ldo.value
-        print('v',v)
         self.initialValue = self.ldo.value[0]
         self.latestValueTS = None
-        print('iv of ',self.name,str(self.initialValue)[:60])
+        #print('iv of ',self.name,str(self.initialValue)[:60])
         self.guiType = self._guiType()
-        print('guiType of %s: '%self.name+str(self.guiType))
+        #print('guiType of %s: '%self.name+str(self.guiType))
         #self.t = 0.
 
     def set(self,val):
@@ -493,16 +491,16 @@ class DataAccessTable():
         self.hostRequest = {}# holds combined requests for each host
         with open(fileName,'r') as infile:
             config = yaml.load(infile,Loader=yaml.FullLoader) 
-            pprint(('config:',config))
+            #pprint(('config:',config))
             for row,rlist in enumerate(config['rows']):
                 if rlist is None:
                     continue
-                pprint(('row,rlist',row,rlist))
+                #pprint(('row,rlist',row,rlist))
                 nCols = len(rlist)
                 for col,cell in enumerate(rlist):
                   cellFeatures = {}
                   try:
-                    print( 'cell:'+str(cell))
+                    #print( 'cell:'+str(cell))
                     if isinstance(cell,str):
                         self.pos2obj[(row,col)] = cell,cellFeatures
                         continue
@@ -530,13 +528,13 @@ class DataAccessTable():
                     # cell is LDO
                     #print('cell[0][0]',cell[0][0])
                     # cell[:2] is LDO,par, optional cell[2] is cell property
-                    print('cell[%i,%i] is LDO: '%(row,col)+str(cell))
+                    #print('cell[%i,%i] is DA: '%(row,col)+str(cell))
                     try:    cnsNameDev,par = cell[0],cell[1]
-                    except: NameError('expect LDO,par, got: '+str(cell))
+                    except: NameError('expect DA,par, got: '+str(cell))
                     #remove $ from the cnsName
                     cnd = cnsNameDev.copy()
                     cnd[0] = cnd[0][1:]
-                    print( 'the cell[%i,%i] is cnd: %s,%s'%(row,col,str(cnd),par))
+                    #print( 'the cell[%i,%i] is cnd: %s,%s'%(row,col,str(cnd),par))
                     if True:# Do not catch exception here!#try:
                         da = DataAccess(cnd,par)
                         self.pos2obj[(row,col)] = da,cellFeatures
@@ -562,8 +560,8 @@ class DataAccessTable():
                 row += 1
         self.shape = row,maxcol
         print('table created, shape: '+str(self.shape))
-        pprint(self.pos2obj)
-        print('hostRequest',self.hostRequest)
+        #pprint(self.pos2obj)
+        #print('hostRequest',self.hostRequest)
 
     def build_temporary_pvfile(self):
         fname = 'pvsheet.tmp'

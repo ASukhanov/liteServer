@@ -189,8 +189,8 @@ class Channel():
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #self.sock.bind((self.lHost,self.lPort)) #we can live without bind
             self.sock.settimeout(timeout)
-        print('%s client of %s, timeout %s'
-        %(('TCP','UDP')[UDP],str((self.sHost,self.sPort)),str(timeout)))
+        #print('%s client of %s, timeout %s'
+        #%(('TCP','UDP')[UDP],str((self.sHost,self.sPort)),str(timeout)))
 
     def _recvDictio(self):
         if UDP:
