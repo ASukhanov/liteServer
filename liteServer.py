@@ -37,7 +37,10 @@ Known issues:
 #__version__ = 'v34 2020-02-07'# wildcarding with *
 #__version__ = 'v35 2020-02-08'# 'read' instead of 'measure'
 #__version__ = 'v36 2020-02-09'# PV replaced with LDO
-__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
+#__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
+#__version__ = 'v38 2020-02-18'# time parameter added to server
+#__version__ = 'v39 2020-02-19'# cnsName
+#__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -46,6 +49,7 @@ import socket
 import socketserver as SocketServer# for python3
 from collections import OrderedDict as OD
 import ubjson
+#from pprint import pprint
 
 UDP = True
 ChunkSize = 60000
@@ -100,7 +104,7 @@ def _send_UDP(buf,socket,addr):
         perfMBytes += mbytes
         perfSeconds += dt
         perfSends += 1
-        Server.DevDict['server'].perf.value = [perfSends, round(perfMBytes,3)\
+        Server.DevDict['server'].perf.v = [perfSends, round(perfMBytes,3)\
         ,round(perfMBytes/perfSeconds,1)]
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
@@ -112,8 +116,8 @@ class Device():
         printd('pars '+str(pars))
         for p,v in list(pars.items()):
             #print('setting '+p+' to '+str(v))
-            #print('value type:',type(v.value))
-            if not isinstance(v.value,list):
+            #print('value type:',type(v.v))
+            if not isinstance(v.v,list):
                 printe('parameter "'+p+'" should be a list')
                 sys.exit(1)
             setattr(self,p,v)
@@ -133,9 +137,9 @@ class LDO():
         printd('>LDO: '+str((features,desc,value,opLimits,parent)))
         self._name = None # assighned in device.__init__. 
         # name is not really needed, as it is keyed in the dictionary
-        self.timestamp = None
-        self.value = value
-        self.count = [len(self.value)]
+        self.t = None
+        self.v = value
+        self.count = [len(self.v)]
         self.features = features
         self.desc = desc
         self._parent = parent
@@ -164,7 +168,7 @@ class LDO():
     def is_writable(self): return 'W' in self.features
     def is_readable(self): return 'R' in self.features
 
-    def set(self,vals,prop='value'):
+    def set(self,vals,prop='v'):
         #print('features %s:%s'%(self._name,str(self.features)))
         if not self.is_writable():
             raise PermissionError('LDO is not writable')
@@ -174,15 +178,15 @@ class LDO():
             vals = [vals]
         
         # Special treatment of the boolean and action parameters
-        #print('set',len(self.value),type(self.value[0]))
-        if len(self.value) == 1 and isinstance(self.value[0],bool):
+        #print('set',len(self.v),type(self.v[0]))
+        if len(self.v) == 1 and isinstance(self.v[0],bool):
             vals = [True] if vals[0] else [False] 
 
-        if type(vals[0]) is not type(self.value[0]):
+        if type(vals[0]) is not type(self.v[0]):
             printe('Cannot assign '+str(type(vals[0]))+' to '\
-            + str(type(self.value[0])))
+            + str(type(self.v[0])))
             raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
-            + str(type(self.value[0])))
+            + str(type(self.v[0])))
             
         if self.opLimits is not None:
             printd('checking for opLimits')
@@ -196,7 +200,7 @@ class LDO():
                 raise ValueError('not a legal value of %s:'\
                 %self._name+str(vals[0]))
 
-        self.value = vals
+        self.v = vals
 
         # call LDO setting method with new value
         #print('self._setter of %s is %s'%(self._name,self._setter))
@@ -216,92 +220,108 @@ class LDO():
 class _LDO_Handler(SocketServer.BaseRequestHandler):
     lastPID = '?'
     def _reply(self,serverMsg):
-        #printd('>_reply [%d'%len(serverMsg)+', type:'+str(type(serverMsg[0])))
         printd('>_reply')
         try:    replyCmd =  serverMsg['cmd']
         except: raise  KeyError("'cmd' key missing in request")
-        try:    cmd,args = replyCmd
+        try:    self.cmd,args = replyCmd
         except: 
-            #cmd,args = replyCmd[0],[['']]
             print('replyCmd',replyCmd)
             if replyCmd[0] == 'info':
-                devs = [i[0] for i in list(Server.DevDict.items())]
+                devs = list(Server.DevDict)
                 return devs
             else:   raise ValueError('expect cmd,args')
-        printd('cmd,args: '+str((cmd,args)))
+        printd('cmd,args: '+str((self.cmd,args)))
         returnedDict = {}
 
         for devParPropVal in args:
-          try:
-            devName,parPropValNames = devParPropVal
-          except Exception as e:
-            msg = 'ERR in _reply for '+str(replyCmd)
-            print(msg)
-            raise TypeError(msg) from e
-          parNames = parPropValNames[0]
-          if len(parPropValNames) > 1:
-            propNames = parPropValNames[1]
-          else:   
-            propNames = propNames = ['*'] if cmd == 'info' else ['value']
-          printd('devNm,parNm,propNm:'+str((devName,parNames,propNames)))
-          if parNames[0][0] == '*':
-            # replace parNames with a list of all parameters
-            dev = Server.DevDict[devName]
-            parNames = [i for i in vars(dev) if not i.startswith('_')]
-          printd('parNames:'+str(parNames))
-          for parName in parNames:
-            pv = getattr(Server.DevDict[devName],parName)
-            features = getattr(pv,'features','')
-            if cmd == 'read' and 'R' not in features:
-                #print('par %s is not readable, it will not be replied.'%parName)
-                continue
-            devParName = devName+':'+parName
-            parDict = {}
-            returnedDict[devParName] = parDict
-            if cmd in ('get','read'):
-                #if Server.Dbg: 
-                ts = timer()
-                pv.update_value()
-                value = getattr(pv,propNames[0])
-                printd('value of %s=%s, timing=%.6f'%(devParName,str(value)[:100],timer()-ts))
-                try:
-                    # if value is numpy array:
-                    shape,dtype = value[0].shape, str(value[0].dtype)
-                except Exception as e:
-                    #printd('not numpy %s, %s'%(pv._name,str(e)))
-                    parDict['value'] = value
-                else:
-                    printd('numpy array %s, shape,type:%s, add key "numpy"'\
-                      %(str(pv._name),str((shape,dtype))))
-                    parDict['value'] = value[0].tobytes()
-                    parDict['numpy'] = shape,dtype
-                timestamp = getattr(pv,'timestamp',None)
-                if not timestamp: timestamp = time.time()
-                parDict['timestamp'] = timestamp
-            elif cmd == 'set':
-                try:    val = parPropValNames[2]
-                except:   raise NameError('set value missing')
-                if not isinstance(val,list):
-                    val = [val]
-                pv.set(val)
-                printd('set: %s=%s'%(parName,str(val)))
-            elif cmd == 'info':
-                printd('info (%s.%s)'%(parName,str(propNames)))
-                #if len(propNames[0]) == 0:
-                if propNames[0][0] == '*':
-                    propNames = pv.info()
-                printd('propNames of %s: %s'%(pv._name,str(propNames)))
-                for propName in propNames:
-                    if propName == 'value': 
-                        # do not return value on info() it could be very long
-                        parDict['value'] = '?'
-                    else:
-                        pv = getattr(Server.DevDict[devName],parName)
-                        propVal = getattr(pv,propName)
-                        parDict[propName] = propVal
-            else:   raise ValueError('accepted commands: info,get,set,read')
+            try:
+                cnsDevName,self.parPropVals = devParPropVal
+            except Exception as e:
+                msg = 'ERR.LS in _reply for '+str(replyCmd)
+                print(msg)
+                raise TypeError(msg) from e
+
+            cnsHost,devName = cnsDevName.rsplit(',',1)
+            parNames = self.parPropVals[0]
+            if len(self.parPropVals) > 1:
+                self.propNames = self.parPropVals[1]
+            else:   
+                self.propNames = '*' if self.cmd == 'info' else 'v'
+            printd('devNm,parNm,propNm:'+str((devName,parNames,self.propNames)))
+            if devName == '*':
+                for devName in Server.DevDict:
+                    cdn = ','.join((cnsHost,devName))
+                    devDict = {}
+                    returnedDict[cdn] = devDict
+                    self._process_parameters(parNames,devName,devDict)
+            else:
+                if cnsDevName not in returnedDict:
+                    #print('add new cnsDevName',cnsDevName)
+                    returnedDict[cnsDevName] = {}
+                devDict = returnedDict[cnsDevName]
+                self._process_parameters(parNames,devName,devDict)
         return returnedDict
-                
+
+    def _process_parameters(self,parNames,devName,devDict):
+      if parNames[0][0] == '*':
+        # replace parNames with a list of all parameters
+        try:    dev = Server.DevDict[devName]
+        except: raise NameError("device '%s' not served"%(str(devName)))
+        parNames = [i for i in vars(dev) if not i.startswith('_')]
+      printd('parNames:'+str(parNames))
+      for idx,parName in enumerate(parNames):
+        pv = getattr(Server.DevDict[devName],parName)
+        features = getattr(pv,'features','')
+        if self.cmd == 'read' and 'R' not in features:
+            #print('par %s is not readable, it will not be replied.'%parName)
+            continue
+        parDict = {}
+        devDict[parName] = parDict
+        if self.cmd in ('get','read'):
+            #if Server.Dbg: 
+            ts = timer()
+            pv.update_value()
+            value = getattr(pv,self.propNames)
+            printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
+            try:
+                # if value is numpy array:
+                shape,dtype = value[0].shape, str(value[0].dtype)
+            except Exception as e:
+                #printd('not numpy %s, %s'%(pv._name,str(e)))
+                parDict['v'] = value
+            else:
+                printd('numpy array %s, shape,type:%s, add key "n"'\
+                  %(str(pv._name),str((shape,dtype))))
+                parDict['v'] = value[0].tobytes()
+                parDict['n'] = shape,dtype
+            timestamp = getattr(pv,'t',None)
+            if not timestamp: timestamp = time.time()
+            parDict['t'] = timestamp
+        elif self.cmd == 'set':
+            try:    val = self.parPropVals[2][idx]
+            except:   raise NameError('set value missing')
+            if not isinstance(val,list):
+                val = [val]
+            pv.set(val)
+            printd('set: %s=%s'%(parName,str(val)))
+        elif self.cmd == 'info':
+            printd('info (%s.%s)'%(parName,str(self.propNames)))
+            #if len(self.propNames[0]) == 0:
+            if self.propNames[0] == '*':
+                propNames = pv.info()
+            else:
+                propNames = [self.propNames]
+            printd('propNames of %s: %s'%(pv._name,str(propNames)))
+            for propName in propNames:
+                if propName == 'v': 
+                    # do not return value on info() it could be very long
+                    parDict['v'] = '?'
+                else:
+                    pv = getattr(Server.DevDict[devName],parName)
+                    propVal = getattr(pv,propName)
+                    parDict[propName] = propVal
+        else:   raise ValueError('accepted commands: info,get,set,read')
+                 
     def handle(self):
         """Override handle method"""
         if UDP:
@@ -322,7 +342,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         printd(str(cmd))
 
         # retrieve previous source to server.lastPID LDO
-        Server.DevDict['server'].lastPID.value[0] = _LDO_Handler.lastPID
+        Server.DevDict['server'].lastPID.v[0] = _LDO_Handler.lastPID
         # remember current source 
         _LDO_Handler.lastPID = '%s;%i %s %s'%(*self.client_address\
         ,cmd['pid'], cmd['username'], )
@@ -331,7 +351,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         try:
             r = self._reply(cmd)
         except Exception as e:
-            r = 'ERR. Exception: '+repr(e)
+            r = 'ERR.LS. Exception: '+repr(e)
             exc = traceback.format_exc()
             print('Traceback: '+repr(exc))
         
@@ -373,6 +393,13 @@ class _myUDPServer(SocketServer.UDPServer):
             self.ackCounts[sockAddr] -= 1
             sock.sendto(b'\x00\x00\x00\x00',addr)
             
+class LDOt(LDO):
+    '''LDO, returning current time.''' 
+    # override data updater
+    def update_value(self):
+        self.v = [time.time()]
+        self.t = time.time()
+
 class Server():
     """liteServer object"""
     #``````````````Attributes`````````````````````````````````````````````````
@@ -388,10 +415,10 @@ class Server():
               'version':LDO('','liteServer',[__version__]),
               'host':   LDO('','Host name',[socket.gethostname()]),
               'status': LDO('R','Messages from liteServer',['']),
+              'time':   LDOt('R','server time',[0.]),
               'debug':  LDO('W','debugging level: 14:ERROR, 13:WARNING, 12:INFO, 11-1:DEBUG, bits[15:4] are for user needs'\
               ,[Server.Dbg],setter=self._debug_set),
               'lastPID': LDO('','report source of the last request ',['?']),
-              'tstInt': LDO('W','test integer variables',[1,2],setter=self.par_set),
               'perf':   LDO('R','Server performance [RQ,MBytes,MBytes/s]'\
                             ,[0.,0.,0.])
             })]
@@ -418,14 +445,14 @@ class Server():
         self.server.serve_forever()
         
     def _debug_set(self,par):
-        par_debug = Server.DevDict['server'].debug.value
+        par_debug = Server.DevDict['server'].debug.v
         print('par_debug',par_debug)
         Server.Dbg = par_debug[0]
         print('Debugging level set to '+str(Server.Dbg))
 
     def par_set(self,par):
         """Generic parameter setter"""
-        parVal = par.value
+        parVal = par.v
         print('par_set %s='%par.name + str(parval))
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # see liteScaler.py liteAccess.py

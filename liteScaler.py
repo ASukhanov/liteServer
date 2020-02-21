@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
 #__version__ = 'v18 2020-02-09'# PV replaced with LDO
-__version__ = 'v19 2020-02-18'# reset drops after clearing
+#__version__ = 'v19 2020-02-18'# reset drops after clearing
+__version__ = 'v20 2020-02-21'# liteServer-rev3
  
 import sys, time, threading
 import numpy as np
@@ -22,8 +23,8 @@ class LDOt(LDO):
     '''LDO, returning current time.''' 
     # override data updater
     def update_value(self):
-        self.value = [time.time()]
-        self.timestamp = time.time()
+        self.v = [time.time()]
+        self.t = time.time()
 
 class Scaler(Device):
     """ Derived from liteServer.Device.
@@ -64,39 +65,39 @@ class Scaler(Device):
         
     def reset(self,pv):
         #print('resetting scalers of %s'%self._name)
-        for i in range(len(self.counters.value)):
-            self.counters.value[i] = 0
-        self.reset.value[0] = False# reset parameter
+        for i in range(len(self.counters.v)):
+            self.counters.v[i] = 0
+        self.reset.v[0] = False# reset parameter
   
     def command_set(self,pv):
-        print('command',str(self.command.value))
-        if self.command.value[0] == 'Start':
-            self.command.value[0] = 'Started'
+        print('command',str(self.command.v))
+        if self.command.v[0] == 'Start':
+            self.command.v[0] = 'Started'
             self._pause = False
         else:
-            self.command.value[0] = 'Stopped'
+            self.command.v[0] = 'Stopped'
             self._pause = True
         
     def _state_machine(self):
         self._cycle = 0
-        ns = len(self.counters.value)
+        ns = len(self.counters.v)
         while not EventExit.is_set():
-            EventExit.wait(1./self.frequency.value[0])
-            #print('self.pause',self.pause.value)
+            EventExit.wait(1./self.frequency.v[0])
+            #print('self.pause',self.pause.v)
             if self._pause:
                 continue
 
             # increment counters individually
-            for i,increment in enumerate(self.increments.value[:ns]):
-                #print(instance+': c,i='+str((self.counters.value[i],increment)))
-                self.counters.value[i] += increment
-                self.counters.timestamp = time.time()
+            for i,increment in enumerate(self.increments.v[:ns]):
+                #print(instance+': c,i='+str((self.counters.v[i],increment)))
+                self.counters.v[i] += increment
+                self.counters.t = time.time()
                 
             # increment pixels in the image
             # this is very time consuming:
-            #self.image.value[0] = (self.image.value[0] + 1).astype('uint8')
+            #self.image.v[0] = (self.image.v[0] + 1).astype('uint8')
             
-            self.image.value[0][0,0,0] = self._cycle
+            self.image.v[0][0,0,0] = self._cycle
             
             self._cycle += 1
         print('Scaler '+self._name+' exit')

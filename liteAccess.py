@@ -1,90 +1,60 @@
 """Base class for accessing multiple Process Variables, served by a liteServer.
-#``````````````````Low level usage:```````````````````````````````````````````
+#``````````````````Usage:`````````````````````````````````````````````````````
 import liteAccess as LA
 from pprint import pprint
-hostPort = '' # empty for local, or IP:port: '130.199.105.240;9700'
-llch = LA.Channel(hostPort)
-llTrans = llch._llTransaction
-    # get short list of devices on the hostPort
-pprint(llTrans({'cmd':['info']}))
-    # info on all devices, parameters and properties on hostPort
-#DNW#pprint(llTrans({'cmd':['info',[['',['']]]]}))
-    # info on server device at the hostPort:
-pprint(llTrans({'cmd':['info',[['server','*']]]}))
-    # info on server.status data obj at the hostPort:
-pprint(llTrans({'cmd':['info',[['server',[['status']]]]]}))
-    # info on server.status.desc property at the hostPort:
-pprint(llTrans({'cmd':['info',[['server',[['status'],['desc']]]]]}))
-    # the get command returns timestamped property:
-pprint(llTrans({'cmd':['get',[['server'],['status'],['desc']]]}))
-    # info of multiple devices and parameters:
-pprint(llTrans({'cmd':['info',[('server',[['status','version']]),('dev1',[['frequency']])]]}))
-    # get server.version value from the hostPort:
-pprint(llTrans({'cmd':['get',[['server',[['version']]]]]}))
-    # get all data objects of the server at the hostPort:
-pprint(llTrans({'cmd':['get',[['server',['*']]]]}))
-    # get multiple parameters from multiple devices on the hostPort
-pprint(llTrans({'cmd':['get',[('server',[['status','version']]),('dev1',[['frequency']])]]}))
-    # get all readable data objects from a device:
-pprint(llTrans({'cmd':['read',[['dev1','*']]]}))
-    # get all readable data objects from all devices the the hostPort
-#pprint(llTrans({'cmd':['read']}))
-
-    # set:
-pprint(llTrans({'cmd':['set',[['dev1',[['frequency'],['value'],[4.]]]]]}))
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-#``````````````````Test of LdoPar _transaction, no name service involved``````
-ch = LA.Channel(hostPort,{'dev1': [['time','frequency']]})
-pprint(ch._transaction('get'))
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-#``````````````````High level, using LdoPars and name service`````````````````
     #``````````````Info```````````````````````````````````````````````````````
+    # list of devices on a server
+pprint(list(LA.LdoPars([[['Scaler1','*'],'*']]).info()))
+    # info on all paremeters of the 'Scaler1','server'
+pprint(LA.LdoPars([[['Scaler1','server'],'*']]).info())    
+pprint(LA.LdoPars([[['set#1 of counters & image','server'],'*']]).info())
     # info on single parameter
-pprint(LA.LdoPars(['scaler0.dev0','time']).info())
+pprint(LA.LdoPars([[['Scaler1','server'],'time']]).info())
     # info on multiple parameters
-pprint(LA.LdoPars(['scaler0.dev0',['time','frequency']]).info())
-    # info on all parameters of an ldo
-pprint(LA.LdoPars(['scaler0.dev0','*']).info())
-    # list of devices on accociated server
-pprint(LA.LdoPars(['scaler0.dev0','*']).devices())
+pprint(LA.LdoPars([[['Scaler1','server'],['time','perf']]]).info())
     #``````````````Get````````````````````````````````````````````````````````
     # simplified get: returns (value,timestamp) of a parameter (frequency)\
     # from a ldo (scaler0.dev0). 
-pprint(LA.LdoPars(['scaler0.dev0','frequency']).value)
+pprint(LA.LdoPars([[['Scaler1','server'],'perf']]).value)
     # get single parameter from ldo scaler0.dev0, 
-pprint(LA.LdoPars(['scaler0.dev0','frequency']).get())
+pprint(LA.LdoPars([[['Scaler1','server'],'perf']]).get())
     # get multiple parameters from an ldo 
-pprint(LA.LdoPars(['scaler0.dev0',['time','frequency']]).get())
+pprint(LA.LdoPars([[['Scaler1','server'],['time','perf']]]).get())
     # get multiple parameters from multiple ldos 
-pprint(LA.LdoPars([['scaler0.dev0',['time','frequency']],['scaler0.dev1',['frequency','time']]]).get())
+pprint(LA.LdoPars([[['Scaler1','dev1'],['time','frequency']],[['Scaler1','dev2'],['time','command']]]).get())
     #``````````````Read```````````````````````````````````````````````````````
     # get all readable parameters from an ldo
-pprint(LA.LdoPars(['scaler0.dev0','*']).read())
-    #``````````````set````````````````````````````````````````````````````````
-LA.LdoPars(['scaler0.dev0','frequency']).set([6.])
-LA.LdoPars(['scaler0.dev0','frequency']).value
+print(LA.LdoPars([[['Scaler1','dev1'],'*']]).read())  
+    #``````````````Set````````````````````````````````````````````````````````
+    # explicit set
+LA.LdoPars([[['Scaler1','dev1'],'frequency']]).set([7.])
+    # simple set, equivalent to explicit set
+LA.LdoPars([[['Scaler1','dev1'],'frequency']]).value = [9.]
+pprint(LA.LdoPars([[['Scaler1','dev1'],'frequency']]).value)
     # multiple set
-LA.LdoPars([['scaler0.dev0','frequency'],['scaler0.dev1','frequency']]).set([[7.],[8.]])
-LA.LdoPars([['scaler0.dev0','frequency'],['scaler0.dev1','frequency']]).get()
+LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).set([8.,'Stop'])
+LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).get()
     # test for timeout, should timeout in 10s:
-LA.LdoPars(['scaler1.dev0','frequency']).value
+#LA.LdoPars(['scaler1.dev0','frequency']).value
 
-#v38
-    #TODO: test with two servers, what happens if devices have same name?
-LA.LdoPars([['scaler0.dev0','frequency'],['scaler1.dev0','frequency']]).get()
     #TODO: 
-LA.LdoPars(['scaler0.dev0','frequency']).set(property=('oplimits',[-1,11])
+#LA.LdoPars(['scaler0.dev0','frequency']).set(property=('oplimits',[-1,11])
 #``````````````````Observations```````````````````````````````````````````````
-transaction time of LdoPars is ~3 ms
+    # Measured transaction time is 1.8ms for:
+LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).get()
+    # Measured transaction time is 6.4ms per 61 KBytes for:
+LA.LdoPars([[['Scaler1','dev1'],'*']]).read() 
 #``````````````````Tips```````````````````````````````````````````````````````
 To enable debugging: LA.LdoPars.Dbg = True
+To enable transaction timing: LA.Channel.Perf = True  
 """
 #__version__ = 'v36 2020-02-06'# full re-design
 #__version__ = 'v37 2020-02-09'# LdoPars info(), get(), read() set() are good.
 #__version__ = 'v38 2020-02-10'# set() raising exceptions on failures
 #__version__ = 'v39b 2020-02-11'# better error and timeout handling
 #__version__ = 'v40 2020-02-13'# pid field added to request
-__version__ = 'v41 2020-02-14'# bug in set() fixed, deepcopy needed
+#__version__ = 'v41 2020-02-14'# bug in set() fixed, deepcopy needed
+__version__ = 'v42 2020-02-21'# liteServer-rev3.
 
 print('liteAccess '+__version__)
 
@@ -114,17 +84,22 @@ def ip_address():
         for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
 import liteCNS
-CNSMap = {}# local map of ldo to (host:port,dev)
-def hostPortDev(ldo):
+CNSMap = {}# local map of cnsName to host:port
+def _hostPort(cnsNameDev):
+    """Return host;port of the cnsName,Dev try it first from already 
+    registered recores, or from the name service"""
     global CNSMap
-    try:  hpd = CNSMap[ldo]# check if ldo name is in local map
+    cnsName,dev = cnsNameDev
+    try:  
+        hp,dev = CNSMap[cnsName]# check if cnsName is in local map
     except  KeyError:
-        try:    hpd = liteCNS.hostPortDev(ldo)
-        except: raise   NameError('cannot resolve ldo name '+str(ldo))
-        # register externally resolved ldo in local map
-        print('ldo %s is locally registered: '%ldo+str(hpd))
-        CNSMap[ldo] = hpd[0],hpd[1]
-    return hpd
+        #print('cnsName '+str(cnsName)+' not in local map')
+        try:    hp = liteCNS.hostPort(cnsName)
+        except: raise   NameError('cannot resolve cnsName '+str(cnsName))
+        # register externally resolved cnsName in local map
+        print('cnsName %s is locally registered as '%cnsName+str((hp,dev)))
+        CNSMap[cnsName] = hp,dev
+    return hp
 
 def devices(info):
     """Return set of device names from LdoPars.info()"""
@@ -194,6 +169,7 @@ def _recvUdp(socket,socketSize):
     return data, addr
 
 class Channel():
+    Perf = False
     """Provides access to host;port"""#[(dev1,[pars1]),(dev2,[pars2]),...]
     def __init__(self,hostPort, devParDict={}, timeout=10):
         #print('>Channel',devParDict)
@@ -265,16 +241,18 @@ class Channel():
         if not isinstance(decoded,dict):
             #print('decoded is not dict')
             return decoded
-        # items could by numpy arrays, the following should decode everything:
-        for parName,item in list(decoded.items()):
-            printd('parName:'+parName)
-            try:# check if it is numpy array
-                shape,dtype = decoded[parName]['numpy']
-                v = decoded[parName]['value']
-                decoded[parName]['value'] = frombuffer(v,dtype).reshape(shape)
-                del decoded[parName]['numpy']
-            except:# OK. it is not numpy.
-                pass
+        for cnsDev in decoded:
+            # items could by numpy arrays, the following should decode everything:
+            parDict = decoded[cnsDev]
+            for parName,item in list(parDict.items()):
+                printd('parName:'+parName)
+                try:# check if it is numpy array
+                    shape,dtype = parDict[parName]['n']
+                    v = parDict[parName]['v']
+                    parDict[parName]['v'] = frombuffer(v,dtype).reshape(shape)
+                    del parDict[parName]['n']
+                except:# OK. it is not numpy.
+                    pass
         return decoded
 
     def _sendDictio(self,dictio):
@@ -304,10 +282,15 @@ class Channel():
     def _sendCmd(self,cmd,values):
         import copy
         devParDict = self.devParDict
+        printd('devParDict %s, name %s'%(str(devParDict),self.name))
         if cmd == 'set':
-            devParDict = copy.deepcopy(devParDict)# that is important!
-            for key,value in zip(devParDict,values):
-                devParDict[key] += ['value'],value                
+            if len(devParDict) != 1:
+                raise ValueError('Set is supported for single device only')
+            #devParDict = copy.deepcopy(devParDict)# that is important!
+            #for key,value in zip(devParDict,values):
+            #    devParDict[key] += 'v',value
+            for key in devParDict:
+                devParDict[key] += 'v',values
         devParList = list(devParDict.items())
         dictio = {'cmd':(cmd,devParList)}
         printd('sending cmd: '+str(dictio))
@@ -315,10 +298,11 @@ class Channel():
 
     def _transaction(self,cmd,value=None):
         # normal transaction: send command, receive response
-        ts = timer()
+        if Channel.Perf: ts = timer()
         self._sendCmd(cmd,value)
         r = self._recvDictio()
-        #print('transaction time: %.5f'%(timer()-ts))
+        if Channel.Perf: print('transaction time: %.5f'%(timer()-ts))
+        #print('reply from channel %s:'%self.name+str(r))
         return r
     
 class LdoPars(object): #inheritance from object is needed in python2 for properties to work
@@ -329,27 +313,29 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
         #print('ldoPars',ldoPars)
         if isinstance(ldoPars[0],str):
             ldoPars = [ldoPars]
-            #print('standardized ldoPars',ldoPars)
-        self.name = ldoPars[0]
+            print('standardized ldoPars',ldoPars)
+        self.name = ','.join(ldoPars[0][0])
+        #print('lpname',self.name)
         
         # unpack arguments to hosRequest map
         self.channelMap = {}
         for ldoPar in ldoPars:
-            print('ldoPar',ldoPar)            
+            #print('ldoPar',ldoPar)            
             ldo,pars = ldoPar
             if isinstance(pars,str): pars = [pars]
-            ldoHost,dev = hostPortDev(ldo)
+            ldoHost = _hostPort(ldo)
+            cnsNameDev = ','.join(ldoPar[0])
+            #print('ldoHost,cnsNameDev',ldoHost,cnsNameDev)
             if ldoHost not in self.channelMap:
-                self.channelMap[ldoHost] = {dev:[pars]}
-                print('created self.channelMap[%s]='%ldoHost\
-                + str(self.channelMap[ldoHost]))
+                self.channelMap[ldoHost] = {cnsNameDev:[pars]}
+                #print('created self.channelMap[%s]='%str(ldoHost)+ str(self.channelMap[ldoHost]))
             else:
                 try:
-                    #print(('appending old dev %s%s with '%(ldoHost,dev)+str(pars[0]))
-                    self.channelMap[ldoHost][dev][0].append(pars[0])
+                    #print(('appending old cnsNameDev %s%s with '%(ldoHost,cnsNameDev)+str(pars[0]))
+                    self.channelMap[ldoHost][cnsNameDev][0].append(pars[0])
                 except:
-                    #print(('creating new dev %s%s with '%(ldoHost,dev)+str(pars))
-                    self.channelMap[ldoHost][dev] = [pars]
+                    #print(('creating new cnsNameDev %s%s with '%(ldoHost,cnsNameDev)+str(pars))
+                    self.channelMap[ldoHost][cnsNameDev] = [pars]
                 #print(('updated self.channelMap[%s]='%ldoHost\
                 #+ str(self.channelMap[ldoHost]))
         channelList = list(self.channelMap.items())
@@ -370,12 +356,16 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
             return channel._transaction('get')
 
     def _firstValueAndTime(self):
-        if True:#try:
+        if True:#try: skip 'server,device'
             firstDict = self.channels[0]._transaction('get')
+            if not isinstance(firstDict,dict):
+                return firstDict
             firstValsTDict = list(firstDict.values())[0]
         else:#except Exception as e:
             printw('in _firstValueAndTime: '+str(e))
             return (None,)
+        # skip parameter key
+        firstValsTDict = list(firstValsTDict.values())[0]
         ValsT = list(firstValsTDict.values())[:2]
         try:     return (ValsT[0], ValsT[1])
         except:  return (ValsT[0],)

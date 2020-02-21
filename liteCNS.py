@@ -6,10 +6,11 @@
 #liteCNS.yaml file.
 
 # Comment the following line for file-based name resolution
-CNSHostPort = 'acnlin23;9699'# host;port of the liteServer
+#CNSHostPort = 'acnlin23;9699'# host;port of the liteServer
 
 #`````````````````````````````````````````````````````````````````````````````
-def hostPortDev(ldo):
+def hostPort(cnsName):
+  #print('>liteCNS.hostPort(%s)'%cnsName)
   try:
     CNSHostPort
     # CNSHostPort is defined, use liteCNSServer
@@ -21,9 +22,9 @@ def hostPortDev(ldo):
     fname = 'liteCNS.yaml'
     f = open(fname,'r')
     print('File-base name resolution using '+fname)
-    y = yaml.load(f,Loader=yaml.FullLoader)
+    y = yaml.load(f,Loader=yaml.BaseLoader)
     try:
-        r = y['ldo'][ldo]
+        r = y['hosts'][cnsName]
     except Exception as e:
         raise NameError('ERROR in liteCNS.py '+str(e))
     return r

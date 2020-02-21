@@ -1,19 +1,14 @@
-# Map of LDO to [host:port,device]
+# Map of LDO cns names to host;port
 
 define:
-  - &scalerMan0 acnlin23 # or localhost
-  - &scalerMan1 acnlin23;9701
-  - &cnsMan '130.199.109.192;9699'#DNW:acnlin23;9699
+  - &scalerMan0 acnlin23      # or localhost using default port 9700
+  - &scalerMan1 acnlin23;9701 # port specified explicitly 
+  - &cnsMan '130.199.109.192;9699'
 
-ldo:
-  cns:          [*cnsMan,           liteCNS]# name server 
-
-  scaler0.server: [*scalerMan0,     server]# for testingtest
-  scaler0.dev0: [*scalerMan0,       dev1]
-  scaler0.dev1: [*scalerMan0,       dev2]
-
-  scaler1.server: [*scalerMan1,     server]# for testing
-  scaler1.dev0: [*scalerMan1,       dev1]
-  scaler1.dev1: [*scalerMan1,       dev2]
-  
+hosts:
+  # cns name                    # host;port of the server
+  cns:                          *cnsMan # name server 
+  Scaler1:                      *scalerMan0 # host;port of the liteScaler
+  'set#1 of counters & image':  *scalerMan0 # same
+  'Scaler2: another set':       *scalerMan1 
 
