@@ -40,7 +40,7 @@ Known issues:
 #__version__ = 'v37 2020-02-13'# server.lastPID added, to track who was requestin last, perf counters
 #__version__ = 'v38 2020-02-18'# time parameter added to server
 #__version__ = 'v39 2020-02-19'# cnsName
-#__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
+__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
