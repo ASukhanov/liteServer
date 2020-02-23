@@ -50,7 +50,7 @@ ChunkSize = 60000
 #ChunkSize = 10000
 PrefixLength = 4
 ChunkSleep = 0.001 # works on localhost, 50MB/s, and on shallow network
-
+#ChunkSleep = 0.0005 # works on localhost, 100MB/s, rare KeyError: 'pid'
 MaxEOD = 4
 
 PORT = 9700# Communication port number

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = 'v20 2020-02-21'# liteServer-rev3
+__version__ = 'v20a 2020-02-21'# liteServer-rev3
  
 import sys, time, threading
 import numpy as np
@@ -30,14 +30,11 @@ class Scaler(Device):
     be prefixed with _"""
     def __init__(self,name,bigImage=False):
         initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
-        #print('initials '+name+'[%d]: '%len(initials)+str(initials[:20]))
-        h,w,p = 120,160,3
-        smallImg = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
-        #h,w,p = 2000,3000,3 #works on localhost with 1ms delay 50MB/s, server busy 200%
-        #h,w,p = 960,1280,3 # 3.6 MB, OK on localhost with 60K chunks and 1ms delay
-        h,w,p = 480,640,3 # 0.9 MB, OK on localhost with 60K chunks
-        bigImg = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
-        img = bigImg if bigImage else smallImg    
+        #2000,3000,3 #works on localhost with 1ms delay 50MB/s, server busy 200%
+        #960,1280,3 # 3.6 MB, OK on localhost with 60K chunks and 0.5ms ChunkSleep, 100MB/s, sporadic KeyError 'pid'
+        #480,640,3 # 0.9 MB, OK on localhost with 60K chunks, 1ms ChunkSleep, 48MB/s chunk speed
+        h,w,p = (960,1280,3) if bigImage else (120,160,3)
+        img = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
         pars = {
           'counters':   LDO('R','%i of counters'%len(initials),initials),
           'increments': LDO('W','Increments of the individual counters'\

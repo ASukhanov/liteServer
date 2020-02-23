@@ -110,7 +110,7 @@ class Window(QtWidgets.QWidget):
         self.table.cellClicked.connect(self.handleCellClicked)
         
         Window.bottomLine = QtWidgets.QLabel(self)
-        Window.bottomLine.setText('Lite Objet Viewer version '+__version__)
+        Window.bottomLine.setText('Lite Object Viewer version '+__version__)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
