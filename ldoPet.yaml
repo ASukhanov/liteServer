@@ -1,21 +1,25 @@
-# Example of the lpet definition table
-#
-# Substitution dictionary
-dict:
-  SERVER:   scaler0.server
-  DEV1:     scaler0.dev0
-  DEV2:     scaler0.dev1
-
-define:
-  - &SERVER scaler0.server
-
-# Table definition
 rows:
-  - [[0,Test of the table view of a Process Variable server,2,3,4]]
-  - ['version:',$SERVER:version,Reset,Command,Frequency,Time]
-  - [First set of counters,$DEV1:counters,$DEV1:reset,$DEV1:command,$DEV1:frequency,$DEV1:time,]
-  - [MultiDimensional,$DEV1:image]
-  - [Second set of counters,$DEV2:counters,$DEV2:reset,$DEV2:command,$DEV2:frequency,$DEV2:time]
-  - [MultiDimensional,$DEV2:image] 
-  - [' ',' ','Shell cmd:',xterm;launch:xterm]
-
+  - [['acnlin8d,server',{span: [3,1],color: cyan}]]
+  - ['version',[[$acnlin8d,server],version]]
+  - ['host',[[$acnlin8d,server],host]]
+  - ['status',[[$acnlin8d,server],status]]
+  - ['time',[[$acnlin8d,server],time]]
+  - ['debug',[[$acnlin8d,server],debug]]
+  - ['lastPID',[[$acnlin8d,server],lastPID]]
+  - ['perf',[[$acnlin8d,server],perf]]
+  - [['acnlin8d,dev1',{span: [3,1],color: cyan}]]
+  - ['counters',[[$acnlin8d,dev1],counters]]
+  - ['increments',[[$acnlin8d,dev1],increments]]
+  - ['frequency',[[$acnlin8d,dev1],frequency]]
+  - ['reset',[[$acnlin8d,dev1],reset]]
+  - ['command',[[$acnlin8d,dev1],command]]
+  - ['image',[[$acnlin8d,dev1],image]]
+  - ['time',[[$acnlin8d,dev1],time]]
+  - [['acnlin8d,dev2',{span: [3,1],color: cyan}]]
+  - ['counters',[[$acnlin8d,dev2],counters]]
+  - ['increments',[[$acnlin8d,dev2],increments]]
+  - ['frequency',[[$acnlin8d,dev2],frequency]]
+  - ['reset',[[$acnlin8d,dev2],reset]]
+  - ['command',[[$acnlin8d,dev2],command]]
+  - ['image',[[$acnlin8d,dev2],image]]
+  - ['time',[[$acnlin8d,dev2],time]]

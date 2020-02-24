@@ -1,4 +1,4 @@
-# Map of LDO cns names to host;port
+# Map of LDO cns names to host;port.
 
 define:
   - &scalerMan0 acnlin23      # or localhost using default port 9700
@@ -11,4 +11,5 @@ hosts:
   Scaler1:                      *scalerMan0 # host;port of the liteScaler
   'set#1 of counters & image':  *scalerMan0 # same
   'Scaler2: another set':       *scalerMan1 
+  RPiGaussmeter:                acnpi002
 

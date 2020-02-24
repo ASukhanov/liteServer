@@ -34,7 +34,8 @@ Known issues:
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
+#__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
+__version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -71,6 +72,7 @@ def ip_address():
 perfMBytes = 0
 perfSeconds = 0
 perfSends = 0
+perfRetransmits = 0
 def _send_UDP(buf,socket,addr):
     global perfMBytes, perfSeconds, perfSends
     # send buffer via UDP socked, chopping it to smaller chunks
@@ -99,7 +101,7 @@ def _send_UDP(buf,socket,addr):
         perfSeconds += dt
         perfSends += 1
         Server.DevDict['server'].perf.v = [perfSends, round(perfMBytes,3)\
-        ,round(perfMBytes/perfSeconds,1)]
+        ,round(perfMBytes/perfSeconds,1),perfRetransmits]
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
     """Device object has unique _name, its members are parameters (objects,
@@ -214,6 +216,7 @@ class LDO():
 class _LDO_Handler(SocketServer.BaseRequestHandler):
     lastPID = '?'
     def _reply(self,serverMsg):
+        global perfRetransmits
         printd('>_reply')
         try:    replyCmd =  serverMsg['cmd']
         except: raise  KeyError("'cmd' key missing in request")
@@ -226,7 +229,10 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             else:   raise ValueError('expect cmd,args')
         printd('cmd,args: '+str((self.cmd,args)))
         returnedDict = {}
-
+        if self.cmd == 'retransmit':
+            perfRetransmits += 1
+            raise BufferError({'Retransmit':args})
+            
         for devParPropVal in args:
             try:
                 cnsDevName,self.parPropVals = devParPropVal
@@ -336,18 +342,26 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         printd(str(cmd))
 
         # retrieve previous source to server.lastPID LDO
-        Server.DevDict['server'].lastPID.v[0] = _LDO_Handler.lastPID
-        # remember current source 
-        _LDO_Handler.lastPID = '%s;%i %s %s'%(*self.client_address\
-        ,cmd['pid'], cmd['username'], )
-        #print('lastPID now',_LDO_Handler.lastPID)
+        try:
+            Server.DevDict['server'].lastPID.v[0] = _LDO_Handler.lastPID
+            # remember current source 
+            _LDO_Handler.lastPID = '%s;%i %s %s'%(*self.client_address\
+            ,cmd['pid'], cmd['username'], )
+            #print('lastPID now',_LDO_Handler.lastPID)
+        except:
+            pass
         
         try:
             r = self._reply(cmd)
         except Exception as e:
-            r = 'ERR.LS. Exception: '+repr(e)
-            exc = traceback.format_exc()
-            print('Traceback: '+repr(exc))
+            if isinstance(e, BufferError ):
+                print('Retransmit ignored: '+str(e))
+                r = 'WARN.LS: Retransmit ignored'
+            else:
+                r = 'ERR.LS. Exception: '+repr(e)
+                exc = traceback.format_exc()
+                print('Traceback: '+repr(exc))
+                return
         
         printd('reply object: '+str(r)[:200]+'...'+str(r)[-40:])
         reply = ubjson.dumpb(r)

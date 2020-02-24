@@ -29,16 +29,19 @@ class Scaler(Device):
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name,bigImage=False):
-        initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
+        #initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
+        initials = [0]*pargs.nCounters
         #2000,3000,3 #works on localhost with 1ms delay 50MB/s, server busy 200%
         #960,1280,3 # 3.6 MB, OK on localhost with 60K chunks and 0.5ms ChunkSleep, 100MB/s, sporadic KeyError 'pid'
         #480,640,3 # 0.9 MB, OK on localhost with 60K chunks, 1ms ChunkSleep, 48MB/s chunk speed
         h,w,p = (960,1280,3) if bigImage else (120,160,3)
         img = np.arange(h*w*p).astype('uint8').reshape(h,w,p)
+        incs = []
+        for i in range(1,1+pargs.nCounters//2):
+            incs += [-i,i]
         pars = {
           'counters':   LDO('R','%i of counters'%len(initials),initials),
-          'increments': LDO('W','Increments of the individual counters'\
-                        ,[-1]+[1]*(pargs.nCounters-1)),
+          'increments': LDO('W','Increments of the individual counters',incs),
           'frequency':  LDO('RW','Update frequency of all counters',[1.]\
                         ,opLimits=(0,10)),
           # 'pause' is boolean because it is readable

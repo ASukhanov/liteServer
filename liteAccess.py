@@ -48,7 +48,8 @@ LA.LdoPars([[['Scaler1','dev1'],'*']]).read()
 To enable debugging: LA.LdoPars.Dbg = True
 To enable transaction timing: LA.Channel.Perf = True  
 """
-__version__ = 'v42 2020-02-21'# liteServer-rev3.
+#__version__ = 'v42 2020-02-21'# liteServer-rev3.
+__version__ = 'v43 2020-02-24'# noCNS, err nandling in retransmission 
 
 print('liteAccess '+__version__)
 
@@ -89,7 +90,11 @@ def _hostPort(cnsNameDev):
     except  KeyError:
         #print('cnsName '+str(cnsName)+' not in local map')
         try:    hp = liteCNS.hostPort(cnsName)
-        except: raise   NameError('cannot resolve cnsName '+str(cnsName))
+        except NameError:
+            msg = 'WARNING. Cannot resolve cnsName %s, trying it as is.'%str(cnsName)
+            #raise   NameError(msg)
+            print(msg)
+            hp = cnsName
         # register externally resolved cnsName in local map
         print('cnsName %s is locally registered as '%cnsName+str((hp,dev)))
         CNSMap[cnsName] = hp,dev
@@ -100,16 +105,19 @@ def devices(info):
     return {i.split(':')[0] for i in info.keys()}
 
 def _recvUdp(socket,socketSize):
-    """Receive chopped UDP data"""
+    """Receive the chopped UDP data"""
     chunks = []
     tryMore = 5
     ts = timer()
+    ignoreEOD = 2
+    retransmitInProgress = False
     while tryMore:
         try:
             buf, addr = socket.recvfrom(socketSize)
         except Exception as e:
             msg = 'LATimeout'
             #printw('in recvfrom '+str(e))
+            
             buf = None
         if buf is None:
             raise RuntimeError(msg)
@@ -118,26 +126,37 @@ def _recvUdp(socket,socketSize):
         #print('prefix', repr(buf[:PrefixLength]))
         #print('offset',offset)
         
-        if size > 0:
-            printd('chunk received '+str((offset,size)))
-            chunks.append((offset,size,buf[PrefixLength:]))
+        #print('chunk received '+str((offset,size)))
+        if size > 0:    chunks.append((offset,size,buf[PrefixLength:]))
+        if offset > 0:
             continue
-        printd('EOD detected')
+
+        if size == 0:
+            ignoreEOD -= 1
+            if ignoreEOD >= 0:
+                #print('premature EOD received, ignore it')
+                continue
+            else:
+                #print('ERR.LA. Looks like first chunk is missing')
+                pass
+        else:
+            #print('First chunk received')
+            pass
         # check for holes
         chunks = sorted(chunks)
-        prev = None
+        prev = [0,0]
         allAssembled = True
         for offset,size,buf in chunks:
-            printd('check offset,size:'+str((offset,size)))
-            if prev == None:
-                prev = offset,size
-                continue
+            #print('check offset,size:'+str((offset,size)))
             if prev[0] + prev[1] == offset:
-                prev = offset,size
+                prev = [offset,size]
                 continue
-            printw('hole [%i] in the assembly chain @%i, re-request'\
-            %prev)
+            if retransmitInProgress:
+                break
+            retransmitInProgress = True
+            prev[1] = offset
             cmd = {'cmd':('retransmit',prev)}
+            print('Asking to retransmit '+str(cmd))
             socket.sendto(ubjson.dumpb(cmd),addr)
             allAssembled = False
             break
@@ -214,9 +233,8 @@ class Channel():
             else:#except Exception as e:
                 printw('in sock.recv:'+str(e))
                 return {}
-        printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)\
-        +':')
-        
+        #print('received %i bytes'%(len(data)))
+        #printd('received %i of '%len(data)+str(type(data))+' from '+str(addr)':')
         # decode received data
         # allow exception here, it willl be caught in execute_cmd
         if len(data) == 0:
@@ -226,8 +244,8 @@ class Channel():
             decoded = ubjson.loadb(data)
         except Exception as e:
             msg = 'exception in ubjson.load: %s'%str(e)
-            print(msg+'. Data:')
-            print(data)
+            print(msg+'. Data[%i]:'%len(data))
+            print(str(data)[:150])
             #raise ValueError('in _recvDictio: '+msg)
             return {}
         
