@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Spreadsheet view of process variables from a remote liteServer."""
-__version__ = 'v35 2020-02-16'# LS revision3
+#__version__ = 'v35 2020-02-16'# LS revision3
+#__version__ = 'v36 2020-02-22'# error handling for aggr. response
+__version__ = 'v37 2020-02-22'# 
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -35,7 +37,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
         opl = (0.,100.)
         try:    opl = self.ldo.opLimits['values']
         except:
-            printw(' no oplimits') 
+            printw(' no oplimits in '+self.ldo.name) 
             pass
         else:
             #self.setRange(*opl)
@@ -170,15 +172,18 @@ class Window(QtWidgets.QWidget):
         #print('par2pos ',daTable.par2pos)
 
     def setItem(self,row,col,item,features,dataAccess=None,fgColor=None):
-        if dataAccess: iValue = dataAccess.initialValue[0]        
+        if dataAccess: 
+            iValue = dataAccess.initialValue
+            #print('ivalue',iValue)
         if isinstance(item,list):
             # Take the first item, the last one is cellFeature
             cellName = str(item[0])
             item = QtWidgets.QTableWidgetItem(cellName)
         elif dataAccess: # this section is valid only for non-scalar ldoPars 
-            try:    item = QtWidgets.QTableWidgetItem(iValue)
+            try:    item = QtWidgets.QTableWidgetItem(str(iValue))
             except Exception as e: 
-                pass#printw('in re-item(%i,%i): '%(row,col)+str(e))
+                printw('in re-item(%i,%i): '%(row,col)+str(e))
+                pass
         if fgColor:
             item.setForeground(QtGui.QBrush(QtGui.QColor(fgColor)))
         for feature,value in features.items():
@@ -205,7 +210,7 @@ class Window(QtWidgets.QWidget):
                 if value == 'spinbox':
                     #print('it is spinbox:'+dataAccess.title())
                     spinbox = QDoubleSpinBoxLDO(dataAccess)                
-                    spinbox.setValue(float(iValue))
+                    spinbox.setValue(float(iValue[0]))
                     self.table.setCellWidget(row, col, spinbox)
                     #print('table set for spinbox',row, col, spinbox)
                     return
@@ -218,7 +223,7 @@ class Window(QtWidgets.QWidget):
                     item.setText(dataAccess.name.rsplit(',')[-1])
                     item.setFlags(QtCore.Qt.ItemIsUserCheckable |
                                   QtCore.Qt.ItemIsEnabled)
-                    state = QtCore.Qt.Checked if iValue\
+                    state = QtCore.Qt.Checked if iValue[0]\
                       else QtCore.Qt.Unchecked
                     item.setCheckState(state)
                     continue
@@ -371,7 +376,7 @@ def MySlot(a):
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Data provider
 class LDOMonitor(QtCore.QThread):
-    Perf = True
+    Perf = False
     # inheritance from QtCore.QThread is needed for qt signals
     SignalSourceDataReady = QtCore.pyqtSignal(object)
     def __init__(self):
@@ -400,6 +405,9 @@ class LDOMonitor(QtCore.QThread):
                     #print(msg)
                     Window.bottomLine.setText(msg)
                     dataReceived = False
+                    break
+                if not isinstance(r,dict):
+                    print('ERR.LP. unexpected response: '+str(r)[:80])
                     break
                 if LDOMonitor.Perf: print('retrieval time from %s = %.4fs'\
                 %(host,timer()-ts))
@@ -525,12 +533,11 @@ class DataAccessTable():
                             print('Not supported yet')
                         continue
 
-                    # cell is LDO
-                    #print('cell[0][0]',cell[0][0])
+                    # cell is a data access object
                     # cell[:2] is LDO,par, optional cell[2] is cell property
                     #print('cell[%i,%i] is DA: '%(row,col)+str(cell))
                     try:    cnsNameDev,par = cell[0],cell[1]
-                    except: NameError('expect DA,par, got: '+str(cell))
+                    except: raise NameError('expect DA,par, got: '+str(cell))
                     #remove $ from the cnsName
                     cnd = cnsNameDev.copy()
                     cnd[0] = cnd[0][1:]
@@ -563,24 +570,20 @@ class DataAccessTable():
         #pprint(self.pos2obj)
         #print('hostRequest',self.hostRequest)
 
-    def build_temporary_pvfile(self):
-        fname = 'pvsheet.tmp'
-        print('>build_temporary_pvfile')
-        pvServerInfo = LA.LdoPars([pargs.host]).info()
-        deviceSet = {i.split(':')[0] for i in pvServerInfo.keys()}
-        printd('devs:'+str(deviceSet))
-        f = open(fname,'w')
-        #for dev in deviceSet:
-        curDev = ''
-        for devParName,pardict in pvServerInfo.items():
-            dev,parName = devParName.split(':')
-            if dev != curDev:
-                curDev = dev
-                f.write("[,'____Device: %s____',]\n"%dev)
-            f.write("'%s',%s\n"%(parName,devParName))
-        f.close()
-        print('DataAccess spreadsheet config file generated: %s'%fname)
-        return fname
+def build_temporary_pvfile(cnsName):
+    fname = 'pvsheet.tmp'
+    print('>build_temporary_pvfile')
+    cnsInfo = LA.LdoPars([[[cnsName,'*'],'*']]).info()
+    fname = 'ldoPet.yaml'
+    f = open(fname,'w')
+    f.write('rows:\n')
+    for ldo,parDict in cnsInfo.items():
+        f.write("  - [['%s',{span: [3,1],color: cyan}]]\n"%ldo)
+        for par,props in parDict.items():
+            f.write("  - ['%s',[[$%s],%s]]\n"%(par,ldo,par))
+    f.close()
+    print('DataAccess spreadsheet config file generated: %s'%fname)
+    return fname
 #`````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
     global mainWidget
@@ -603,7 +606,7 @@ if __name__ == '__main__':
         print('Monitoring DataAccess as defined in '+pargs.file)
     else:
         print('Monitoring LDOs: '+str(pargs.ldo))
-        pargs.file = self.build_temporary_pvfile()
+        pargs.file = build_temporary_pvfile(pargs.ldo)
     app = QtWidgets.QApplication(sys.argv)
 
     # read config file
