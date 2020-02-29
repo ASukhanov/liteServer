@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = 'v20a 2020-02-21'# liteServer-rev3
+#__version__ = 'v20a 2020-02-21'# liteServer-rev3
+__version__ = 'v21 2020-02-29'# command, pause, moved to server
  
 import sys, time, threading
 import numpy as np
@@ -44,17 +45,13 @@ class Scaler(Device):
           'increments': LDO('W','Increments of the individual counters',incs),
           'frequency':  LDO('RW','Update frequency of all counters',[1.]\
                         ,opLimits=(0,10)),
-          # 'pause' is boolean because it is readable
-          #'pause':      LDO('RW','Pause all counters',[False]),
-          # 'reset' is action because it is not readable 
           'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
-          'command':    LDO('RW','Command to execute',['Started']\
-                        ,legalValues=['Start','Stop'],setter=self.command_set),
           'image':      LDO('R','Image',[img]),
+          'coordinate': LDO('RW','Just 2-component vector for testing'\
+                        ,[0.,1.]),
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
         }
-        self._pause = False
         super().__init__(name,pars)
         #print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
@@ -65,38 +62,38 @@ class Scaler(Device):
         #print('resetting scalers of %s'%self._name)
         for i in range(len(self.counters.v)):
             self.counters.v[i] = 0
+        t = time.time()
+        self.counters.t = t
         self.reset.v[0] = False# reset parameter
-  
-    def command_set(self,pv):
-        print('command',str(self.command.v))
-        if self.command.v[0] == 'Start':
-            self.command.v[0] = 'Started'
-            self._pause = False
-        else:
-            self.command.v[0] = 'Stopped'
-            self._pause = True
+        self.reset.t = t
         
     def _state_machine(self):
+        time.sleep(.2)# give time for server to startup
+
         self._cycle = 0
         ns = len(self.counters.v)
         while not EventExit.is_set():
             EventExit.wait(1./self.frequency.v[0])
-            #print('self.pause',self.pause.v)
-            if self._pause:
+            idling = self.serverState()[:5] != 'Start'
+            if idling:
                 continue
+
+            if self._cycle%100 == 0:#Status report through server.status
+                self.setServerStatusText('Cycle %i on '%self._cycle+self._name)
 
             # increment counters individually
             for i,increment in enumerate(self.increments.v[:ns]):
                 #print(instance+': c,i='+str((self.counters.v[i],increment)))
                 self.counters.v[i] += increment
-                self.counters.t = time.time()
+            self.counters.t = time.time()
                 
             # increment pixels in the image
             # this is very time consuming:
             #self.image.v[0] = (self.image.v[0] + 1).astype('uint8')
-            
+
+            # change only one pixel            
             self.image.v[0][0,0,0] = self._cycle
-            
+            self.image.t = time.time()
             self._cycle += 1
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -121,7 +118,6 @@ devices = [Scaler('dev'+str(i+1),bigImage=pargs.bigImage)\
 print('Serving:'+str([dev._name for dev in devices]))
 
 server = liteServer.Server(devices)
-server
 server.loop()
 
 

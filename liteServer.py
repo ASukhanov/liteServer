@@ -35,7 +35,10 @@ Known issues:
   point-to-point network connection but may fail on a multi-hop network. 
 """
 #__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
-__version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
+#__version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
+#__version__ = 'v42 2020-02-25'# start command added
+#__version__ = 'v43 2020-02-27'# serverState and setServerStatusText
+__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -43,6 +46,7 @@ import socket
 #import SocketServer# for python2
 import socketserver as SocketServer# for python3
 from collections import OrderedDict as OD
+import array
 import ubjson
 #from pprint import pprint
 
@@ -100,27 +104,44 @@ def _send_UDP(buf,socket,addr):
         perfMBytes += mbytes
         perfSeconds += dt
         perfSends += 1
-        Server.DevDict['server'].perf.v = [perfSends, round(perfMBytes,3)\
+        Device.server.perf.v = [perfSends, round(perfMBytes,3)\
         ,round(perfMBytes/perfSeconds,1),perfRetransmits]
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
+    server = None# It will keep the server device after initialization
     """Device object has unique _name, its members are parameters (objects,
     derived from LDO class)."""
     def __init__(self,name='?',pars=None):
         self._name = name
         #print('Dbg',Dbg)
         printd('pars '+str(pars))
+
+        # Add parameters
         for p,v in list(pars.items()):
             #print('setting '+p+' to '+str(v))
             #print('value type:',type(v.v))
-            if not isinstance(v.v,list):
+            if not isinstance(v.v,(list,array.array)):
                 printe('parameter "'+p+'" should be a list')
                 sys.exit(1)
             setattr(self,p,v)
             par = getattr(self,p)
             #setattr(par,'_name',p)
             par._name = p
-        
+
+    #def set_par(self,par,val,t=time.time())
+    #    self.par.v[0] = val
+    #    self.par.t = t
+    #
+    #def get_par(self,par):
+    #    return self.par.v[0]
+
+    def setServerStatusText(self,txt):
+        Device.server.status.v[0] = txt
+        Device.server.status.t = time.time()
+
+    def serverState(self):
+        return Device.server.start.v[0]
+
 class LDO():
     """Base class for Lite Data Objects. Standard properties:
     value, count, timestamp, features, decription.
@@ -166,6 +187,7 @@ class LDO():
 
     def set(self,vals,prop='v'):
         #print('features %s:%s'%(self._name,str(self.features)))
+        print('type(vals)',self._name,type(vals))
         if not self.is_writable():
             raise PermissionError('LDO is not writable')
         try: # pythonic way for testing if object is iterable
@@ -179,10 +201,10 @@ class LDO():
             vals = [True] if vals[0] else [False] 
 
         if type(vals[0]) is not type(self.v[0]):
-            printe('Cannot assign '+str(type(vals[0]))+' to '\
-            + str(type(self.v[0])))
-            raise TypeError('Cannot assign '+str(type(vals[0]))+' to '\
-            + str(type(self.v[0])))
+            msg='Setting %s: '%self._name+str(type(vals[0]))+' to '\
+            +str(type(self.v[0]))
+            #raise TypeError(msg)
+            printw(msg)
             
         if self.opLimits is not None:
             printd('checking for opLimits')
@@ -267,10 +289,15 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         # replace parNames with a list of all parameters
         try:    dev = Server.DevDict[devName]
         except: raise NameError("device '%s' not served"%(str(devName)))
-        parNames = [i for i in vars(dev) if not i.startswith('_')]
-      printd('parNames:'+str(parNames))
+        #parNames = [i for i in vars(dev) if not i.startswith('_')]
+        parNames = vars(dev)
+        
+      #print('parNames:'+str(parNames))
       for idx,parName in enumerate(parNames):
         pv = getattr(Server.DevDict[devName],parName)
+        #print('parName',parName,type(pv),isinstance(pv,LDO))
+        if not isinstance(pv,LDO):
+            continue
         features = getattr(pv,'features','')
         if self.cmd == 'read' and 'R' not in features:
             #print('par %s is not readable, it will not be replied.'%parName)
@@ -298,9 +325,11 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             if not timestamp: timestamp = time.time()
             parDict['t'] = timestamp
         elif self.cmd == 'set':
-            try:    val = self.parPropVals[2][idx]
+            try:
+                val = self.parPropVals[2][idx]\
+                  if len(parNames) > 1 else self.parPropVals[2]
             except:   raise NameError('set value missing')
-            if not isinstance(val,list):
+            if not isinstance(val,(list,array.array)):
                 val = [val]
             pv.set(val)
             printd('set: %s=%s'%(parName,str(val)))
@@ -343,7 +372,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
 
         # retrieve previous source to server.lastPID LDO
         try:
-            Server.DevDict['server'].lastPID.v[0] = _LDO_Handler.lastPID
+            Device.server.lastPID.v[0] = _LDO_Handler.lastPID
             # remember current source 
             _LDO_Handler.lastPID = '%s;%i %s %s'%(*self.client_address\
             ,cmd['pid'], cmd['username'], )
@@ -420,6 +449,8 @@ class Server():
         # create Device 'server'
         if serverPars:
             dev = [Device('server',{\
+              'start':LDO('RW','Start/Stop',['Started']\
+              , legalValues=['Start','Stop','Exit'],setter=self._start_set),
               'version':LDO('','liteServer',[__version__]),
               'host':   LDO('','Host name',[socket.gethostname()]),
               'status': LDO('R','Messages from liteServer',['']),
@@ -447,16 +478,23 @@ class Server():
         self.server.server_bind()
         self.server.server_activate()
         print('Server instantiated')
-    
+
     def loop(self):
+        Device.server = Server.DevDict['server']
         print(__version__+'. Waiting for %s messages at %s'%(('TCP','UDP')[UDP],self.host+';'+str(self.port)))
         self.server.serve_forever()
         
     def _debug_set(self,par):
-        par_debug = Server.DevDict['server'].debug.v
+        par_debug = Device.server.debug.v
         print('par_debug',par_debug)
         Server.Dbg = par_debug[0]
         print('Debugging level set to '+str(Server.Dbg))
+
+    def _start_set(self,pv):
+        cmd = Device.server.start.v[0]
+        print('Server state: '+cmd)
+        Device.server.start.v[0] = 'Started'\
+          if cmd == 'Start' else 'Stopped'
 
     def par_set(self,par):
         """Generic parameter setter"""

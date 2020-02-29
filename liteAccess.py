@@ -32,8 +32,8 @@ LA.LdoPars([[['Scaler1','dev1'],'frequency']]).set([7.])
 LA.LdoPars([[['Scaler1','dev1'],'frequency']]).value = [9.]
 pprint(LA.LdoPars([[['Scaler1','dev1'],'frequency']]).value)
     # multiple set
-LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).set([8.,'Stop'])
-LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).get()
+LA.LdoPars([[['Scaler1','dev1'],['frequency','coordinate']]]).set([8.,[3.,4.]])
+LA.LdoPars([[['Scaler1','dev1'],['frequency','coordinate']]]).get()
     # test for timeout, should timeout in 10s:
 #LA.LdoPars(['scaler1.dev0','frequency']).value
 

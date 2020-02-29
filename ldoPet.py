@@ -2,7 +2,8 @@
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v35 2020-02-16'# LS revision3
 #__version__ = 'v36 2020-02-22'# error handling for aggr. response
-__version__ = 'v37 2020-02-24'# err handling for missed chunks
+3__version__ = 'v37 2020-02-24'# err handling for missed chunks
+__version__ = 'v38 2020-02-24'# default localhost
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -209,8 +210,10 @@ class Window(QtWidgets.QWidget):
                 #print('widget feature: "%s"'%value)
                 if value == 'spinbox':
                     #print('it is spinbox:'+dataAccess.title())
-                    spinbox = QDoubleSpinBoxLDO(dataAccess)                
-                    spinbox.setValue(float(iValue[0]))
+                    spinbox = QDoubleSpinBoxLDO(dataAccess)
+                    try:    v = int(iValue[0])#DNW with QDoubleSpinBox 
+                    except: v = float(iValue[0])
+                    spinbox.setValue(v)
                     self.table.setCellWidget(row, col, spinbox)
                     #print('table set for spinbox',row, col, spinbox)
                     return
@@ -333,7 +336,9 @@ def MySlot(a):
             if da.guiType == 'spinbox':
                 printd('LDO '+da.name+' is spinbox '+str(val[0]))
                 #print(str(window.table.cellWidget(*rowCol).value()))
-                window.table.cellWidget(*rowCol).setValue(float(val[0]))
+                try:    v = int(val[0])#DNW with QDoubleSpinBox
+                except: v = float(val[0])
+                window.table.cellWidget(*rowCol).setValue(v)
                 continue
             elif da.guiType =='bool':
                 printd('LDO '+da.name+' is bool')
@@ -597,7 +602,7 @@ if __name__ == '__main__':
     'Config file')
     parser.add_argument('-t','--timeout',type=float,default=10,
       help='timeout of the receiving socket')
-    parser.add_argument('ldo', nargs='?', 
+    parser.add_argument('ldo', nargs='?', default='localhost',
       help='LDOs: lite data objects')
     pargs = parser.parse_args()
     LA.LdoPars.Dbg = pargs.dbg# transfer dbg flag to liteAccess
