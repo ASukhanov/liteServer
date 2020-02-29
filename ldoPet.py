@@ -2,7 +2,7 @@
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v35 2020-02-16'# LS revision3
 #__version__ = 'v36 2020-02-22'# error handling for aggr. response
-3__version__ = 'v37 2020-02-24'# err handling for missed chunks
+__version__ = 'v37 2020-02-24'# err handling for missed chunks
 __version__ = 'v38 2020-02-24'# default localhost
 
 import threading, socket, subprocess, sys, time
