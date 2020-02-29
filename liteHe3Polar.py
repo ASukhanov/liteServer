@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """liteServer for He3 Polarization Measurements"""
-__version__ = 'v01 2020-02-24'# adopted from he3PolarMan
+#__version__ = 'v01 2020-02-24'# adopted from he3PolarMan
+__version__ = 'v02 2020-02-29'# 
 
 import sys
 import time
@@ -158,14 +159,14 @@ class Plant():
         self.data = None
         self.timestamp = None
 
-    def send_value(self,value,channel='stimulGenS'):
-        self.w = value
-        
-    def read_back(self):
-        y = func_sum_of_peaks([self.w], simulPars)
+    def send_value(self,value):
+        y = func_sum_of_peaks([value], simulPars)
         # add 10% of noise
         y += 0.1*simulPars[FGY[0]]*np.random.random()
-        return round(float(y[0]),9)
+        self.v = round(float(y[0]),9)
+        
+    def read_back(self):
+        return self.v
 
 #````````````````````````````Hardware specific````````````````````````````````
 class Plant_SRS_Lock_In_AMplifier(Plant):
