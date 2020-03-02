@@ -517,6 +517,5 @@ devices = [Mgr('He3Polar')]
 print('Serving:'+str([dev._name for dev in devices]))
 
 server = liteServer.Server(devices)
-server
 server.loop()
 
