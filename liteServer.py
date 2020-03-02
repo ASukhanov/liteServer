@@ -38,7 +38,8 @@ Known issues:
 #__version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
 #__version__ = 'v42 2020-02-25'# start command added
 #__version__ = 'v43 2020-02-27'# serverState and setServerStatusText
-__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
+#__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
+__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -120,9 +121,9 @@ class Device():
         for p,v in list(pars.items()):
             #print('setting '+p+' to '+str(v))
             #print('value type:',type(v.v))
-            if not isinstance(v.v,(list,array.array)):
-                printe('parameter "'+p+'" should be a list')
-                sys.exit(1)
+            if not isinstance(v.v,(list)):
+                printw('parameter "'+p+'" should be a list')
+                #sys.exit(1)
             setattr(self,p,v)
             par = getattr(self,p)
             #setattr(par,'_name',p)
@@ -162,8 +163,9 @@ class LDO():
         self._parent = parent
         
         # if the parameter is numpy :
+        vv = value# [0]
         try:    
-            shape,dtype = value[0].shape, value[0].dtype
+            shape,dtype = vv.shape, vv.dtype
             printd('par is numpy')
         except: 
             pass
@@ -310,16 +312,17 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             pv.update_value()
             value = getattr(pv,self.propNames)
             printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
+            vv = value#[0]
             try:
                 # if value is numpy array:
-                shape,dtype = value[0].shape, str(value[0].dtype)
+                shape,dtype = vv.shape, str(vv.dtype)
             except Exception as e:
                 #printd('not numpy %s, %s'%(pv._name,str(e)))
                 parDict['v'] = value
             else:
                 printd('numpy array %s, shape,type:%s, add key "n"'\
                   %(str(pv._name),str((shape,dtype))))
-                parDict['v'] = value[0].tobytes()
+                parDict['v'] = vv.tobytes()
                 parDict['n'] = shape,dtype
             timestamp = getattr(pv,'t',None)
             if not timestamp: timestamp = time.time()
@@ -493,6 +496,10 @@ class Server():
     def _start_set(self,pv):
         cmd = Device.server.start.v[0]
         print('Server state: '+cmd)
+        if cmd == 'Exit':
+            print('Exiting')
+            EventExit.set()
+            sys.exit()
         Device.server.start.v[0] = 'Started'\
           if cmd == 'Start' else 'Stopped'
 
