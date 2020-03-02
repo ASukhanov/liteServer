@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """liteServer for He3 Polarization Measurements"""
 #__version__ = 'v01 2020-02-24'# adopted from he3PolarMan
-__version__ = 'v02 2020-03-01'# 
+__version__ = 'v02 2020-03-01'# serial dev argument
 
 import sys
 import time
@@ -15,10 +15,6 @@ import liteServer
 LDO = liteServer.LDO
 Device = liteServer.Device
 EventExit = liteServer.EventExit
-
-#EventPocessingFinished = threading.Event()
-#EventExit = threading.Event()
-#EventCommand = threading.Event()
 
 mgr = None
 eventData = []
@@ -56,13 +52,8 @@ pargs = None# program arguments
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
-def printd(msg,level=10):
-    if mgr is None or mgr.adoDebug.value.value <= level:
-        print('dbg: '+msg)
-def printd1(msg):
-    printd(msg,level=9)
-def printd2(msg):
-    printd(msg,level=8)
+def printd(msg):
+    if pargs.dbg: print('dbg: '+msg)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````For fitting``````````````````````````````````````
 from scipy.optimize import curve_fit
@@ -143,7 +134,7 @@ class Interface():
         rt = 0.04
         baud = 19200 #115200, strangely read speed does not depend on this and stays at 62p/s
         #baud = 115200#strangely read speed does not depend on this and stays at 62p/s
-        self.ser = serial.Serial('/dev/ttyUSB0', baud, timeout=rt,\
+        self.ser = serial.Serial(pargs.serdev, baud, timeout=rt,\
         #  stopbits = serial.STOPBITS_TWO, #inter_byte_timeout=0.1,
         #  xonxoff=False, rtscts=True, dsrdtr=True
           )
@@ -237,14 +228,14 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
         #print('cmd,readline',cmd,r)
         reread = False
         if len(r) == 0:
-            printd2('rereading '+cmd+', last written: '+str(self.lastWritten))
+            printd('rereading '+cmd+', last written: '+str(self.lastWritten))
             self.iface.write(cmd)
             r = self.iface.readline()
             if len(r) > 0:
                 reread = True
             else:
                 if self.lastWritten is not None:
-                    printd2('reread failed, repeating the command')
+                    printd('reread failed, repeating the command')
                     self.iface.write(self.lastWritten)
                     self.iface.write(cmd)
                     r = self.iface.readline()
@@ -252,7 +243,7 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
                         printe('rewriting failed')
                         r = 0
                     else:
-                        printd2('rewrite ok:'+str(r))
+                        printd('rewrite ok:'+str(r))
         # we may get \x8d at the end, strip it out
         line = r[:-1]
         try:
@@ -261,7 +252,7 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
             printe('float conversion of "'+str(line)+'"')
             v = []
         if reread:
-            printd2('reread OK:'+str(v))
+            printd('reread OK:'+str(v))
         #self.iface.write(cmd)# request new data
         return v
 
@@ -289,7 +280,7 @@ class Mgr(Device):
         'guessMode':  LDO('W',('Guess of fit parameters, manually provided'\
         ' or automatic'),['Auto'], legalValues=['Auto','Fixed']),
         'peakPosMode':LDO('W','Peak position treatment: Auto/Fixed'\
-        , legalValues=['Auto','Fixed']),
+        , ['Auto'], legalValues=['Auto','Fixed']),
         'localStimulus':LDO('W','Enable local stimulus on X5 output'\
         , ['Triangular'], legalValues=['Disabled','Triangular','Sawtooth']),
         'analysis':   LDO('W','Enable/disable analysis',['Off']\
@@ -363,7 +354,7 @@ class Mgr(Device):
         stimul = []
         for swing in (0,1):
             stimul.append(self.generate_localStimulus(swing))
-        stimul = np.array(stimul)
+        #stimul = np.array(stimul)
         print('stimulus: '+str(stimul))
         
         print('State machine started')
@@ -380,7 +371,7 @@ class Mgr(Device):
             ts = timer()
             npoints = 0
             for swing in (0,1):
-                self.stimulus.v = stimul[swing]
+                self.stimulus.v = stimul[swing]#.tolist()#TODO handle array properly
                 self.stimulus.t = time.time()
                 npoints += len(self.stimulus.v)
                 for i,x in enumerate(self.stimulus.v):
@@ -394,7 +385,8 @@ class Mgr(Device):
                 if ar.shape[0] < 20:
                     print('too few points')
                     continue
-                self.analyze(ar)
+                fp = self.analyze(ar)
+                self.fittedParsM.v = fp
             dt = timer() - ts
             print('cycle time: %.4fs, %.1f p/s'%(dt,npoints/dt))
 
@@ -423,8 +415,8 @@ class Mgr(Device):
         left,right = self.cropBorders
         xr = ar[left:-right,0]
         yr = ar[left:-right,1]
-        print('xr:'+repr(xr))
-        print('yr:'+repr(yr))
+        printd('xr:'+repr(xr))
+        printd('yr:'+repr(yr))
         
         #````````````````````find peaks
         try: # smooth data slightly for peak finding
@@ -509,6 +501,8 @@ class Mgr(Device):
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('-d','--dbg', action='store_true', help='Debugging mode')
+parser.add_argument('serdev', nargs='?', default='/dev/ttyUSB0'\
+,help='Serial device')
 pargs = parser.parse_args()
 
 liteServer.Server.Dbg = pargs.dbg

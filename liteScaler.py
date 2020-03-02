@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
 #__version__ = 'v20a 2020-02-21'# liteServer-rev3
-__version__ = 'v21 2020-02-29'# command, pause, moved to server
+#__version__ = 'v21 2020-02-29'# command, pause, moved to server
+__version__ = 'v21 2020-03-02'# numpy array unpacked 
  
 import sys, time, threading
 import numpy as np
@@ -47,7 +48,7 @@ class Scaler(Device):
                         ,opLimits=(0,10)),
           'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
-          'image':      LDO('R','Image',[img]),
+          'image':      LDO('R','Image',img),
           'coordinate': LDO('RW','Just 2-component vector for testing'\
                         ,[0.,1.]),
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
@@ -92,7 +93,7 @@ class Scaler(Device):
             #self.image.v[0] = (self.image.v[0] + 1).astype('uint8')
 
             # change only one pixel            
-            self.image.v[0][0,0,0] = self._cycle
+            self.image.v[0,0,0] = self._cycle
             self.image.t = time.time()
             self._cycle += 1
         print('Scaler '+self._name+' exit')
