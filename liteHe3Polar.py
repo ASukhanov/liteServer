@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """liteServer for He3 Polarization Measurements"""
 #__version__ = 'v01 2020-02-24'# adopted from he3PolarMan
-__version__ = 'v02 2020-02-29'# 
+__version__ = 'v02 2020-03-01'# 
 
 import sys
 import time
@@ -72,7 +72,8 @@ FGX = [RankBckg+1,RankBckg+4]# fitGuess index of X0,1
 FGS = [RankBckg+2,RankBckg+5]# fitGuess index of Sigma0,1
 FGY = [RankBckg+3,RankBckg+6]# fitGuess index of Y0,1
 #          base, X0,  S0,  Y0,    X1,  S1,  Y1,
-simulPars = [0.0, 0.0, 0.2, 0.002, 0.0, 0.2, 0.002] # guess parameters
+guessPars = [0.0, 0.0, 0.2, 0.002, 0.0, 0.2, 0.002] # guess parameters
+simulPars = [0.0, 1.0, 0.2, 0.002, 2.0, 0.2, 0.002] # simulation parameters
 #fitBounds = [[-np.inf,np.inf]*len(fitGuess)]
 
 def peak_shape(xx, halfWidth):
@@ -115,15 +116,40 @@ def read_wavelength_meter():
 '''
 #````````````````````````````Device interface`````````````````````````````````
 import serial # RS232 interface
+class ReadLine:
+    def __init__(self, s):
+        self.buf = bytearray()
+        self.s = s
+
+    def readline(self):
+        i = self.buf.find(b"\n")
+        if i >= 0:
+            r = self.buf[:i+1]
+            self.buf = self.buf[i+1:]
+            return r
+        while True:
+            i = max(1, min(2048, self.s.in_waiting))
+            data = self.s.read(i)
+            i = data.find(b"\n")
+            if i >= 0:
+                r = self.buf + data[:i+1]
+                self.buf[0:] = data[i+1:]
+                return r
+            else:
+                self.buf.extend(data)
 class Interface():
     def open(self):
-        rt = 0.04 # 0.2 have the same issues
-        self.ser = serial.Serial('/dev/ttyS0', 19200, timeout=rt,\
-          stopbits = serial.STOPBITS_TWO, #inter_byte_timeout=0.1,
-          xonxoff=False, rtscts=True, dsrdtr=True)
-        print(self.ser.name+', '+str(self.ser.bytesize)\
+        #rt = 0.04 # 0.2 have the same issues
+        rt = 0.04
+        baud = 19200 #115200, strangely read speed does not depend on this and stays at 62p/s
+        #baud = 115200#strangely read speed does not depend on this and stays at 62p/s
+        self.ser = serial.Serial('/dev/ttyUSB0', baud, timeout=rt,\
+        #  stopbits = serial.STOPBITS_TWO, #inter_byte_timeout=0.1,
+        #  xonxoff=False, rtscts=True, dsrdtr=True
+          )
+        print('Interface open: '+self.ser.name+', '+str(self.ser.bytesize)\
           +', '+str(self.ser.stopbits)+', timeout:'+str(self.ser.timeout))
-        self.connected = False
+        self.rl = ReadLine(self.ser)
 
     def close(self):
         self.ser.close()
@@ -134,20 +160,23 @@ class Interface():
 
     def write(self,data):
         #self.printRts()
-        printd1('serial: writing:'+str(data))
         encoded = (data+'\r\n').encode()
         self.ser.write(encoded)
 
     def readline(self):
         #self.printRts()
         try:
-            r = self.ser.readline()
+            #r = self.ser.readline()
+            r = self.ser.read_until()# same as readline, io.ioBASE is not involved
+            #r = self.rl.readline()
+            #r = '0.'; 
+            #self.ser.reset_output_buffer()
         except Exception as e:
             printe('SRS: in readline:'+str(e))
-            return ''
+            return '0.'
         #print('serial: reading:\n'+str(r))
         if len(r) < 2:
-            printd2('No response from SRS:'+str(r))
+            print('No response from SRS:'+str(r))
         return r
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Hardware abstraction`````````````````````````````
@@ -156,17 +185,25 @@ class Plant():
     All methods, except state_machine should be overridded by derived classes.
     """
     def __init__(self):
-        self.data = None
-        self.timestamp = None
+        self.iface = Interface()
+        self.iface.open();
 
     def send_value(self,value):
-        y = func_sum_of_peaks([value], simulPars)
+        self.lastWritten = value
+        #self.iface.write(str(value))
+        #return
+        y = func_sum_of_peaks(np.array([value]), *simulPars)
         # add 10% of noise
         y += 0.1*simulPars[FGY[0]]*np.random.random()
-        self.v = round(float(y[0]),9)
+        w = round(float(y[0]),9)
+        #print('written '+str(w))
+        self.iface.write(str(w))
         
     def read_back(self):
-        return self.v
+        r = self.iface.readline()
+        fr = float(r)
+        #print('read_back: '+str(fr))        
+        return fr
 
 #````````````````````````````Hardware specific````````````````````````````````
 class Plant_SRS_Lock_In_AMplifier(Plant):
@@ -248,7 +285,7 @@ class Mgr(Device):
         'devReply':   LDO('R','Reply from Lock-In Amplifier', ['']),
         #'perf':       LDO('R','Performance counters', [0]*5),
         'guess':      LDO('W',('Guess of fit parameters: base, stimulus'\
-        ' value, sigma, amplitude of two peaks'), simulPars),
+        ' value, sigma, amplitude of two peaks'), guessPars),
         'guessMode':  LDO('W',('Guess of fit parameters, manually provided'\
         ' or automatic'),['Auto'], legalValues=['Auto','Fixed']),
         'peakPosMode':LDO('W','Peak position treatment: Auto/Fixed'\
@@ -260,6 +297,9 @@ class Mgr(Device):
         'polarMeasure':LDO('W','Reference,Hold,Polarization',['Reference']\
         , legalValues=['Reference','Hold','Polarization']),
         'polarRef':   LDO('R','Polarization reference',[0.]),
+        'polarM':     LDO('R','Measured polarization',[0.]),
+        'fittedParsM': LDO('R',('Fitted parameters: base, pos, sigma, amp'\
+           ' of two peaks'),[0.]*len(guessPars)),
         #'waveMeter':  LDO('W','',['Disabled']\
         #, legalValues=['Disabled','Enabled']),
         #'frequency':  LDO('R','Frequency from remote WLM',[0.]),
@@ -301,13 +341,12 @@ class Mgr(Device):
         
         self.signS = self.add_par('signS','StringType',1,0,
           ampy.CNSF_D | ampy.CNSF_ARCHIVE,'Positive')
-        self.signS.add('legalValues', 'Positive,Negative')
-        
-        self.averBox = np.ones(4)/4.# averaging box
-        
-        self.cropBorders = (10,5)# remove number of points at the (beginning,end) from analysis
+        self.signS.add('legalValues', 'Positive,Negative')        
         }
         '''
+        self.averBox = np.ones(4)/4.# averaging box
+        self.cropBorders = (1,1)# remove number of points at the (beginning,end) from analysis
+
         super().__init__(name,pars)
         
         self.plant = Plant()
@@ -321,6 +360,11 @@ class Mgr(Device):
     def _state_machine(self):
         time.sleep(.2)# give time for server to startup
         self._cycle = 0
+        stimul = []
+        for swing in (0,1):
+            stimul.append(self.generate_localStimulus(swing))
+        stimul = np.array(stimul)
+        print('stimulus: '+str(stimul))
         
         print('State machine started')
         while not EventExit.is_set():
@@ -333,17 +377,27 @@ class Mgr(Device):
                 self.setServerStatusText('Cycle %i on '%self._cycle+self._name)
             self._cycle += 1
 
-            for backward in (0,1):
-                self.stimulus.v = self.generate_localStimulus(backward)
+            ts = timer()
+            npoints = 0
+            for swing in (0,1):
+                self.stimulus.v = stimul[swing]
                 self.stimulus.t = time.time()
-
+                npoints += len(self.stimulus.v)
                 for i,x in enumerate(self.stimulus.v):
                     self.plant.send_value(x)
+                    #y = 0.
                     y = self.plant.read_back()
+                    #print('readback: '+str(y))
                     self.response.v[i] = y
                 self.response.t = time.time()
-                    
-                EventExit.wait(self.sleep.v[0])
+                ar = np.stack([self.stimulus.v,self.response.v],-1)
+                if ar.shape[0] < 20:
+                    print('too few points')
+                    continue
+                self.analyze(ar)
+            dt = timer() - ts
+            print('cycle time: %.4fs, %.1f p/s'%(dt,npoints/dt))
+
         print('state_machine'+self._name+' exit')
 
     def generate_localStimulus(self,backward):
@@ -364,271 +418,13 @@ class Mgr(Device):
                 x = np.linspace(rng[1], rng[0], 3)
         return [round(float(i),3) for i in x[:nPoints]]
 
-        '''
-            if self.localStimulS.value.value != 'Disabled':
-                v = self.rampForm[self.rampPtr]
-                self.plant.send_value(v,'stimulGenS')
-                self.rampPtr += 1
-                if self.rampPtr >= len(self.rampForm):
-                    self.rampFinished = True
-                    self.rampPtr = 0
-                self.update_par(self.par['stimulGenS'],v)
-                
-            # all updated parameters will have this timestamp
-            self.timestamp = time.time()
-
-            #self.event.wait(self.sleepS.value.value)
-            self.eventExit.wait(self.sleepS.value.value)
-            if self.eventExit.isSet():
-                break
-            
-            # read the lock-in amplifier data
-            self.data = self.plant.get_data()
-            
-            # read the laser wavemeter
-            if self.waveMeterS.value.value == 'Enabled':
-                ts = timer()
-                r = read_wavelength_meter()
-                self.update_par(self.wlmRoundTripTimeM,timer()-ts)
-                if len(r) == 0:
-                    if not wlmReported:
-                        wlmReported = True
-                        self.update_par(self.adoStatus,'ERR: No waivemeter data')
-                else:
-                    if wlmReported:
-                        wlmReported = False
-                        self.update_par(self.adoStatus,'Wavemeter is back')
-                    wlmTs,self.frequencyM.value.value = r
-                    self.wlmTDiffM.value.value = wlmTs - time.time()
-                    #print('wlm',self.frequencyM.value.value,self.wlmTDiffM.value.value)
-                    self.update_par(self.frequencyM)
-                    self.update_par(self.wlmTDiffM)
-
-            # process data
-            if len(self.data):
-                self.process_data()
-            EventExit.wait(self.sleep.v[0])
-            if self._pause:
-                continue
-            '''
-    '''
-    def periodic_update(self):
-        printd1('sm stopped='+str(self.stopped)+', event:'+str(self.event.is_set()))
-
-    def run_startx(self):
-        print('>startx')
-        try:
-            self.plant
-        except:
-            # 
-            self.plant = Plant_SRS_Lock_In_AMplifier()
-            stateMachineThread = threading.Thread(target=self.stateMachine)
-            try:
-                stateMachineThread.start()
-            except Exception as e:
-                printe('stateMachine:'+str(e))
-            print('plant:',self.plant)
-            return
-        printe('plant already exist')
-        return
-
-    def run_stopx(self):
-        printi('>stopx')
-        #self.event.set()
-        try:
-            del self.plant
-        except:
-            printe('deleting plant')
-        self.update_par(self.adoStatus,'Run stopped, RS232 closed')
-    
-    #````````````````````````Set methods``````````````````````````````````````
-    def devCommandS_set(self,*args):
-        if not self.stopped:# we need idle the state machine during command execution
-            printi('idle the state machine for a second')
-            self.idle = True
-            time.sleep(.5)
-        self.plant.readline()# to purge a buffer
-        r = self.plant.execute_command(self.devCommandS.value.value)
-        if self.idle:
-            self.idle = False
-            printi('un-idle the state machine')            
-        self.update_par(self.devReplyM,str(r.split()))
-        return 0
-        
-        
-    def polarS_set(self,*args):
-        if self.polarS.value.value == 'Reference':
-            lsw = len(self.ratioSlidingWindow)
-            self.ratioSlidingWindow = np.zeros(lsw)
-            self.update_par(self.polarRefM,0.)
-            for par in self.polarM:
-                self.update_par(par,0.)
-        self.update_par(self.cycleNM,0)
-        return 0
-    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-    #````````````````````````State machine````````````````````````````````````
-    def stateMachine(self):
-        """ The manager's state machine"""
-        print('state machine started')
-        wlmReported = False
-        self.rampFinished = False
-        self.halfRampCrossed = False
-        while not self.eventExit.isSet():
-            if self.stopped:
-                break
-            if self.idle:
-                self.eventExit.wait(1)
-                continue
-
-            # change stimulus
-            if self.localStimulS.value.value != 'Disabled':
-                v = self.rampForm[self.rampPtr]
-                self.plant.send_value(v,'stimulGenS')
-                self.rampPtr += 1
-                if self.rampPtr >= len(self.rampForm):
-                    self.rampFinished = True
-                    self.rampPtr = 0
-                self.update_par(self.par['stimulGenS'],v)
-                
-            # all updated parameters will have this timestamp
-            self.timestamp = time.time()
-
-            #self.event.wait(self.sleepS.value.value)
-            self.eventExit.wait(self.sleepS.value.value)
-            if self.eventExit.isSet():
-                break
-            
-            # read the lock-in amplifier data
-            self.data = self.plant.get_data()
-            
-            # read the laser wavemeter
-            if self.waveMeterS.value.value == 'Enabled':
-                ts = timer()
-                r = read_wavelength_meter()
-                self.update_par(self.wlmRoundTripTimeM,timer()-ts)
-                if len(r) == 0:
-                    if not wlmReported:
-                        wlmReported = True
-                        self.update_par(self.adoStatus,'ERR: No waivemeter data')
-                else:
-                    if wlmReported:
-                        wlmReported = False
-                        self.update_par(self.adoStatus,'Wavemeter is back')
-                    wlmTs,self.frequencyM.value.value = r
-                    self.wlmTDiffM.value.value = wlmTs - time.time()
-                    #print('wlm',self.frequencyM.value.value,self.wlmTDiffM.value.value)
-                    self.update_par(self.frequencyM)
-                    self.update_par(self.wlmTDiffM)
-
-            # process data
-            if len(self.data):
-                self.process_data()
-                                
-        printi('state machine stopped')
-    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-    #````````````````````````Data processing methods``````````````````````````
-    def ramp_is_finished(self):
-        if self.rampFinished:
-            self.rampFinished = False
-            self.halfRampCrossed = False
-            return True
-        elif not self.halfRampCrossed and self.rampPtr >= self.halfRamp:
-            self.halfRampCrossed = True
-            return True
-        return False
-
-    def process_data(self):
-        printd1('processing: '+str(self.data))
-        for i,val in enumerate(self.data):
-            if InputChannels[i] == 'responseM':
-                val = val * self.responseScaleS.value.value
-            self.update_par(self.par[InputChannels[i]],val)
-        rampV = self.par[AnalysisChannels['x']].value.value
-        y = self.par[AnalysisChannels['y']].value.value
-        
-        # check if data OK for analysis
-        if self.analysiS.value.value != 'On':
-            self.anList = [[],[]]
-            self.cycleNM.value.value = 0
-            return
-            
-        # fill the analysis arrays
-        i = 0
-        if self.waveMeterS.value.value == 'Enabled':
-            self.anList[0].append((self.frequencyM.value.value,y))
-            i = 1
-        self.anList[i].append((rampV,y))
-
-        if not self.ramp_is_finished():
-            return
-        # ramp is finished, disregard the first sweep
-        if self.cycleNM.value.value <= 0:
-            self.cycleNM.value.value = 1
-            return
-        if len(self.anList[0]) < 10:
-            printw('Too few points in the ramp: %d'%len(self.anList[0]))
-            return
-        
-        # data are OK for analysis
-        print('ramp Point:%d'%self.rampPtr+', analysis list:%d'%len(self.anList[0]))
-        #for iFit in range(2): # Nobody interested in second analysis
-        for iFit in range(1):
-            if len(self.anList[iFit]) == 0:
-                continue
-            
-            if self.waveMeterS.value.value == 'Enabled' and iFit == 0:     
-                # expected peak width in frequency domain is 0.02 (THz)
-                for i in FGS:
-                   self.fitGuess[i] = 0.0015
-            else:
-                # expected peak width in stimulus domain is 0.2V
-                for i in FGS:
-                    try:
-                        self.fitGuess[i] = 0.2
-                    except:
-                        printe('changing self.fitGuess:',self.fitGuess)
-                        continue
-                
-            fp = self.analyze(np.array(self.anList[iFit]))
-            if len(fp) == 0:
-                continue
-            #````````````````````update all parameters
-            self.update_par(self.fittedParsM[iFit],fp)
-            ratio = fp[3]/fp[6]
-            self.update_par(self.ratioM[iFit],ratio)
-            #if iFit == 0:
-            if self.polarS.value.value == 'Polarization':
-                # update polarization
-                r0 = self.polarRefM.value.value
-                #polar = abs((ratio - r0))/(ratio + r0)*100.
-                try:
-                    sign = {'Positive':1.,'Negative':-1.}[self.signS.value.value]
-                except Exception as e:
-                    printe('in sign:'+str(e))
-                    sign = 1.
-                polar = sign*(ratio - r0)/(ratio + r0)*100.
-                self.update_par(self.polarM[iFit],polar)
-            elif self.polarS.value.value == 'Reference':
-                if iFit == 0:
-                    # accumulate reference
-                    sw = self.ratioSlidingWindow
-                    sw[:-1] = sw[1:]
-                    sw[-1] = ratio
-                    self.update_par(self.polarRefM,sw.sum()/np.count_nonzero(sw))            
-            
-        self.anList = [[],[]]
-        self.cycleNM.value.value +=1
-        self.update_par(self.cycleNM)
-        print('cycle:%d'%self.cycleNM.value.value)      
-        #EventPocessingFinished.set()        
-                
     def analyze(self,ar):
         #print('>analysis of %d points'%len(ar)+', shape:'+str(ar.shape))
         left,right = self.cropBorders
         xr = ar[left:-right,0]
         yr = ar[left:-right,1]
-        printd('xr:'+repr(xr))
-        printd('yr:'+repr(yr))
+        print('xr:'+repr(xr))
+        print('yr:'+repr(yr))
         
         #````````````````````find peaks
         try: # smooth data slightly for peak finding
@@ -663,34 +459,33 @@ class Mgr(Device):
         printd('x,y, 2h:'+repr((xr2h,yr2h)))
         
         # adjust guess peak positions
-        if self.guessModeS.value.value == 'Auto':
+        fitGuess = self.guess.v
+        if self.guessMode.v[0] == 'Auto':
             for ip in range(NPeaks):
-               self.fitGuess[FGX[ip]] = xr2h[ip]
-               self.fitGuess[FGY[ip]] = yr2h[ip]
-            self.update_par(self.guessS,self.fitGuess)
-        else:
-            self.fitGuess = list(self.guessS.value.value)
-        print('fg :'+''.join(['%.5f, '%i for i in self.fitGuess]))
+               fitGuess[FGX[ip]] = xr2h[ip]
+               fitGuess[FGY[ip]] = yr2h[ip]
+            self.guess.v = fitGuess
+        print('fg :'+''.join(['%.5f, '%i for i in fitGuess]))
         
         #````````````````````Fit with base and two gaussian
         try:
-            if self.peakPositionS.value.value == 'Auto':
-                fp,pcov = curve_fit(func_sum_of_peaks,xr,yr,self.fitGuess)
+            if self.peakPosMode.v[0] == 'Auto':
+                fp,pcov = curve_fit(func_sum_of_peaks,xr,yr,fitGuess)
                 relStdevs = np.sqrt(np.diag(pcov))/abs(fp)
             else:
                 # Fix parameters.
-                # remove parameters from function and self.fitGuess
+                # remove parameters from function and fitGuess
                 # reduced guess:
-                fgr = [i for i in self.fitGuess if self.fitGuess.index(i) not in FGX]
+                fgr = [i for i in fitGuess if fitGuess.index(i) not in FGX]
                 # reduced function, assuming RankBckg=1
                 fpr,pcov = curve_fit(lambda x,p0,p2,p3,p5,p6:\
-                  func_sum_of_peaks(x,p0,self.fitGuess[1],p2,p3,self.fitGuess[4],p5,p6),
+                  func_sum_of_peaks(x,p0,fitGuess[1],p2,p3,fitGuess[4],p5,p6),
                   xr,yr,fgr)
                 relStdevs = list(np.sqrt(np.diag(pcov))/abs(fpr))
                 # inflate the fp with fixed parameters
                 fp = list(fpr)
-                fp.insert(FGX[0],self.fitGuess[FGX[0]])
-                fp.insert(FGX[1],self.fitGuess[FGX[1]])
+                fp.insert(FGX[0],fitGuess[FGX[0]])
+                fp.insert(FGX[1],fitGuess[FGX[1]])
                 # the same with relStdevs
                 relStdevs.insert(FGX[0],0.)
                 relStdevs.insert(FGX[1],0.)
@@ -709,10 +504,6 @@ class Mgr(Device):
                 printw('High standard deviation of parameter '+str(badParIdx))
                 return []
         return fp
-        
-        #yf = func_sum_of_peaks(xr,*fp)
-        #self.plotDataItems['Fit'].setData(xr,yf,pen='r',symbol=None)
-    '''
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Program``````````````````````````````````````````
 import argparse
