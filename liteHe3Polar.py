@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """liteServer for He3 Polarization Measurements"""
 #__version__ = 'v01 2020-02-24'# adopted from he3PolarMan
-__version__ = 'v02 2020-03-01'# serial dev argument
+#__version__ = 'v02 2020-03-01'# serial dev argument
+__version__ = 'v03 2020-03-03'# tested with SRS510, 17p/s
 
 import sys
 import time
@@ -20,34 +21,16 @@ mgr = None
 eventData = []
 
 #````````````````````````````Readout channels`````````````````````````````````
-'''
 # List of all available channels in hardware (not all of them will be posted)
 gDataSets = OrderedDict([
-  ('responseM', {'cmd':'Q',  'features':ampy.CNSF_R,
-    'desc':'Output of the Lock-In Amplifier [V]'}),
-  ('ADC0M',     {'cmd':'X1', 'features':ampy.CNSF_R,  
-    'desc':'ADC0 (backplane X1) input [V]'}),
-  ('stimulusM', {'cmd':'X2', 'features':ampy.CNSF_R,
-    'desc':'Applied to change laser frequency, (backplane X2 [V]'}),
-  ('ADC2M',     {'cmd':'X3', 'features':ampy.CNSF_R,
-    'desc':'ADC2 (backplane X3) input [V]'}),
-  ('ADC3M',     {'cmd':'X4', 'features':ampy.CNSF_R,
-    'desc':'ADC3 (backplane X4) input [V]'}),
-  ('stimulGenS',     {'cmd':'X5', 'features':ampy.CNSF_RWE,
-    'desc':'DAC output on backpLane X5, Internally generated stimulus'}),
-  ('DAC1S',     {'cmd':'X6', 'features':ampy.CNSF_RWE,
-    'desc':'DAC output on backpLane X6 [V]'}),
+  ('responseM', {'cmd':'Q','desc':'Output of the Lock-In Amplifier [V]'}),
+  ('ADC0M',     {'cmd':'X1','desc':'ADC0 (backplane X1) input [V]'}),
+  ('stimulusM', {'cmd':'X2','desc':'Applied to change laser frequency, (backplane X2 [V]'}),
+  ('ADC2M',     {'cmd':'X3','desc':'ADC2 (backplane X3) input [V]'}),
+  ('ADC3M',     {'cmd':'X4','desc':'ADC3 (backplane X4) input [V]'}),
+  ('stimulGenS',     {'cmd':'X5','desc':'DAC output on backpLane X5, Internally generated stimulus'}),
+  ('DAC1S',     {'cmd':'X6','desc':'DAC output on backpLane X6 [V]'}),
 ])
-
-# ADO-served parameters
-AnalysisChannels = {'x':'stimulGenS','y':'responseM'}
-#InputChannels = ['responseM','stimulusM']
-InputChannels = ['responseM',]
-OutputChannels = ['stimulGenS']#,'DAC1S']
-
-#````````````````````````````Necessary explicit globals```````````````````````
-pargs = None# program arguments
-'''
 #````````````````````````````Helper functions and classes`````````````````````
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
@@ -58,7 +41,7 @@ def printd(msg):
 #````````````````````````````For fitting``````````````````````````````````````
 from scipy.optimize import curve_fit
 NPeaks = 2 
-RankBckg = 0 # rank of the baseline polinom, 0: constant, 1:linear, 2: not recommended 
+RankBckg = 0 # rank of the baseline polynome, 0: constant, 1:linear, 2: not recommended 
 FGX = [RankBckg+1,RankBckg+4]# fitGuess index of X0,1
 FGS = [RankBckg+2,RankBckg+5]# fitGuess index of Sigma0,1
 FGY = [RankBckg+3,RankBckg+6]# fitGuess index of Y0,1
@@ -135,8 +118,8 @@ class Interface():
         baud = 19200 #115200, strangely read speed does not depend on this and stays at 62p/s
         #baud = 115200#strangely read speed does not depend on this and stays at 62p/s
         self.ser = serial.Serial(pargs.serdev, baud, timeout=rt,\
-        #  stopbits = serial.STOPBITS_TWO, #inter_byte_timeout=0.1,
-        #  xonxoff=False, rtscts=True, dsrdtr=True
+          stopbits = serial.STOPBITS_TWO, #inter_byte_timeout=0.1,
+          xonxoff=False, rtscts=True, dsrdtr=True
           )
         print('Interface open: '+self.ser.name+', '+str(self.ser.bytesize)\
           +', '+str(self.ser.stopbits)+', timeout:'+str(self.ser.timeout))
@@ -203,7 +186,7 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
         #super(Plant_SRS_Lock_In_AMplifier, self).__init__()
         print('initializing SRS_Lock_In_AMplifier')
         self.iface = Interface()
-        self.iface.open();
+        self.iface.open()
         self.lastWritten = None
         
         r = self.iface.readline()
@@ -218,8 +201,9 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
     def send_value(self,value,channel='stimulGenS'):
         self.lastWritten = gDataSets[channel]['cmd']+',%.3f'%value
         self.iface.write(self.lastWritten)
+        #print('lastWritten: '+str(self.lastWritten))
         
-    def readBack(self,channels=('ADC0',)):
+    def read_back(self,channels=('responseM',)):
         """ Read several channels, [1,2,3] translates to 'X1;X2;X3'
         returns list of values."""
         cmd = ';'.join([gDataSets[i]['cmd'] for i in channels])
@@ -228,7 +212,7 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
         #print('cmd,readline',cmd,r)
         reread = False
         if len(r) == 0:
-            printd('rereading '+cmd+', last written: '+str(self.lastWritten))
+            print('rereading '+cmd+', last written: '+str(self.lastWritten))
             self.iface.write(cmd)
             r = self.iface.readline()
             if len(r) > 0:
@@ -241,13 +225,14 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
                     r = self.iface.readline()
                     if len(r) == 0:
                         printe('rewriting failed')
-                        r = 0
+                        r = [0]
                     else:
                         printd('rewrite ok:'+str(r))
         # we may get \x8d at the end, strip it out
         line = r[:-1]
         try:
-            v = [float(i) for i in line.split()] 
+            #v = [float(i) for i in line.split()]
+            v = float(line)
         except Exception as e:
             printe('float conversion of "'+str(line)+'"')
             v = []
@@ -257,7 +242,7 @@ class Plant_SRS_Lock_In_AMplifier(Plant):
         return v
 
     def execute_command(self,cmd):
-        printd('executing "'+str(cmd)+'"')
+        print('executing "'+str(cmd)+'"')
         self.iface.write(cmd)
         return self.iface.readline()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -270,7 +255,7 @@ class Mgr(Device):
         'sleep':      LDO('W','Delay between cycles [s]', [1.]),
         'stimulus':   LDO('RW','Applied signal', [0.]*nPoints),
         'stimulRange':LDO('RW','Lower and upper limits of the local stimulus'\
-        , [.0, 3.]),
+        , [.0, 2.5]),
         'response':   LDO('R','Response', [0.]*nPoints),
         'devCommand': LDO('W','Command to Lock-In Amplifier', ['X5']),
         'devReply':   LDO('R','Reply from Lock-In Amplifier', ['']),
@@ -289,8 +274,9 @@ class Mgr(Device):
         , legalValues=['Reference','Hold','Polarization']),
         'polarRef':   LDO('R','Polarization reference',[0.]),
         'polarM':     LDO('R','Measured polarization',[0.]),
-        'fittedParsM': LDO('R',('Fitted parameters: base, pos, sigma, amp'\
+        'fittedPars': LDO('R',('Fitted parameters: base, pos, sigma, amp'\
            ' of two peaks'),[0.]*len(guessPars)),
+        'fittedData':  LDO('R','Fitted data',[0.]*nPoints),
         #'waveMeter':  LDO('W','',['Disabled']\
         #, legalValues=['Disabled','Enabled']),
         #'frequency':  LDO('R','Frequency from remote WLM',[0.]),
@@ -340,7 +326,8 @@ class Mgr(Device):
 
         super().__init__(name,pars)
         
-        self.plant = Plant()
+        #self.plant = Plant()
+        self.plant = Plant_SRS_Lock_In_AMplifier()
         
         #print('n,p',self._name,pars)
         thread = threading.Thread(target=self._state_machine)
@@ -355,7 +342,7 @@ class Mgr(Device):
         for swing in (0,1):
             stimul.append(self.generate_localStimulus(swing))
         #stimul = np.array(stimul)
-        print('stimulus: '+str(stimul))
+        #print('stimulus: '+str(stimul))
         
         print('State machine started')
         while not EventExit.is_set():
@@ -371,8 +358,7 @@ class Mgr(Device):
             ts = timer()
             npoints = 0
             for swing in (0,1):
-                self.stimulus.v = stimul[swing]#.tolist()#TODO handle array properly
-                self.stimulus.t = time.time()
+                self.stimulus.v = stimul[swing]#.tolist() tolist is not needed anymore
                 npoints += len(self.stimulus.v)
                 for i,x in enumerate(self.stimulus.v):
                     self.plant.send_value(x)
@@ -380,13 +366,28 @@ class Mgr(Device):
                     y = self.plant.read_back()
                     #print('readback: '+str(y))
                     self.response.v[i] = y
-                self.response.t = time.time()
+                #print('stimul[%i]\n'%len(self.stimulus.v)+str(self.stimulus.v))
+                #print('response[%i]\n'%len(self.response.v)+str(self.response.v))
                 ar = np.stack([self.stimulus.v,self.response.v],-1)
                 if ar.shape[0] < 20:
                     print('too few points')
                     continue
+
                 fp = self.analyze(ar)
-                self.fittedParsM.v = fp
+                if len(fp) == 0:
+                    continue
+                self.fittedPars.v = fp#.tolist()
+
+                fd = func_sum_of_peaks(self.stimulus.v,*fp)
+                #print('fd',fd)
+                self.fittedData.v = fd#.tolist()
+                
+                timestamp = time.time()
+                self.stimulus.t = timestamp
+                self.response.t = timestamp
+                self.fittedPars.t = timestamp
+                self.fittedData.t = timestamp
+
             dt = timer() - ts
             print('cycle time: %.4fs, %.1f p/s'%(dt,npoints/dt))
 
