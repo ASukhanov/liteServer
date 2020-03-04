@@ -2,7 +2,8 @@
 """Example of user-defined Lite Data Objects"""
 #__version__ = 'v20a 2020-02-21'# liteServer-rev3
 #__version__ = 'v21 2020-02-29'# command, pause, moved to server
-__version__ = 'v21 2020-03-02'# numpy array unpacked 
+#__version__ = 'v21 2020-03-02'# numpy array unpacked
+__version__ = 'v22 2020-03-03'# coordinate is numpy (for testing) 
  
 import sys, time, threading
 import numpy as np
@@ -49,8 +50,8 @@ class Scaler(Device):
           'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
           'image':      LDO('R','Image',img),
-          'coordinate': LDO('RW','Just 2-component vector for testing'\
-                        ,[0.,1.]),
+          'coordinate': LDO('RW','Just 2-component numpy vector for testing'\
+                        ,np.array([0.,1.]).astype('float32')),# 
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
         }
         super().__init__(name,pars)
