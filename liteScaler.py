@@ -51,7 +51,7 @@ class Scaler(Device):
                         ,setter=self.reset),
           'image':      LDO('R','Image',img),
           'coordinate': LDO('RW','Just 2-component numpy vector for testing'\
-                        ,np.array([0.,1.]).astype('float32')),# 
+                        ,np.array([0.,1.]).astype('float32')),#
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
         }
         super().__init__(name,pars)
@@ -96,7 +96,13 @@ class Scaler(Device):
             # change only one pixel            
             self.image.v[0,0,0] = self._cycle
             self.image.t = time.time()
+     
             self._cycle += 1
+            
+            # publish image once per 10 cycles
+            if self._cycle % 10 == 0:
+                self.image.publish()
+            
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # parse arguments

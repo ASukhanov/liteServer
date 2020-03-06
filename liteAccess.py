@@ -14,7 +14,7 @@ pprint(LA.LdoPars([[['Scaler1','server'],'time']]).info())
 pprint(LA.LdoPars([[['Scaler1','server'],['time','perf']]]).info())
     #``````````````Get````````````````````````````````````````````````````````
     # simplified get: returns (value,timestamp) of a parameter (frequency)\
-    # from a ldo (scaler0.dev0). 
+    # from a ldo Scaler1,server. 
 pprint(LA.LdoPars([[['Scaler1','server'],'perf']]).value)
     # get single parameter from ldo scaler0.dev0, 
 pprint(LA.LdoPars([[['Scaler1','server'],'perf']]).get())
@@ -22,6 +22,8 @@ pprint(LA.LdoPars([[['Scaler1','server'],'perf']]).get())
 pprint(LA.LdoPars([[['Scaler1','server'],['time','perf']]]).get())
     # get multiple parameters from multiple ldos 
 pprint(LA.LdoPars([[['Scaler1','dev1'],['time','frequency']],[['Scaler1','dev2'],['time','command']]]).get())
+    # test for timeout, should timeout in 10s:
+LA.LdoPars([[['Scaler1','dev0'],'*']]).value
     #``````````````Read```````````````````````````````````````````````````````
     # get all readable parameters from an ldo
 print(LA.LdoPars([[['Scaler1','dev1'],'*']]).read())  
@@ -34,11 +36,13 @@ pprint(LA.LdoPars([[['Scaler1','dev1'],'frequency']]).value)
     # multiple set
 LA.LdoPars([[['Scaler1','dev1'],['frequency','coordinate']]]).set([8.,[3.,4.]])
 LA.LdoPars([[['Scaler1','dev1'],['frequency','coordinate']]]).get()
-    # test for timeout, should timeout in 10s:
-#LA.LdoPars(['scaler1.dev0','frequency']).value
+    #``````````````Subscribe``````````````````````````````````````````````````
+ldo = LA.LdoPars([[['localhost','dev1'],'image']])
+ldo.sunscribe()# it will print image data periodically
+ldo.unsubscribe()# cancel subscruption
 
-    #TODO: 
-#LA.LdoPars(['scaler0.dev0','frequency']).set(property=('oplimits',[-1,11])
+#``````````````````TODO``````````````````````````````````````````````````````` 
+#LA.LdoPars(['Scaler1.dev1','frequency']).set(property=('oplimits',[-1,11])
 #``````````````````Observations```````````````````````````````````````````````
     # Measured transaction time is 1.8ms for:
 LA.LdoPars([[['Scaler1','dev1'],['frequency','command']]]).get()
@@ -49,7 +53,8 @@ To enable debugging: LA.LdoPars.Dbg = True
 To enable transaction timing: LA.Channel.Perf = True  
 """
 #__version__ = 'v42 2020-02-21'# liteServer-rev3.
-__version__ = 'v43 2020-02-24'# noCNS, err nandling in retransmission 
+#__version__ = 'v43 2020-02-24'# noCNS, err nandling in retransmission
+__version__ = 'v44 2020-03-06'# subscription supported
 
 print('liteAccess '+__version__)
 
@@ -72,6 +77,10 @@ def printw(msg): print('LAWARNING: '+msg)
 def printe(msg): print('LAERROR: '+msg)
 def printd(msg):
     if LdoPars.Dbg: print('LADbg: '+msg)
+
+def testCallback(args):
+    print('>testCallback(%s)'%str(args))
+import threading
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -225,6 +234,8 @@ class Channel():
             # acknowledge the receiving
             self.sock.sendto(b'ACK', (self.sHost, self.sPort))
             printd('ACK sent to '+str((self.sHost, self.sPort)))
+            #self.sock.sendto(b'ACK', (self.sHost, self.sPort))
+            #printd('ACK2 sent to '+str((self.sHost, self.sPort)))
         else:
             if True:#try:
                 data = self.sock.recv(self.recvMax)
@@ -291,7 +302,7 @@ class Channel():
         self._sendDictio(dictio)
         return  self._recvDictio()
 
-    def _sendCmd(self,cmd,values):
+    def _sendCmd(self,cmd,values=None):
         import copy
         devParDict = self.devParDict
         printd('devParDict %s, name %s'%(str(devParDict),self.name))
@@ -407,9 +418,39 @@ class LdoPars(object): #inheritance from object is needed in python2 for propert
             raise RuntimeError(r)
         return r
 
-    #``````````````subscribtion request```````````````````````````````````````
-    def subscribe(self, callback):
+    #``````````````subscription request```````````````````````````````````````
+    def subscribe(self, callback=testCallback):
         """Calls the callback() each time the LdoPars changes"""
-        return 'Not implemented yet'
+        #return 'Not implemented yet'
+        thread = threading.Thread(target=self.subsThread, args = [callback])
+        thread.daemon = True
+        thread.start()
+
+    def unsubscribe(self):
+        channel = self.channels[0]
+        try:
+            channel.sock.settimeout(0.5)
+            channel._sendCmd('unsubscribe')
+        except: pass
+        #channel.sock.close()
+        self.subscriptionCancelled = True
+        
+    def subsThread(self,callback):
+        if len(self.channels) > 1:
+            raise NameError('subscription is supported only for single host;port')
+        channel = self.channels[0]
+        channel.sock.settimeout(None)# set the socket in blocking mode
+        channel._sendCmd('subscribe')
+        print('subscription thread started with callback '+str(callback))
+        #while channel.sock.fileno() >= 0:
+        self.subscriptionCancelled = False
+        while not self.subscriptionCancelled:
+            try:
+                r = channel._recvDictio()
+            except Exception as e:
+                printw('in subscription thread socket closed: '+str(e))
+                break
+            callback(r)
+        print('subscription thread finished')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 

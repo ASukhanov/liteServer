@@ -39,7 +39,9 @@ Known issues:
 #__version__ = 'v42 2020-02-25'# start command added
 #__version__ = 'v43 2020-02-27'# serverState and setServerStatusText
 #__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
-__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
+#__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
+#__version__ = 'v46 2020-03-04'# test for publishing
+__version__ = 'v47 2020-03-06'# Subscription OK
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -49,7 +51,6 @@ import socketserver as SocketServer# for python3
 from collections import OrderedDict as OD
 import array
 import ubjson
-#from pprint import pprint
 
 UDP = True
 ChunkSize = 60000
@@ -74,39 +75,6 @@ def ip_address():
     return [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
       for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
-perfMBytes = 0
-perfSeconds = 0
-perfSends = 0
-perfRetransmits = 0
-def _send_UDP(buf,socket,addr):
-    global perfMBytes, perfSeconds, perfSends
-    # send buffer via UDP socked, chopping it to smaller chunks
-    lbuf = len(buf)
-    #print('>_send_UDP %i bytes'%lbuf)
-    ts = timer()
-    nChunks = (lbuf-1)//ChunkSize + 1
-    # send chunks in backward order
-    for iChunk in range(nChunks-1,-1,-1):
-        chunk = buf[iChunk*ChunkSize:min((iChunk+1)*ChunkSize,lbuf)]
-        prefixInt = iChunk*ChunkSize
-        #print('pi',prefixInt)
-        prefixBytes = (prefixInt).to_bytes(PrefixLength,'big')
-        prefixed = b''.join([prefixBytes,chunk])
-        #txt = str(chunk)
-        #if len(txt) > 100:
-        #    txt = txt[:100]+'...'
-        #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
-        socket.sendto(prefixed, addr)
-        time.sleep(ChunkSleep)
-    dt = timer()-ts
-    if lbuf > 1000:
-        mbytes = 1e-6*len(buf)
-        print('sent %i bytes, perf: %.1f MB/s'%(lbuf,mbytes/dt))
-        perfMBytes += mbytes
-        perfSeconds += dt
-        perfSends += 1
-        Device.server.perf.v = [perfSends, round(perfMBytes,3)\
-        ,round(perfMBytes/perfSeconds,1),perfRetransmits]
 #````````````````````````````Base Classes`````````````````````````````````````
 class Device():
     server = None# It will keep the server device after initialization
@@ -128,13 +96,6 @@ class Device():
             par = getattr(self,p)
             #setattr(par,'_name',p)
             par._name = p
-
-    #def set_par(self,par,val,t=time.time())
-    #    self.par.v[0] = val
-    #    self.par.t = t
-    #
-    #def get_par(self,par):
-    #    return self.par.v[0]
 
     def setServerStatusText(self,txt):
         Device.server.status.v[0] = txt
@@ -161,26 +122,19 @@ class LDO():
         self.features = features
         self.desc = desc
         self._parent = parent
-        
-        # if the parameter is numpy :
-        vv = value# [0]
-        try:    
-            shape,dtype = vv.shape, vv.dtype
-            printd('par is numpy')
-        except: 
-            pass
+        self._subscribers = {}
         
         # absorb optional properties
         self.opLimits = opLimits
         self.legalValues = legalValues
         self._setter = setter
-        #self.numpy = numpy# for numpy array it is: (shape,dtype)
         
     def __str__(self):
         print('LDO object desc: %s at %s'%(self.desc,id(self)))
 
     def update_value(self):
-        """Overridable getter"""
+        """It is called during get() and read() request to refresh the value.
+        """
         #printd('default get_values called for '+self._name)
         pass
 
@@ -226,136 +180,236 @@ class LDO():
         #print('self._setter of %s is %s'%(self._name,self._setter))
         if self._setter is not None:
             self._setter(self) # (self) is important!
-        
-    def subscribe(self,callback):
-        raise NotImplementedError('LDO.subscribe() is not implemented yet')
 
     def info(self):
         # list all members which are not None and not prefixed with '_'
         r = [i for i in vars(self) 
           if not (i.startswith('_') or getattr(self,i) is None)]
         return r
+
+    #````````````````````````Subscriptions````````````````````````````````````
+    def subscribe(self,clientAddr,socket,request):
+        """Register a new subscriber for this object""" 
+        printd('subscribe '+str(request))
+        if clientAddr in self._subscribers:
+            printw('subscriber %s is already subscribed  for '%str(clientAddr)\
+            + self._name)
+            return
+        self._subscribers[clientAddr] = socket,request
+        print('subscription added for %s: '%self._name+str((clientAddr,request)))
+        Device.server.subscriptions.v[0] += 1
+
+    def un_subscribe(self,request):
+        print('deleting subscriber %s from '%str(request)+self._name)
+        try:    del self._subscribers[subscriber]
+        except: pass
+
+    def publish(self):
+        """Call this when data are ready to be published to subscribers"""
+        printd('>publish '+self._name)
+        for clientAddr,sockReq in self._subscribers.items():
+            socket,request = sockReq
+            printd('publishing request of %s by %s'%(str(request)\
+            ,str(clientAddr)))
+            
+            # check if previous delivery was succesfull
+            if (socket,clientAddr) in _myUDPServer.ackCounts:
+                print('previous delivery failed for '+str(clientAddr))
+                print('cancel subscription for '+str(clientAddr))
+                del self._subscribers[clientAddr]
+                return
+            _reply(['read',request], socket, clientAddr)
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+#``````````````````functions for socket data preparation and sending``````````
+perfMBytes = 0
+perfSeconds = 0
+perfSends = 0
+perfRetransmits = 0
+def _send_UDP(buf,socket,clientAddr):
+    """send buffer via UDP socket, chopping it to smaller chunks"""
+    global perfMBytes, perfSeconds, perfSends
+    
+    # setup the EOD repetition count at the server
+    _myUDPServer.ackCounts[(socket,clientAddr)] = MaxEOD
+
+    lbuf = len(buf)
+    #print('>_send_UDP %i bytes'%lbuf)
+    ts = timer()
+    nChunks = (lbuf-1)//ChunkSize + 1
+    # send chunks in backward order
+    for iChunk in range(nChunks-1,-1,-1):
+        chunk = buf[iChunk*ChunkSize:min((iChunk+1)*ChunkSize,lbuf)]
+        prefixInt = iChunk*ChunkSize
+        #print('pi',prefixInt)
+        prefixBytes = (prefixInt).to_bytes(PrefixLength,'big')
+        prefixed = b''.join([prefixBytes,chunk])
+        #txt = str(chunk)
+        #if len(txt) > 100:
+        #    txt = txt[:100]+'...'
+        #print('sending prefix %i'%prefixInt+' %d bytes:'%len(prefixed),txt)
+        socket.sendto(prefixed, clientAddr)
+        time.sleep(ChunkSleep)
+    dt = timer()-ts
+    if lbuf > 1000:
+        mbytes = 1e-6*len(buf)
+        print('sent %i bytes, perf: %.1f MB/s'%(lbuf,mbytes/dt))
+        perfMBytes += mbytes
+        perfSeconds += dt
+        perfSends += 1
+        Device.server.perf.v = [perfSends, round(perfMBytes,3)\
+        ,round(perfMBytes/perfSeconds,1),perfRetransmits]
+
+def _replyData(cmdArgs):
+    """Prepare data for reply"""
+    global perfRetransmits
+    printd('>_reply')
+    try:    cmd,args = cmdArgs
+    except: 
+        print('cmdArgs',cmdArgs)
+        if cmdArgs[0] == 'info':
+            devs = list(Server.DevDict)
+            return devs
+        else:   raise ValueError('expect cmd,args')
+    printd('cmd,args: '+str((cmd,args)))
+        
+    returnedDict = {}
+    if cmd == 'retransmit':
+        perfRetransmits += 1
+        raise BufferError({'Retransmit':args})
+        
+    for devParPropVal in args:
+        try:
+            cnsDevName,sParPropVals = devParPropVal
+        except Exception as e:
+            msg = 'ERR.LS in _replyData for '+str(cmdArgs)
+            print(msg)
+            raise TypeError(msg) from e
+
+        cnsHost,devName = cnsDevName.rsplit(',',1)
+        parNames = sParPropVals[0]
+        if len(sParPropVals) > 1:
+            propNames = sParPropVals[1]
+        else:   
+            propNames = '*' if cmd == 'info' else 'v'
+        printd('devNm,parNm,propNm:'+str((devName,parNames,propNames)))
+        try:    vals = sParPropVals[2]
+        except: vals = None
+        if devName == '*':
+            for devName in Server.DevDict:
+                cdn = ','.join((cnsHost,devName))
+                devDict = {}
+                returnedDict[cdn] = devDict
+                _process_parameters(cmd,parNames,devName,devDict,propNames,vals)
+        else:
+            if cnsDevName not in returnedDict:
+                #print('add new cnsDevName',cnsDevName)
+                returnedDict[cnsDevName] = {}
+            devDict = returnedDict[cnsDevName]
+            _process_parameters(cmd,parNames,devName,devDict,propNames,vals)
+    return returnedDict
+
+def _process_parameters(cmd,parNames,devName,devDict,propNames,vals):
+  """part of _replyData"""
+  if parNames[0][0] == '*':
+    # replace parNames with a list of all parameters
+    try:    dev = Server.DevDict[devName]
+    except: raise NameError("device '%s' not served"%(str(devName)))
+    #parNames = [i for i in vars(dev) if not i.startswith('_')]
+    parNames = vars(dev)
+    
+  #print('parNames:'+str(parNames))
+  for idx,parName in enumerate(parNames):
+    pv = getattr(Server.DevDict[devName],parName)
+    #print('parName',parName,type(pv),isinstance(pv,LDO))
+    if not isinstance(pv,LDO):
+        continue
+    features = getattr(pv,'features','')
+    if cmd == 'read' and 'R' not in features:
+        #print('par %s is not readable, it will not be replied.'%parName)
+        continue
+    parDict = {}
+    devDict[parName] = parDict
+    if cmd in ('get','read'):
+        #if Server.Dbg: 
+        ts = timer()
+        pv.update_value()
+        value = getattr(pv,propNames)
+        printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
+        vv = value#[0]
+        try:
+            # if value is numpy array:
+            shape,dtype = vv.shape, str(vv.dtype)
+        except Exception as e:
+            #printd('not numpy %s, %s'%(pv._name,str(e)))
+            parDict['v'] = value
+        else:
+            printd('numpy array %s, shape,type:%s, add key "n"'\
+              %(str(pv._name),str((shape,dtype))))
+            parDict['v'] = vv.tobytes()
+            parDict['n'] = shape,dtype
+        timestamp = getattr(pv,'t',None)
+        if not timestamp: timestamp = time.time()
+        parDict['t'] = timestamp
+    elif cmd == 'set':
+        try:
+            val = vals[idx]\
+              if len(parNames) > 1 else vals
+        except:   raise NameError('set value missing')
+        if not isinstance(val,(list,array.array)):
+            val = [val]
+        pv.set(val)
+        printd('set: %s=%s'%(parName,str(val)))
+    elif cmd == 'info':
+        printd('info (%s.%s)'%(parName,str(propNames)))
+        #if len(propNames[0]) == 0:
+        if propNames[0] == '*':
+            propNames = pv.info()
+        printd('propNames of %s: %s'%(pv._name,str(propNames)))
+        for propName in propNames:
+            if propName == 'v': 
+                # do not return value on info() it could be very long
+                parDict['v'] = '?'
+            else:
+                pv = getattr(Server.DevDict[devName],parName)
+                propVal = getattr(pv,propName)
+                parDict[propName] = propVal
+    else:   raise ValueError('accepted commands: info,get,set,read')
+
+def _reply(cmd, socket, client_address=None):
+    """Build a reply data and send it to client"""
+    try:
+        r = _replyData(cmd)
+    except Exception as e:
+        if isinstance(e, BufferError ):
+            print('Retransmit ignored: '+str(e))
+            r = 'WARN.LS: Retransmit ignored'
+        else:
+            r = 'ERR.LS. Exception: '+repr(e)
+            exc = traceback.format_exc()
+            print('Traceback: '+repr(exc))
+            return
+    
+    printd('reply object: '+str(r)[:200]+'...'+str(r)[-40:])
+    reply = ubjson.dumpb(r)
+    
+    host,port = client_address# the port here is temporary
+    printd('sending back %d bytes to %s:'%(len(reply)\
+    ,str(client_address)))
+    printd(str(reply)[:200])
+
+    if UDP:
+        _send_UDP(reply, socket, client_address)
+        # initiate the sending of EOD to that client
+    else:
+        #self.request.sendall(reply)
+        print('TCP not supported yet')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````The Request broker```````````````````````````````
 class _LDO_Handler(SocketServer.BaseRequestHandler):
     lastPID = '?'
-    def _reply(self,serverMsg):
-        global perfRetransmits
-        printd('>_reply')
-        try:    replyCmd =  serverMsg['cmd']
-        except: raise  KeyError("'cmd' key missing in request")
-        try:    self.cmd,args = replyCmd
-        except: 
-            print('replyCmd',replyCmd)
-            if replyCmd[0] == 'info':
-                devs = list(Server.DevDict)
-                return devs
-            else:   raise ValueError('expect cmd,args')
-        printd('cmd,args: '+str((self.cmd,args)))
-        returnedDict = {}
-        if self.cmd == 'retransmit':
-            perfRetransmits += 1
-            raise BufferError({'Retransmit':args})
-            
-        for devParPropVal in args:
-            try:
-                cnsDevName,self.parPropVals = devParPropVal
-            except Exception as e:
-                msg = 'ERR.LS in _reply for '+str(replyCmd)
-                print(msg)
-                raise TypeError(msg) from e
-
-            cnsHost,devName = cnsDevName.rsplit(',',1)
-            parNames = self.parPropVals[0]
-            if len(self.parPropVals) > 1:
-                self.propNames = self.parPropVals[1]
-            else:   
-                self.propNames = '*' if self.cmd == 'info' else 'v'
-            printd('devNm,parNm,propNm:'+str((devName,parNames,self.propNames)))
-            if devName == '*':
-                for devName in Server.DevDict:
-                    cdn = ','.join((cnsHost,devName))
-                    devDict = {}
-                    returnedDict[cdn] = devDict
-                    self._process_parameters(parNames,devName,devDict)
-            else:
-                if cnsDevName not in returnedDict:
-                    #print('add new cnsDevName',cnsDevName)
-                    returnedDict[cnsDevName] = {}
-                devDict = returnedDict[cnsDevName]
-                self._process_parameters(parNames,devName,devDict)
-        return returnedDict
-
-    def _process_parameters(self,parNames,devName,devDict):
-      if parNames[0][0] == '*':
-        # replace parNames with a list of all parameters
-        try:    dev = Server.DevDict[devName]
-        except: raise NameError("device '%s' not served"%(str(devName)))
-        #parNames = [i for i in vars(dev) if not i.startswith('_')]
-        parNames = vars(dev)
-        
-      #print('parNames:'+str(parNames))
-      for idx,parName in enumerate(parNames):
-        pv = getattr(Server.DevDict[devName],parName)
-        #print('parName',parName,type(pv),isinstance(pv,LDO))
-        if not isinstance(pv,LDO):
-            continue
-        features = getattr(pv,'features','')
-        if self.cmd == 'read' and 'R' not in features:
-            #print('par %s is not readable, it will not be replied.'%parName)
-            continue
-        parDict = {}
-        devDict[parName] = parDict
-        if self.cmd in ('get','read'):
-            #if Server.Dbg: 
-            ts = timer()
-            pv.update_value()
-            value = getattr(pv,self.propNames)
-            printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
-            vv = value#[0]
-            try:
-                # if value is numpy array:
-                shape,dtype = vv.shape, str(vv.dtype)
-            except Exception as e:
-                #printd('not numpy %s, %s'%(pv._name,str(e)))
-                parDict['v'] = value
-            else:
-                printd('numpy array %s, shape,type:%s, add key "n"'\
-                  %(str(pv._name),str((shape,dtype))))
-                parDict['v'] = vv.tobytes()
-                parDict['n'] = shape,dtype
-            timestamp = getattr(pv,'t',None)
-            if not timestamp: timestamp = time.time()
-            parDict['t'] = timestamp
-        elif self.cmd == 'set':
-            try:
-                val = self.parPropVals[2][idx]\
-                  if len(parNames) > 1 else self.parPropVals[2]
-            except:   raise NameError('set value missing')
-            if not isinstance(val,(list,array.array)):
-                val = [val]
-            pv.set(val)
-            printd('set: %s=%s'%(parName,str(val)))
-        elif self.cmd == 'info':
-            printd('info (%s.%s)'%(parName,str(self.propNames)))
-            #if len(self.propNames[0]) == 0:
-            if self.propNames[0] == '*':
-                propNames = pv.info()
-            else:
-                propNames = [self.propNames]
-            printd('propNames of %s: %s'%(pv._name,str(propNames)))
-            for propName in propNames:
-                if propName == 'v': 
-                    # do not return value on info() it could be very long
-                    parDict['v'] = '?'
-                else:
-                    pv = getattr(Server.DevDict[devName],parName)
-                    propVal = getattr(pv,propName)
-                    parDict[propName] = propVal
-        else:   raise ValueError('accepted commands: info,get,set,read')
                  
     def handle(self):
-        """Override handle method"""
+        """Override the handle method"""
         if UDP:
             data = self.request[0].strip()
             socket = self.request[1]
@@ -364,7 +418,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
                 try:
                     del self.server.ackCounts[(socket,self.client_address)]
                 except Exception as e:
-                    printw('deleting ackCounts: '+str(e))
+                    printw('no ACK to delete from '+str(self.client_address))
                 return
         else:
             data = self.request.recv(1024).strip()
@@ -382,55 +436,49 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             #print('lastPID now',_LDO_Handler.lastPID)
         except:
             pass
-        
-        try:
-            r = self._reply(cmd)
-        except Exception as e:
-            if isinstance(e, BufferError ):
-                print('Retransmit ignored: '+str(e))
-                r = 'WARN.LS: Retransmit ignored'
-            else:
-                r = 'ERR.LS. Exception: '+repr(e)
-                exc = traceback.format_exc()
-                print('Traceback: '+repr(exc))
-                return
-        
-        printd('reply object: '+str(r)[:200]+'...'+str(r)[-40:])
-        reply = ubjson.dumpb(r)
-        
-        host,port = self.client_address# the port here is temporary
-        printd('sending back %d bytes to %s:'%(len(reply)\
-        ,str(self.client_address)))
-        printd(str(reply)[:200])
 
-        if UDP:
-            _send_UDP(reply, socket, self.client_address)
-            # initiate the sending of EOD to that client
-            self.server.ackCounts[(socket,self.client_address)] = MaxEOD
-        else:
-            self.request.sendall(reply)
+        try:    cmdArgs =  cmd['cmd']
+        except: raise  KeyError("'cmd' key missing in request")
+
+        if  cmdArgs[0] == 'subscribe':
+            self.register_subscriber(self.client_address, socket, cmdArgs[1])
+            return
+
+        _reply(cmdArgs,socket,self.client_address)
+        
+    def register_subscriber(self,clientAddr,socket,args):
+        print('regiter subscriber for '+str(args))
+        # the first dev,ldo in the list will trigger the publishing
+        try:    cnsDevName,parPropVals = args[0]
+        except: raise NameError('cnsDevName,parPropVals wrong: '+args)
+        cnsHost,devName = cnsDevName.rsplit(',',1)
+        parName = parPropVals[0][0]
+        pv = getattr(Server.DevDict[devName],parName)
+        pv.subscribe(clientAddr,socket,args)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class _myUDPServer(SocketServer.UDPServer):
     """Subclass the UDPServer to override the service_actions()"""
+    ackCounts = {}
     def __init__(self,hostPort, handler):
         super().__init__(hostPort, handler, False)
         #self.handler = handler
-        self.ackCounts = {}
 
     def service_actions(self):
         """service_actions() called by server periodically (0.5s)"""
-        #printd('ackCounts: %s'%str(self.ackCounts))
-        
-        for sockAddr,ackCount in list(self.ackCounts.items()):
+        for sockAddr,ackCount in list(_myUDPServer.ackCounts.items()):
             sock,addr = sockAddr
-            if ackCount == 0:
+            if ackCount == 1:
+                _myUDPServer.ackCounts[sockAddr] = 0
                 printw('No ACK from %s'%str(addr))
-                del self.ackCounts[sockAddr]
+                #del _myUDPServer.ackCounts[sockAddr]
                 return
-            # keep sending EODs to that client
-            printd('waiting for ACK%i from '%ackCount+str(addr))
-            self.ackCounts[sockAddr] -= 1
+            if ackCount <= 0:
+                return
+
+            # keep sending EODs to that client until it detects it
+            print('waiting for ACK%i from '%ackCount+str(addr))
+            _myUDPServer.ackCounts[sockAddr] -= 1
             sock.sendto(b'\x00\x00\x00\x00',addr)
             
 class LDOt(LDO):
@@ -461,17 +509,16 @@ class Server():
               'debug':  LDO('W','debugging level: 14:ERROR, 13:WARNING, 12:INFO, 11-1:DEBUG, bits[15:4] are for user needs'\
               ,[Server.Dbg],setter=self._debug_set),
               'lastPID': LDO('','report source of the last request ',['?']),
-              'perf':   LDO('R','Server performance [RQ,MBytes,MBytes/s]'\
-                            ,[0.,0.,0.])
+              'perf':   LDO('R'\
+                ,'Server performance [RQ,MBytes,MBytes/s],Retransmits'\
+                ,[0.,0.,0.,0]),
+              'subscriptions': LDO('R','Number of subscriptions',[0]),
             })]
         else: dev = []
         
         # create global dictionary of all devices
         devs = dev + list(devices)
-        #DevDict = {dev._name:dev for dev in devs}
         Server.DevDict = OD([[dev._name,dev] for dev in devs])
-        #for d,i in DevDict.items():  print('device '+str(d))
-        #print('DevDict',Server.DevDict)
                     
         self.host = host if host else ip_address()
         self.port = port
@@ -508,4 +555,4 @@ class Server():
         parVal = par.v
         print('par_set %s='%par.name + str(parval))
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# see liteScaler.py liteAccess.py
+# see liteScaler.py, liteAccess.py
