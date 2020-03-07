@@ -90,8 +90,10 @@ class Device():
             #print('setting '+p+' to '+str(v))
             #print('value type:',type(v.v))
             if not isinstance(v.v,(list)):
-                printw('parameter "'+p+'" should be a list')
-                #sys.exit(1)
+                try:    testForNumpy = v.v.shape
+                except:
+                    printe('illegal type of %s: '%p+str(type(v.v)))
+                    sys.exit(1)
             setattr(self,p,v)
             par = getattr(self,p)
             #setattr(par,'_name',p)
@@ -309,71 +311,71 @@ def _replyData(cmdArgs):
     return returnedDict
 
 def _process_parameters(cmd,parNames,devName,devDict,propNames,vals):
-  """part of _replyData"""
-  if parNames[0][0] == '*':
-    # replace parNames with a list of all parameters
-    try:    dev = Server.DevDict[devName]
-    except: raise NameError("device '%s' not served"%(str(devName)))
-    #parNames = [i for i in vars(dev) if not i.startswith('_')]
-    parNames = vars(dev)
+    """part of _replyData"""
+    if parNames[0][0] == '*':
+        # replace parNames with a list of all parameters
+        try:    dev = Server.DevDict[devName]
+        except: raise NameError("device '%s' not served"%(str(devName)))
+        #parNames = [i for i in vars(dev) if not i.startswith('_')]
+        parNames = vars(dev)
     
-  #print('parNames:'+str(parNames))
-  for idx,parName in enumerate(parNames):
-    pv = getattr(Server.DevDict[devName],parName)
-    #print('parName',parName,type(pv),isinstance(pv,LDO))
-    if not isinstance(pv,LDO):
-        continue
-    features = getattr(pv,'features','')
-    if cmd == 'read' and 'R' not in features:
-        #print('par %s is not readable, it will not be replied.'%parName)
-        continue
-    parDict = {}
-    devDict[parName] = parDict
-    if cmd in ('get','read'):
-        #if Server.Dbg: 
-        ts = timer()
-        pv.update_value()
-        value = getattr(pv,propNames)
-        printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
-        vv = value#[0]
-        try:
-            # if value is numpy array:
-            shape,dtype = vv.shape, str(vv.dtype)
-        except Exception as e:
-            #printd('not numpy %s, %s'%(pv._name,str(e)))
-            parDict['v'] = value
-        else:
-            printd('numpy array %s, shape,type:%s, add key "n"'\
-              %(str(pv._name),str((shape,dtype))))
-            parDict['v'] = vv.tobytes()
-            parDict['n'] = shape,dtype
-        timestamp = getattr(pv,'t',None)
-        if not timestamp: timestamp = time.time()
-        parDict['t'] = timestamp
-    elif cmd == 'set':
-        try:
-            val = vals[idx]\
-              if len(parNames) > 1 else vals
-        except:   raise NameError('set value missing')
-        if not isinstance(val,(list,array.array)):
-            val = [val]
-        pv.set(val)
-        printd('set: %s=%s'%(parName,str(val)))
-    elif cmd == 'info':
-        printd('info (%s.%s)'%(parName,str(propNames)))
-        #if len(propNames[0]) == 0:
-        if propNames[0] == '*':
-            propNames = pv.info()
-        printd('propNames of %s: %s'%(pv._name,str(propNames)))
-        for propName in propNames:
-            if propName == 'v': 
-                # do not return value on info() it could be very long
-                parDict['v'] = '?'
+    #print('parNames:'+str(parNames))
+    for idx,parName in enumerate(parNames):
+        pv = getattr(Server.DevDict[devName],parName)
+        #print('parName',parName,type(pv),isinstance(pv,LDO))
+        if not isinstance(pv,LDO):
+            continue
+        features = getattr(pv,'features','')
+        if cmd == 'read' and 'R' not in features:
+            #print('par %s is not readable, it will not be replied.'%parName)
+            continue
+        parDict = {}
+        devDict[parName] = parDict
+        if cmd in ('get','read'):
+            #if Server.Dbg: 
+            ts = timer()
+            pv.update_value()
+            value = getattr(pv,propNames)
+            printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
+            vv = value#[0]
+            try:
+                # if value is numpy array:
+                shape,dtype = vv.shape, str(vv.dtype)
+            except Exception as e:
+                #printd('not numpy %s, %s'%(pv._name,str(e)))
+                parDict['v'] = value
             else:
-                pv = getattr(Server.DevDict[devName],parName)
-                propVal = getattr(pv,propName)
-                parDict[propName] = propVal
-    else:   raise ValueError('accepted commands: info,get,set,read')
+                printd('numpy array %s, shape,type:%s, add key "n"'\
+                  %(str(pv._name),str((shape,dtype))))
+                parDict['v'] = vv.tobytes()
+                parDict['n'] = shape,dtype
+            timestamp = getattr(pv,'t',None)
+            if not timestamp: timestamp = time.time()
+            parDict['t'] = timestamp
+        elif cmd == 'set':
+            try:
+                val = vals[idx]\
+                  if len(parNames) > 1 else vals
+            except:   raise NameError('set value missing')
+            if not isinstance(val,(list,array.array)):
+                val = [val]
+            pv.set(val)
+            printd('set: %s=%s'%(parName,str(val)))
+        elif cmd == 'info':
+            printd('info (%s.%s)'%(parName,str(propNames)))
+            #if len(propNames[0]) == 0:
+            if propNames[0] == '*':
+                propNames = pv.info()
+            printd('propNames of %s: %s'%(pv._name,str(propNames)))
+            for propName in propNames:
+                if propName == 'v': 
+                    # do not return value on info() it could be very long
+                    parDict['v'] = '?'
+                else:
+                    pv = getattr(Server.DevDict[devName],parName)
+                    propVal = getattr(pv,propName)
+                    parDict[propName] = propVal
+        else:   raise ValueError('accepted commands: info,get,set,read')
 
 def _reply(cmd, socket, client_address=None):
     """Build a reply data and send it to client"""
@@ -446,15 +448,25 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
 
         _reply(cmdArgs,socket,self.client_address)
         
-    def register_subscriber(self,clientAddr,socket,args):
-        print('regiter subscriber for '+str(args))
+    def register_subscriber(self,clientAddr,socket,serverCmdArgs):
+        print('register subscriber for '+str(serverCmdArgs))
         # the first dev,ldo in the list will trigger the publishing
-        try:    cnsDevName,parPropVals = args[0]
-        except: raise NameError('cnsDevName,parPropVals wrong: '+args)
+        try:    cnsDevName,parPropVals = serverCmdArgs[0]
+        except: raise NameError('cnsDevName,parPropVals wrong: '+serverCmdArgs)
         cnsHost,devName = cnsDevName.rsplit(',',1)
         parName = parPropVals[0][0]
+        print('pn',parName)
+        if parName == '*':
+            dev = Server.DevDict[devName]
+            pvars = vars(dev)
+            print('pvars',pvars)
+            # use first LDO of the device
+            for parName,val in pvars.items():
+                if isinstance(val,LDO):
+                    break
+            print('pn2',parName)
         pv = getattr(Server.DevDict[devName],parName)
-        pv.subscribe(clientAddr,socket,args)
+        pv.subscribe(clientAddr,socket,serverCmdArgs)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class _myUDPServer(SocketServer.UDPServer):

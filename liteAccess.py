@@ -42,6 +42,8 @@ ldo.sunscribe()# it will print image data periodically
 ldo.unsubscribe()# cancel subscruption
 
 #``````````````````TODO``````````````````````````````````````````````````````` 
+#ldo = LA.LdoPars([[['localhost','dev1'],'*']])
+#ldo.sunscribe()
 #LA.LdoPars(['Scaler1.dev1','frequency']).set(property=('oplimits',[-1,11])
 #``````````````````Observations```````````````````````````````````````````````
     # Measured transaction time is 1.8ms for:

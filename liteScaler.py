@@ -3,7 +3,8 @@
 #__version__ = 'v20a 2020-02-21'# liteServer-rev3
 #__version__ = 'v21 2020-02-29'# command, pause, moved to server
 #__version__ = 'v21 2020-03-02'# numpy array unpacked
-__version__ = 'v22 2020-03-03'# coordinate is numpy (for testing) 
+#__version__ = 'v22 2020-03-03'# coordinate is numpy (for testing) 
+__version__ = 'v23 2020-03-06'# publish image and counters
  
 import sys, time, threading
 import numpy as np
@@ -45,7 +46,7 @@ class Scaler(Device):
         pars = {
           'counters':   LDO('R','%i of counters'%len(initials),initials),
           'increments': LDO('W','Increments of the individual counters',incs),
-          'frequency':  LDO('RW','Update frequency of all counters',[1.]\
+          'frequency':  LDO('RW','Update frequency of all counters [Hz]',[1.]\
                         ,opLimits=(0,10)),
           'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
@@ -99,9 +100,8 @@ class Scaler(Device):
      
             self._cycle += 1
             
-            # publish image once per 10 cycles
-            if self._cycle % 10 == 0:
-                self.image.publish()
+            self.image.publish()
+            self.counters.publish()
             
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

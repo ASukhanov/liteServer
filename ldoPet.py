@@ -2,8 +2,9 @@
 """Spreadsheet view of process variables from a remote liteServer."""
 #__version__ = 'v35 2020-02-16'# LS revision3
 #__version__ = 'v36 2020-02-22'# error handling for aggr. response
-__version__ = 'v37 2020-02-24'# err handling for missed chunks
-__version__ = 'v38 2020-02-24'# default localhost
+#__version__ = 'v37 2020-02-24'# err handling for missed chunks
+#__version__ = 'v38 2020-02-24'# default localhost
+__version__ = 'v39 2020-03-05'# 
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -387,10 +388,13 @@ class LDOMonitor(QtCore.QThread):
     def __init__(self):
         # for signal/slot paradigm we need to call the parent init
         super(LDOMonitor,self).__init__()
-        #...
+
+        # create list of aggregated LDOs for each host
         self.hostLdos = {}
         for host,longListOfLNames in daTable.hostRequest.items():
             self.hostLdos[host] = LA.LdoPars(longListOfLNames)
+            
+        # start the receiving thread 
         thread = threading.Thread(target=self.thread_proc)
         thread.start()
         self.SignalSourceDataReady.connect(MySlot)
@@ -401,6 +405,8 @@ class LDOMonitor(QtCore.QThread):
             # collect data from all hosts and fill daTable with data
             dataReceived = True
             for host,aggregatedLdo in self.hostLdos.items():
+                
+                # get values of all parameters from the host
                 #print('host,ldo',host,aggregatedLdo.name)
                 if LDOMonitor.Perf: ts = timer()
                 try:
@@ -416,6 +422,8 @@ class LDOMonitor(QtCore.QThread):
                     break
                 if LDOMonitor.Perf: print('retrieval time from %s = %.4fs'\
                 %(host,timer()-ts))
+                
+                # update GUI elements
                 #pprint('got from %s \n'%host+str(r))
                 for hostDev,parDict in r.items():
                     #print('update GUI objects of %s :'% hostDev + str(parDict))

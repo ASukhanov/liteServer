@@ -4,13 +4,16 @@ ADO manager, which accepts all variables of a given liteServer and post them
 in an ADO.
 '''
 #__version__ = 'v21 2019-12-10'# if not measurements: return
-__version__ = 'v22 2020-02-21'# for liteServer rev3
+#__version__ = 'v22 2020-02-21'# for liteServer rev3
+#__version__ = 'v23 2020-03-03'# do not set shape for 1-dimensional numpy array, otherwise right click in PET kills the manager
+__version__ = 'v24 2020-03-07'# Retrieve data asynchronously
 
 import time, argparse
 from cad import ampy
 import liteAccess as LA
 import sys
 
+Subscription = True# Retrieve data asynchronously
 #````````````````````````````Helper methods```````````````````````````````````
 def printi(msg): print('info: '+msg)
 def printw(msg): print('WARNING: '+msg)
@@ -22,7 +25,7 @@ def printd(msg):
 ldo2parFeatureMap = {'R':ampy.CNSF_R,'W':ampy.CNSF_WE,'A':ampy.CNSF_ARCHIVE}
 ldo2parTypeMap = {type('0'):'StringType',type(u'0'):'StringType'\
     ,type(0):'IntType',type(0.):'DoubleType',type(True):'VoidType'\
-    ,'uint8':'UCharType',}
+    ,'uint8':'UCharType', 'float32':'DoubleType', 'float64':'DoubleType'}
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Manager object```````````````````````````````````
 class Mgr(ampy.ampyClass): # inherits from ampyClass
@@ -41,7 +44,7 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
         ,timeout=pargs.timeout)
         allLdoInfo = list(self.allLdo.info().values())[0]
         allLdoVals = list(self.allLdo.get().values())[0]
-        print('Bridged parameters:')
+        print('Bridged parameters:\n'+str(allLdoVals.keys()))
         for lParName,parVal in allLdoVals.items():
             parInfo = allLdoInfo[lParName]
             initialValue,ts = parVal['v'],parVal['t']
@@ -59,6 +62,8 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
             
             # make type of the ado parameter from first element of initialValue
             shape = None
+
+            #print('par',lParName,initialValue,type(initialValue[0]))  
             try:
                 ptype = ldo2parTypeMap[type(initialValue[0])]
             except Exception as e:
@@ -66,7 +71,9 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
                 if 'numpy' in str(type(ndarray)):
                     shape = ndarray.shape
                     #print('ndarray',ndarray.shape,str(ndarray.dtype))
-                    initialValue = tuple(ndarray.flatten())
+                    if len(shape) == 1: shape = None# otherwise issue in Pet
+                    #initialValue = tuple(ndarray.flatten())
+                    initialValue = ndarray.flatten().tolist()
                     ptype = ldo2parTypeMap[str(ndarray.dtype)]
                 else:
                     printw('unknown type of %s:'%lParName+str(initialValue))
@@ -77,7 +84,7 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
             parName = lParName# ADO Name is the same as LDO parName
             l = len(initialValue) 
             iv = initialValue if l > 1 else  initialValue[0]
-            print('adding par '+str((parName,ptype,l,0,adoFeatures,iv))[:150])
+            #print('adding par '+str((parName,ptype,l,0,adoFeatures,iv))[:150])
             par = self.add_par(parName,ptype,l,0,adoFeatures,iv)
             if 'legalValues' in parInfo:
                 par.add('legalValues',str(','.join(parInfo['legalValues'])))
@@ -96,6 +103,13 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
                     return mgr.par_set(par)
                 par.set = f # override set() for farameter
         #print('ldo2par',self.ldo2par)
+
+        if Subscription:
+            # subscribe to all LFO parameters
+            self.allLdo.subscribe(self.callback)
+                        
+    def run_startx(self):
+        self.updatePeriodS_set()
     
     def par_set(self,par):
         """Setter for an ado parameter"""
@@ -106,18 +120,13 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
         print('assigning %s='%str(ldo.name)+str(v))
         ldo.value = [v]
         return 0
-
-    def periodic_update(self):
+    
+    def _update_pars(self,measurements):
+        """update ADO parameters from measurements"""
         oldStatus = self.adoStatus.value.value
         self.adoStatus.value.value = 'OK'
-        
-        # get all measurable data from server using measurements() method
-        measurements = self.allLdo.read()
-        if not isinstance(measurements,dict):
-            raise RuntimeError('measurements: '+str(measurements))
-        #print('measurements: '+str(measurements))
-        measDict = list(measurements.values())[0]
-        for item,value in list(measDict.items()):
+        printd('msmnts\n'+str(measurements))
+        for item,value in measurements.items():
             #print('measure par '+item)#+': '+str(value))
             par = self.ldo2par[item]
             v,ts = value['v'],value['t']
@@ -130,21 +139,15 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
             if lv == 1: 
                 v = v[0]
             else:
-                if lv != len(par.value.value):
-                    # check if it is numpy array, just try to flatten it
-                    try:
-                        flatArray = v.flatten()
-                        v = tuple(flatArray)
-                        lv = len(v)
-                        if lv != len(par.value.value):
-                            raise ValueError('Bad, numpy array changed length')
-                    except: # not numpy, something wrong
-                        msg = 'length changed in %s: %s, was %s'%\
-                        (par.name,repr(v),repr(par.value.value))
-                        printe(msg)
-                        self.update_adoStatus('ERR:'+msg)
-                        continue
-            #print('update_par %s ='%par.name)#+str(v))
+                # check if it is numpy array, just try to flatten it
+                try:
+                    flatArray = v.flatten()
+                    v = flatArray.tolist()
+                    #print('update numpy array '+par.name)
+                except:
+                    #print('not numpy '+par.name)
+                    pass
+            #print('update_par %s,%s ='%(par.name,type(v))+str(v))
             try:
                 self.update_par(par,v,timestamp=ts)
             except Exception as e:
@@ -152,13 +155,26 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
                 msg = 'in update_par %s:'%par.name+str(e)
                 printe(msg)
                 self.update_adoStatus('ERR:'+msg)
-                continue
-         
+                continue         
         if oldStatus != 'OK' and self.adoStatus.value.value == 'OK':
             self.update_adoStatus()
-                
-    def run_startx(self):
-        self.updatePeriodS_set()
+
+    if Subscription:
+      def callback(self,reply):
+        printd('>callback(%s)'%str(reply.values()))
+        self._update_pars(list(reply.values())[0])
+    else:
+      def periodic_update(self):
+        
+        # get all measurable data from server using measurements() method
+        measurements = self.allLdo.read()
+        if not isinstance(measurements,dict):
+            raise RuntimeError('measurements: '+str(measurements))
+        #print('measurements: '+str(measurements))
+
+        # update ADO parameters with measurements
+        measDict = list(measurements.values())[0]
+        self._update_pars(measDict)        
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #````````````````````````Setters``````````````````````````````````````````
     def updatePeriodS_set(self,*args,**kwargs):
@@ -196,7 +212,8 @@ mgr = Mgr(debug=10 if pargs.dbg else 12,
     mgrName = pargs.mgrName,
     adoName = pargs.adoName,
     version = __version__,
-    description = 'Bridge to LDO '+str(pargs.ldo),
+    description = ' A'[Subscription]+'synchronous bridge to LDO '\
+    +str(pargs.ldo),
     periodicUpdate = pargs.update, # period of calling the periodic_update()
    )
 #````````````````````````Manager event loop```````````````````````````````
