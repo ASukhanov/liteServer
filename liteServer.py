@@ -41,7 +41,8 @@ Known issues:
 #__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
 #__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
 #__version__ = 'v46 2020-03-04'# test for publishing
-__version__ = 'v47 2020-03-06'# Subscription OK
+#__version__ = 'v47 2020-03-06'# Subscription OK
+__version__ = 'v48 2020-03-07'
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -455,16 +456,16 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         except: raise NameError('cnsDevName,parPropVals wrong: '+serverCmdArgs)
         cnsHost,devName = cnsDevName.rsplit(',',1)
         parName = parPropVals[0][0]
-        print('pn',parName)
         if parName == '*':
             dev = Server.DevDict[devName]
             pvars = vars(dev)
-            print('pvars',pvars)
             # use first LDO of the device
             for parName,val in pvars.items():
                 if isinstance(val,LDO):
-                    break
-            print('pn2',parName)
+                    printd('ldo %s, features '%parName+val.features)
+                    if 'R' in val.features:
+                        break
+            print('The master parameter: '+parName)
         pv = getattr(Server.DevDict[devName],parName)
         pv.subscribe(clientAddr,socket,serverCmdArgs)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

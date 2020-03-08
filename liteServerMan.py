@@ -105,7 +105,8 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
         #print('ldo2par',self.ldo2par)
 
         if Subscription:
-            # subscribe to all LFO parameters
+            # subscribe to all LDO parameters
+            print('subscribing to '+str(self.allLdo.name))
             self.allLdo.subscribe(self.callback)
                         
     def run_startx(self):
@@ -127,9 +128,9 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
         self.adoStatus.value.value = 'OK'
         printd('msmnts\n'+str(measurements))
         for item,value in measurements.items():
-            #print('measure par '+item)#+': '+str(value))
             par = self.ldo2par[item]
             v,ts = value['v'],value['t']
+            printd('measure par %s, ts=%.3f'%(item,ts))#+': '+str(value))
             parTS = par.timestampSeconds.value + par.timestampNanoSeconds.value*1e-9
             #print('lts,pts',item,ts,parTS)
             if abs(ts - parTS) < 0.01:
@@ -139,7 +140,7 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
             if lv == 1: 
                 v = v[0]
             else:
-                # check if it is numpy array, just try to flatten it
+                # check if it is numpy array, just try to flatsten it
                 try:
                     flatArray = v.flatten()
                     v = flatArray.tolist()
