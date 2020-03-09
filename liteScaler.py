@@ -4,7 +4,8 @@
 #__version__ = 'v21 2020-02-29'# command, pause, moved to server
 #__version__ = 'v21 2020-03-02'# numpy array unpacked
 #__version__ = 'v22 2020-03-03'# coordinate is numpy (for testing) 
-__version__ = 'v23 2020-03-06'# publish image and counters
+#__version__ = 'v23 2020-03-06'# publish image and counters
+__version__ = 'v24 2020-03-09'# publish is called once per loop 
  
 import sys, time, threading
 import numpy as np
@@ -98,10 +99,9 @@ class Scaler(Device):
             self.image.v[0,0,0] = self._cycle
             self.image.t = time.time()
      
+            #print('publish all modified parameters of '+self._name)
+            self.publish()
             self._cycle += 1
-            
-            self.image.publish()
-            self.counters.publish()
             
         print('Scaler '+self._name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

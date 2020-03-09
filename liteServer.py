@@ -14,13 +14,14 @@ message format:
   'user':user,...}
 
 Supported commands:
-- info      reply with information of LDOs
-- get       reply with values of LDOs
-- read      reply with values of readable LDOs only, 
+- info:     reply with information of LDOs
+- get:      reply with values of LDOs
+- read:     reply only with values of readable LDOs, with changed timestamp, 
             readable LDO have 'R' in their feature, 
-- set       set values of LDOs
-- ACK       internal, response from a client on server reply
-- subscribe not implemented yet, send reply when LDO has changed.
+- set:      set values of LDOs
+- ACK:      internal, response from a client on server reply
+- subscribe: server will reply when any of requsted readable parameters have changed
+- unsubscribe
 
 Example usage:
 - start liteServer for 2 Scalers on a remote host:
@@ -42,7 +43,8 @@ Known issues:
 #__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
 #__version__ = 'v46 2020-03-04'# test for publishing
 #__version__ = 'v47 2020-03-06'# Subscription OK
-__version__ = 'v48 2020-03-07'
+#__version__ = 'v48 2020-03-07'
+__version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -99,6 +101,7 @@ class Device():
             par = getattr(self,p)
             #setattr(par,'_name',p)
             par._name = p
+            self.subscribers = {}
 
     def setServerStatusText(self,txt):
         Device.server.status.v[0] = txt
@@ -106,6 +109,60 @@ class Device():
 
     def serverState(self):
         return Device.server.start.v[0]
+    #````````````````````````Subscriptions````````````````````````````````````
+    #@staticmethod
+    def register_subscriber(self,clientAddr,socket,serverCmdArgs):
+        print('register subscriber for '+str(serverCmdArgs))
+        # the first dev,ldo in the list will trigger the publishing
+        try:    cnsDevName,parPropVals = serverCmdArgs[0]
+        except: raise NameError('cnsDevName,parPropVals wrong: '+serverCmdArgs)
+        cnsHost,devName = cnsDevName.rsplit(',',1)
+        parName = parPropVals[0][0]
+        if parName == '*':
+            dev = Server.DevDict[devName]
+            pvars = vars(dev)
+            # use first LDO of the device
+            for parName,val in pvars.items():
+                if isinstance(val,LDO):
+                    printd('ldo %s, features '%parName+val.features)
+                    if 'R' in val.features:
+                        break
+            print('The master parameter: '+parName)
+        #pv = getattr(Server.DevDict[devName],parName)
+        #pv.subscribe(clientAddr,socket,serverCmdArgs)
+
+        #def Server.subscribe(clientAddr,socket,serverCmdArgs)
+        #def subscribe(self,clientAddr,socket,serverCmdArgs):
+        """Register a new subscriber for this object""" 
+        print('subscribe '+str(serverCmdArgs))
+        if clientAddr in self.subscribers:
+            printw('subscriber %s is already subscribed  for '%str(clientAddr)\
+            + self._name)
+            return
+        self.subscribers[clientAddr] = socket,serverCmdArgs
+        print('subscription added: '+str((clientAddr,serverCmdArgs)))
+        Device.server.subscriptions.v[0] += 1
+
+    def un_subscribe(self,request):
+        print('deleting subscriber %s from '%str(request)+self._name)
+        try:    del self.subscribers[subscriber]
+        except: pass
+
+    def publish(self):
+        """Call this when data are ready to be published to subscribers.
+        usually at the endof the data pocessing"""
+        for clientAddr,sockReq in self.subscribers.items():
+            socket,request = sockReq
+            printd('publishing request of %s by %s'%(str(request)\
+            ,str(clientAddr)))
+            
+            # check if previous delivery was succesfull
+            if (socket,clientAddr) in _myUDPServer.ackCounts:
+                print('previous delivery failed for '+str(clientAddr))
+                print('cancel subscription for '+str(clientAddr))
+                del self.subscribers[clientAddr]
+                return
+            _reply(['read',request], socket, clientAddr)
 
 class LDO():
     """Base class for Lite Data Objects. Standard properties:
@@ -119,13 +176,13 @@ class LDO():
         printd('>LDO: '+str((features,desc,value,opLimits,parent)))
         self._name = None # assighned in device.__init__. 
         # name is not really needed, as it is keyed in the dictionary
-        self.t = None
+        self.t = time.time()# None
         self.v = value
         self.count = [len(self.v)]
         self.features = features
         self.desc = desc
         self._parent = parent
-        self._subscribers = {}
+        #self._subscribers = {}
         
         # absorb optional properties
         self.opLimits = opLimits
@@ -178,6 +235,7 @@ class LDO():
                 %self._name+str(vals[0]))
 
         self.v = vals
+        self.t = time.time()
 
         # call LDO setting method with new value
         #print('self._setter of %s is %s'%(self._name,self._setter))
@@ -189,39 +247,6 @@ class LDO():
         r = [i for i in vars(self) 
           if not (i.startswith('_') or getattr(self,i) is None)]
         return r
-
-    #````````````````````````Subscriptions````````````````````````````````````
-    def subscribe(self,clientAddr,socket,request):
-        """Register a new subscriber for this object""" 
-        printd('subscribe '+str(request))
-        if clientAddr in self._subscribers:
-            printw('subscriber %s is already subscribed  for '%str(clientAddr)\
-            + self._name)
-            return
-        self._subscribers[clientAddr] = socket,request
-        print('subscription added for %s: '%self._name+str((clientAddr,request)))
-        Device.server.subscriptions.v[0] += 1
-
-    def un_subscribe(self,request):
-        print('deleting subscriber %s from '%str(request)+self._name)
-        try:    del self._subscribers[subscriber]
-        except: pass
-
-    def publish(self):
-        """Call this when data are ready to be published to subscribers"""
-        printd('>publish '+self._name)
-        for clientAddr,sockReq in self._subscribers.items():
-            socket,request = sockReq
-            printd('publishing request of %s by %s'%(str(request)\
-            ,str(clientAddr)))
-            
-            # check if previous delivery was succesfull
-            if (socket,clientAddr) in _myUDPServer.ackCounts:
-                print('previous delivery failed for '+str(clientAddr))
-                print('cancel subscription for '+str(clientAddr))
-                del self._subscribers[clientAddr]
-                return
-            _reply(['read',request], socket, clientAddr)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #``````````````````functions for socket data preparation and sending``````````
 perfMBytes = 0
@@ -321,21 +346,32 @@ def _process_parameters(cmd,parNames,devName,devDict,propNames,vals):
         parNames = vars(dev)
     
     #print('parNames:'+str(parNames))
+    currentTime =  time.time()
     for idx,parName in enumerate(parNames):
         pv = getattr(Server.DevDict[devName],parName)
         #print('parName',parName,type(pv),isinstance(pv,LDO))
         if not isinstance(pv,LDO):
             continue
         features = getattr(pv,'features','')
+
         if cmd == 'read' and 'R' not in features:
             #print('par %s is not readable, it will not be replied.'%parName)
             continue
         parDict = {}
-        devDict[parName] = parDict
+
         if cmd in ('get','read'):
             #if Server.Dbg: 
             ts = timer()
             pv.update_value()
+            timestamp = getattr(pv,'t',None)
+            if not timestamp: 
+                printw('parameter '+parName+' does ot have timestamp')
+                timestamp = time.time()
+            if cmd == 'read' and currentTime - timestamp > 1.:
+                #printw('parameter %s is skipped as it did not change for %.1fs'%(parName,currentTime - timestamp))
+                continue
+                
+            devDict[parName] = parDict
             value = getattr(pv,propNames)
             printd('value of %s=%s, timing=%.6f'%(parName,str(value)[:100],timer()-ts))
             vv = value#[0]
@@ -350,20 +386,21 @@ def _process_parameters(cmd,parNames,devName,devDict,propNames,vals):
                   %(str(pv._name),str((shape,dtype))))
                 parDict['v'] = vv.tobytes()
                 parDict['n'] = shape,dtype
-            timestamp = getattr(pv,'t',None)
-            if not timestamp: timestamp = time.time()
             parDict['t'] = timestamp
+
         elif cmd == 'set':
             try:
                 val = vals[idx]\
                   if len(parNames) > 1 else vals
             except:   raise NameError('set value missing')
+            devDict[parName] = parDict
             if not isinstance(val,(list,array.array)):
                 val = [val]
             pv.set(val)
             printd('set: %s=%s'%(parName,str(val)))
         elif cmd == 'info':
             printd('info (%s.%s)'%(parName,str(propNames)))
+            devDict[parName] = parDict
             #if len(propNames[0]) == 0:
             if propNames[0] == '*':
                 propNames = pv.info()
@@ -444,30 +481,17 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         except: raise  KeyError("'cmd' key missing in request")
 
         if  cmdArgs[0] == 'subscribe':
-            self.register_subscriber(self.client_address, socket, cmdArgs[1])
+            print('>register_subscriber '+str(cmdArgs))
+            try:
+                devName= cmdArgs[1][0][0].split(',')[1]
+                #print('subscriber for device '+devName)
+                dev = Server.DevDict[devName]
+                dev.register_subscriber(self.client_address, socket, cmdArgs[1])
+            except:
+                raise NameError(('Subscription should be of the form:'\
+                "[['host,dev1', [parameters]]\ngot: "+str(cmdArgs[1])))
             return
-
         _reply(cmdArgs,socket,self.client_address)
-        
-    def register_subscriber(self,clientAddr,socket,serverCmdArgs):
-        print('register subscriber for '+str(serverCmdArgs))
-        # the first dev,ldo in the list will trigger the publishing
-        try:    cnsDevName,parPropVals = serverCmdArgs[0]
-        except: raise NameError('cnsDevName,parPropVals wrong: '+serverCmdArgs)
-        cnsHost,devName = cnsDevName.rsplit(',',1)
-        parName = parPropVals[0][0]
-        if parName == '*':
-            dev = Server.DevDict[devName]
-            pvars = vars(dev)
-            # use first LDO of the device
-            for parName,val in pvars.items():
-                if isinstance(val,LDO):
-                    printd('ldo %s, features '%parName+val.features)
-                    if 'R' in val.features:
-                        break
-            print('The master parameter: '+parName)
-        pv = getattr(Server.DevDict[devName],parName)
-        pv.subscribe(clientAddr,socket,serverCmdArgs)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Server```````````````````````````````````````````
 class _myUDPServer(SocketServer.UDPServer):
@@ -490,7 +514,10 @@ class _myUDPServer(SocketServer.UDPServer):
                 return
 
             # keep sending EODs to that client until it detects it
-            print('waiting for ACK%i from '%ackCount+str(addr))
+            #print('waiting for ACK%i from '%ackCount+str(addr))
+            if ackCount != MaxEOD:
+                # there was a delay with client acknowledge
+                printw('waiting for ACK%i from '%ackCount+str(addr))
             _myUDPServer.ackCounts[sockAddr] -= 1
             sock.sendto(b'\x00\x00\x00\x00',addr)
             

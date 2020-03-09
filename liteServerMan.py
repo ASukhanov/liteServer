@@ -128,9 +128,10 @@ class Mgr(ampy.ampyClass): # inherits from ampyClass
         self.adoStatus.value.value = 'OK'
         printd('msmnts\n'+str(measurements))
         for item,value in measurements.items():
+            #print('measure par %s, keys=%s'%(item,str(value.keys())))
             par = self.ldo2par[item]
-            v,ts = value['v'],value['t']
-            printd('measure par %s, ts=%.3f'%(item,ts))#+': '+str(value))
+            v = value['v']
+            ts = value['t']
             parTS = par.timestampSeconds.value + par.timestampNanoSeconds.value*1e-9
             #print('lts,pts',item,ts,parTS)
             if abs(ts - parTS) < 0.01:
