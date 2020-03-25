@@ -4,7 +4,8 @@
 #__version__ = 'v36 2020-02-22'# error handling for aggr. response
 #__version__ = 'v37 2020-02-24'# err handling for missed chunks
 #__version__ = 'v38 2020-02-24'# default localhost
-__version__ = 'v39 2020-03-05'# 
+#__version__ = 'v39 2020-03-05'# 
+__version__ = 'v40 2020-03-24'# --server option
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -590,7 +591,13 @@ def build_temporary_pvfile(cnsName):
     fname = 'ldoPet.yaml'
     f = open(fname,'w')
     f.write('rows:\n')
+    # loop through all devices on the server
     for ldo,parDict in cnsInfo.items():
+        print('ldo',ldo)
+        host,device = ldo.split(',')
+        print('hd',host,device)
+        if not pargs.server and device == 'server':
+        	continue
         f.write("  - [['%s',{span: [3,1],color: cyan}]]\n"%ldo)
         for par,props in parDict.items():
             f.write("  - ['%s',[[$%s],%s]]\n"%(par,ldo,par))
@@ -608,6 +615,8 @@ if __name__ == '__main__':
     parser.add_argument('-d','--dbg', action='store_true', help='debugging')
     parser.add_argument('-f','--file', help=\
     'Config file')
+    parser.add_argument('-s','--server', action='store_true'\
+    ,help='show server variables')
     parser.add_argument('-t','--timeout',type=float,default=10,
       help='timeout of the receiving socket')
     parser.add_argument('ldo', nargs='?', default='localhost',
