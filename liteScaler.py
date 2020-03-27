@@ -5,7 +5,8 @@
 #__version__ = 'v21 2020-03-02'# numpy array unpacked
 #__version__ = 'v22 2020-03-03'# coordinate is numpy (for testing) 
 #__version__ = 'v23 2020-03-06'# publish image and counters
-__version__ = 'v24 2020-03-09'# publish is called once per loop 
+#__version__ = 'v24 2020-03-09'# publish is called once per loop
+__version__ = 'v25 2020-03-26'# test number
  
 import sys, time, threading
 import numpy as np
@@ -47,14 +48,17 @@ class Scaler(Device):
         pars = {
           'counters':   LDO('R','%i of counters'%len(initials),initials),
           'increments': LDO('W','Increments of the individual counters',incs),
-          'frequency':  LDO('RW','Update frequency of all counters [Hz]',[1.]\
-                        ,opLimits=(0,10)),
+          'frequency':  LDO('W','Update frequency of all counters [Hz]',[1.]\
+                        ,opLimits=(0.001,10.)),
           'reset':      LDO('RW','Reset all counters',[False]\
                         ,setter=self.reset),
           'image':      LDO('R','Image',img),
           'coordinate': LDO('RW','Just 2-component numpy vector for testing'\
                         ,np.array([0.,1.]).astype('float32')),#
           'time':       LDOt('R','Current time',[0.],parent=self),#parent is for testing
+          'number':     LDO('W','Test number',[0.],opLimits=(-10,10)\
+          ,setter=self.set_number),
+          'text':     LDO('W','Test text', ['Test'], setter=self.set_text),
         }
         super().__init__(name,pars)
         #print('n,p',self._name,pars)
@@ -70,7 +74,13 @@ class Scaler(Device):
         self.counters.t = t
         self.reset.v[0] = False# reset parameter
         self.reset.t = t
-        
+
+    def set_number(self,pv):
+        print('setting number to '+str(self.number.v[0]))
+
+    def set_text(self,pv):
+        print('setting text to '+str(self.text.v[0]))
+
     def _state_machine(self):
         time.sleep(.2)# give time for server to startup
 
