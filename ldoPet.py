@@ -7,6 +7,7 @@
 #__version__ = 'v39 2020-03-05'# 
 #__version__ = 'v40 2020-03-24'# --server option
 __version__ = 'v41 2020-03-26'# spinbox reacts on editingFinished, not valueChanged
+#TODO QTextEdit: transfer edited text to parameter
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -275,7 +276,7 @@ class Window(QtWidgets.QWidget):
                 d = QtWidgets.QDialog(self)
                 d.setWindowTitle("Info")
                 pname = dataAccess.title()
-                ql = QtWidgets.QLabel(pname,d)
+                #ql = QtWidgets.QLabel(pname,d)
                 qte = QtWidgets.QTextEdit(item.text(),d)
                 qte.move(0,20)
                 #d.setWindowModality(Qt.ApplicationModal)
