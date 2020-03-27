@@ -5,7 +5,8 @@
 #__version__ = 'v37 2020-02-24'# err handling for missed chunks
 #__version__ = 'v38 2020-02-24'# default localhost
 #__version__ = 'v39 2020-03-05'# 
-__version__ = 'v40 2020-03-24'# --server option
+#__version__ = 'v40 2020-03-24'# --server option
+__version__ = 'v41 2020-03-26'# spinbox reacts on editingFinished, not valueChanged
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -48,7 +49,8 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
             #ss = round(ss,12)# trying to fix deficit 1e-14, not working
         self.setRange(*opl)
         self.setSingleStep(ss)
-        self.valueChanged.connect(self.handle_value_changed)
+        #self.valueChanged.connect(self.handle_value_changed)
+        self.editingFinished.connect(self.handle_value_changed)
         #print('instantiated %s'%self.ldo.title())
         
     def handle_value_changed(self):
