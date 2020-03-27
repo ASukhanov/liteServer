@@ -44,7 +44,8 @@ Known issues:
 #__version__ = 'v46 2020-03-04'# test for publishing
 #__version__ = 'v47 2020-03-06'# Subscription OK
 #__version__ = 'v48 2020-03-07'
-__version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
+#__version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
+__version__ = 'v50 2020-03-26'# error propagation to clients
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -396,8 +397,11 @@ def _process_parameters(cmd,parNames,devName,devDict,propNames,vals):
             devDict[parName] = parDict
             if not isinstance(val,(list,array.array)):
                 val = [val]
-            pv.set(val)
-            printd('set: %s=%s'%(parName,str(val)))
+            if True:#try:
+                pv.set(val)
+                printd('set: %s=%s'%(parName,str(val)))
+            else:#except Exception as e:
+                printe('in set %s: '%parName+str(e))
         elif cmd == 'info':
             printd('info (%s.%s)'%(parName,str(propNames)))
             devDict[parName] = parDict
@@ -427,7 +431,7 @@ def _reply(cmd, socket, client_address=None):
             r = 'ERR.LS. Exception: '+repr(e)
             exc = traceback.format_exc()
             print('Traceback: '+repr(exc))
-            return
+            #return
     
     printd('reply object: '+str(r)[:200]+'...'+str(r)[-40:])
     reply = ubjson.dumpb(r)
