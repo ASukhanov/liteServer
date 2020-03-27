@@ -45,7 +45,7 @@ Known issues:
 #__version__ = 'v47 2020-03-06'# Subscription OK
 #__version__ = 'v48 2020-03-07'
 #__version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
-__version__ = 'v50 2020-03-26'# error propagation to clients
+__version__ = 'v50a 2020-03-26'# error propagation to clients
 
 import sys, time, threading, math, traceback
 from timeit import default_timer as timer
@@ -204,7 +204,6 @@ class LDO():
 
     def set(self,vals,prop='v'):
         #print('features %s:%s'%(self._name,str(self.features)))
-        print('type(vals)',self._name,type(vals))
         if not self.is_writable():
             raise PermissionError('LDO is not writable')
         try: # pythonic way for testing if object is iterable
