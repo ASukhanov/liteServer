@@ -6,8 +6,8 @@
 #__version__ = 'v38 2020-02-24'# default localhost
 #__version__ = 'v39 2020-03-05'# 
 #__version__ = 'v40 2020-03-24'# --server option
-__version__ = 'v41 2020-03-26'# spinbox reacts on editingFinished, not valueChanged
-#TODO QTextEdit: transfer edited text to parameter
+#__version__ = 'v41 2020-03-26'# spinbox reacts on editingFinished, not valueChanged
+__version__ = 'v42 2020-03-27'# lineEditLDO widget for writable text parameters
 
 import threading, socket, subprocess, sys, time
 from timeit import default_timer as timer
@@ -42,7 +42,7 @@ class QDoubleSpinBoxLDO(QtWidgets.QDoubleSpinBox):
         opl = (0.,100.)
         try:    opl = self.ldo.opLimits['values']
         except:
-            printw(' no oplimits in '+self.ldo.name) 
+            #printw(' no oplimits for '+self.ldo.name) 
             pass
         else:
             #self.setRange(*opl)
@@ -79,7 +79,7 @@ class QComboBoxLDO(QtWidgets.QComboBox):
         #print('lvs',lvs)
         for lv in lvs:
             self.addItem(lv)
-        self.activated[str].connect(self.onComboChanged) 
+        self.activated[str].connect(self.onComboChanged)
 
     def onComboChanged(self,txt):
         #print('combo changed ',txt)
@@ -87,6 +87,21 @@ class QComboBoxLDO(QtWidgets.QComboBox):
 
     def setText(self,txt):
         self.lineEdit().setText(txt)
+
+class QLineEditLDO(QtWidgets.QLineEdit):
+    """LineEdit associated with DataAccess""" 
+    def __init__(self,ldo):
+        super().__init__()
+        self.ldo = ldo
+        self.returnPressed.connect(self.handle_value_changed)
+
+    def handle_value_changed(self):
+        print('lineedit changed ',self.text())
+        self.ldo.set(self.text())
+
+    #def setText(self,txt):
+    #    print('lineedit setText '+txt)
+    #    self.lineEdit().setText(txt)
 
 class myTableWidget(QtWidgets.QTableWidget):
     def mousePressEvent(self,*args):
@@ -235,6 +250,11 @@ class Window(QtWidgets.QWidget):
                       else QtCore.Qt.Unchecked
                     item.setCheckState(state)
                     continue
+                elif value == 'lineEdit':
+                    #print('>lineEdit',row,col)
+                    lineEdit = QLineEditLDO(dataAccess)
+                    lineEdit.setText(iValue[0])
+                    self.table.setCellWidget(row, col, lineEdit)
                 else:
                     print('not supported widget(%i,%i):'%(row,col)+value)
                     return                  
@@ -487,6 +507,8 @@ class DataAccess():
                 return 'spinbox'                
             if 'legalValues' in self.attr:
                 return 'combo'
+            if type(iv[0]) == str:
+                return 'lineEdit'
         return None
         
     def is_writable(self):
@@ -600,7 +622,7 @@ def build_temporary_pvfile(cnsName):
         host,device = ldo.split(',')
         print('hd',host,device)
         if not pargs.server and device == 'server':
-        	continue
+            continue
         f.write("  - [['%s',{span: [3,1],color: cyan}]]\n"%ldo)
         for par,props in parDict.items():
             f.write("  - ['%s',[[$%s],%s]]\n"%(par,ldo,par))
