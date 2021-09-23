@@ -56,98 +56,96 @@ objects to client and the callback function on the client will be invoked.
    - [Image analysis](https://github.com/ASukhanov/Imagin)
 
 ### Installation
+Python3 should be 3.6 or higher.
 
     python3 pip install liteserver
 
 Additional libraries may be required for specific devices.
 
 ### Key Components
-- **liteServer**: Module, providing classes Server, Device and LDO for building
-liteServer application.
-- **liteAccess.py**: Module for for accessing the Process Variables.
-- **liteCNS.py**:    Lite name service module, provides file-based (**liteCNS.yaml**) or network-based name service (**liteCNSserver.py**).
+- **liteServer**: Module for building liteServer applications.
+- **liteAccess**: Module for for accessing the Process Variables from a liteServer.
+- **liteCNS.py**: Name service module, it provides file-based (**liteCNS.yaml**) or network-based name service (**liteCNSserver.py**).
 
 ### Supportted devices
-Server implementation for various devices are located in .device sub-package. 
+Server implementations for various devices are located in .device sub-package. 
 A device server can be started using following command:
 
     python3 -m liteserver.device.<deviceName> <Arguments>
 
 - **device.liteScaler**: test implementation of the liteServer
 , supporting 1000 of up/down counters as well as multi-dimensional arrays.
-- **device.litePeakSimulator**: Waveforf simulator with multiple peaks and
+- **device.litePeakSimulator**: Waveform simulator with multiple peaks and
 a background noise.
 - **device.liteVGM**: Server for multiple gaussmeters from AlphaLab Inc.
-- **device.liteUSBCam**: Server for USB camera.
-- **device.liteUvcCam**: Server for USB camera using UVC library, allows for 
+- **device.liteUSBCam**: Server for USB cameras.
+- **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
 pan, zoom and tilt control.
 - **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
 - **device.liteLabjack**: LabJack U3 analog and digital IO module.
 - **device.senstation**: Server for various devices, connected to Raspberry Pi
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
 Buzzer, RGB LED indicator, OmegaBus serial sensors. Coming soon: NUCLEO-STM33 
-mixed signal MCU boards, connected to Raspberry Pi.
+mixed signal MCU boards, connected to Raspberry Pi over USB.
 
 ## Examples
 Most convenient way to test base class functionality is by using **ipython3**, 
 
 Start a server liteScaler on a local host:
 
-    python3 -m liteserver.device.liteScaler -ilo
+    python3 -m liteserver.device.liteScaler -ilo -n2
     ipython3
 
 ```python
-from liteAccess import liteAccess as LA 
+from liteserver import liteAccess import liteAccess as LA 
 from pprint import pprint
 
 Host = 'localhost'
 LAserver = Host+':server'
 LAdev1   = Host+':dev1'
-LAdev2   = Host+':dev2'
 
 #``````````````````Programmatic way, using Access`````````````````````````````
 # Advantage: The previuosly created PVs are reused.
+list(LA.Access.info((Host+':*','*')))# list of all devices on the Host
 LA.Access.info((LAserver,'*'))
 LA.Access.get((LAserver,'*'))
+LA.Access.set((LAdev1,'frequency',[2.0]))
 LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
 LA.Access.subscribe(LA.testCallback,(LAdev2,'time'))
 LA.Access.unsubscribe()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,	
 #``````````````````Object-oriented way````````````````````````````````````````
-    #``````````````Info```````````````````````````````````````````````````````
-    # list of all devices on a Host
-print(list(LA.PVs((Host+':*','*')).info()))
-    # info on all parameters of a device
-pprint(LA.PVs((LAserver,'*')).info())
-print(LA.PVs((LAdev1,'*')).info())
-# info on single parameter
-pprint(LA.PVs((LAserver,'run')).info())
-    # info on multiple parameters
-pprint(LA.PVs((LAserver,('perf','run'))).info())
-    #``````````````Get```````````````````````````````````````````````````````
-    # get all parameters from device LAserver
-pprint(LA.PVs((LAserver,'*')).get())
-    # get single parameter from device:
-pprint(LA.PVs((LAserver,    'perf')).get())
-    # simplified get: returns (value,timestamp) of a parameter 'perf' 
-pprint(LA.PVs((LAserver,    'perf')).value)
-    # get multiple parameters from device: 
-pprint(LA.PVs((LAserver,('perf','run'))).get())
-    # get multiple parameters from multiple devices 
-#DNW#pprint(LA.PVs((LAdev1,('time','frequency')),(LAdev2,('time','coordinate'))).get())
-    #``````````````Read```````````````````````````````````````````````````````
-    # get all readable parameters from device Scaler1:server, which have been modified since the last read
-print(LA.PVs((LAserver,'*')).read())
-    #``````````````Set````````````````````````````````````````````````````````
-    # simplified set, for single parameter:
-LA.PVs((LAdev1,'frequency')).value = [1.1]
-    # explicit set, could be used for multiple parameters:
-LA.PVs((LAdev1,'frequency')).set([1.1])
-print(LA.PVs((LAdev1,'frequency')).value)
-    # multiple set
-LA.PVs((LAdev1,('frequency','coordinate'))).set([8.,[3.,4.]])
-pprint(LA.PVs([LAdev1,('frequency','coordinate')]).get())
-    #``````````````Subscribe``````````````````````````````````````````````````
+allServerParameters = LA.PVs((LAserver,'*'))
+pprint(allServerParameters.info())
+pprint(allServerParameters.get())# get all parameters from device LAserver
+# get all readable parameters from device Scaler1:server, which have been 
+# modified since the last read:
+pprint(allServerParameters.read())
+
+allDev1Parameters = LA.PVs((LAdev1,'*'))
+print(allDev1Parameter.info())
+
+server_performance = LA.PVs((LAserver,'perf'))
+pprint(server_performance.info())
+pprint(server_performance.get())
+# simplified get: returns (value,timestamp) of a parameter 'perf' 
+pprint(server_performance.value)
+
+server_multiple_parameters = LA.PVs((LAserver,('perf','run')))
+pprint(server_multiple_parameters.info())
+pprint(server_multiple_parameters.get())
+
+server_multiple_devPars = LA.PVs((LAdev1,('time','frequency')),(LAserver,('statistics','perf'))
+pprint(server_multiple_devPars.get())
+
+# setting
+dev1_frequency = LA.PVs((LAdev1,'frequency'))
+dev1_frequency.set([1.5])
+dev1_frequency.value
+dev1_multiple_parameters = LA.PVs([LAdev1,('frequency','coordinate')])
+dev1_multiple_parameters.set([8.,[3.,4.]])
+
+# subscribing
 ldo = LA.PVs([LAdev1,'cycle'])
 ldo.subscribe()# it will print image data periodically
 ldo.unsubscribe()# cancel the subscruption
@@ -160,6 +158,6 @@ LA.PVs([[['Scaler1','dev1'],['frequency','command']]]).get()
     # Measured transaction time is 6.4ms per 61 KBytes for:
 LA.PVs([[['Scaler1','dev1'],'*']]).read() 
 #``````````````````Tips```````````````````````````````````````````````````````
-To enable debugging: LA.PVs.Dbg = True
-To enable transaction timing: LA.Channel.Perf = True
+# To enable debugging: LA.PVs.Dbg = True
+# To enable transaction timing: LA.Channel.Perf = True
 ```
