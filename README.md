@@ -88,6 +88,7 @@ Revision 4 released.
 
 ## Examples
 Most convenient way to test base class functionality is by using **ipython3**, 
+```python
 #``````````````````Usage:`````````````````````````````````````````````````````
 Start a server liteScaler on a local host:
 python3 -m device.liteScaler -ilo
@@ -157,4 +158,5 @@ LA.PVs([[['Scaler1','dev1'],['frequency','command']]]).get()
 LA.PVs([[['Scaler1','dev1'],'*']]).read() 
 #``````````````````Tips```````````````````````````````````````````````````````
 To enable debugging: LA.PVs.Dbg = True
-To enable transaction timing: LA.Channel.Perf = True  
+To enable transaction timing: LA.Channel.Perf = True
+```
