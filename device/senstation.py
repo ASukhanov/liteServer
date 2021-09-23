@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LiteServer for Raspberry Pi.
+"""liteserver for Raspberry Pi.
 Supported:
   - Two hardware PWMs 1Hz-300 MHz, GPIO 12,13
   - Temperature sensors DS18B20 (0.5'C resolution), GPIO 4
@@ -16,7 +16,7 @@ TODO: connection to RPi Pico RP2040 MCU which will provide:
   - real time
 """
 
-#__version__ = 'v01 2021-05-22'# adopted from liteServer/litePigpio
+#__version__ = 'v01 2021-05-22'# adopted from liteserver/litePigpio
 #__version__ = 'v02 2021-05-28'# Fixed bug in 'buzz'
 #__version__ = 'v03 2021-05-31'# publish1 can accept iterable values now
 #__version__ = 'v04 2021-06-09'# seldomThread starts after publish! setters activated in add_more_parameters
@@ -32,11 +32,11 @@ from functools import partial
 #import numpy as np
 
 from gpiozero import CPUTemperature
-from liteServer import liteServer
+from liteserver import liteserver
 
 #````````````````````````````Globals``````````````````````````````````````````
-LDO = liteServer.LDO
-Device = liteServer.Device
+LDO = liteserver.LDO
+Device = liteserver.Device
 GPIO = {
     'Temp0': 4,
     'PWM0': 12,# 'PWM1':13,
@@ -131,9 +131,9 @@ def init_serial():
     except Exception as e:
         printe(f'Could not open communication to OmegaBus: {e}')
         sys.exit(1)
-#````````````````````````````liteServer methods```````````````````````````````
+#````````````````````````````liteserver methods```````````````````````````````
 class SensStation(Device):
-    """ Derived from liteServer.Device.
+    """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name):
@@ -336,12 +336,12 @@ if pargs.serial != '':
     import serial
     init_serial()
 
-liteServer.Server.Dbg = pargs.dbg
+liteserver.Server.Dbg = pargs.dbg
 SensStationDev1 = SensStation('dev1')
 devices = [SensStationDev1]
 
 print('Serving:'+str([dev.name for dev in devices]))
 
-server = liteServer.Server(devices, interface=pargs.interface,
+server = liteserver.Server(devices, interface=pargs.interface,
     port=pargs.port)
 server.loop()

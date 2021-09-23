@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LiteServer for Labjack U3, supports 5 ADCs, 2 DACs, 2 Counter/Timers, 
+"""liteserver for Labjack U3, supports 5 ADCs, 2 DACs, 2 Counter/Timers, 
 9 Digital IOs"""
 #__version__ = 'v02 2021-05-01'# DAC supported
 #__version__ = 'v03 2021-05-03'# Counters supported, QuickSampling provides ~350 readouts/s
@@ -12,11 +12,11 @@ from timeit import default_timer as timer
 from functools import partial
 import numpy as np
 
-from liteServer import liteServer
+from liteserver import liteserver
 
 #````````````````````````````Globals``````````````````````````````````````````
-LDO = liteServer.LDO
-Device = liteServer.Device
+LDO = liteserver.LDO
+Device = liteserver.Device
 ModBusAddr={'DAC0':5000, 'DAC1':5002}
 
 #````````````````````````````Initialization
@@ -54,7 +54,7 @@ def printd(msg):
         print('LLJ:dbgScaler: '+str(msg))
 
 class LLJ(Device):
-    """ Derived from liteServer.Device.
+    """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name):
@@ -171,11 +171,11 @@ parser.add_argument('-p','--port', type=int, default=9700, help=\
 'Serving port, default: 9700') 
 pargs = parser.parse_args()
 
-liteServer.Server.Dbg = pargs.dbg
+liteserver.Server.Dbg = pargs.dbg
 devices = [LLJ('dev1')]
 
 print('Serving:'+str([dev.name for dev in devices]))
 
-server = liteServer.Server(devices, interface=pargs.interface,
+server = liteserver.Server(devices, interface=pargs.interface,
     port=pargs.port)
 server.loop()

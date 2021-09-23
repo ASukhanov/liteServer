@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""liteServer, simulating peaks"""
+"""liteserver, simulating peaks"""
 #__version__ = 'v01 2021-05-26'# created
 #__version__ = 'v02 2021-05-27'# defaults changed frequency=100Hz, swing=10%.CPU=5% 
 #__version__ = 'v03 2021-07-08'# no_float32 and ServerDbg are handled properly, 
@@ -9,9 +9,9 @@ import sys, time, threading
 from timeit import default_timer as timer
 import numpy as np
 
-from liteServer import liteServer
-LDO = liteServer.LDO
-Device = liteServer.Device
+from liteserver import liteserver
+LDO = liteserver.LDO
+Device = liteserver.Device
 
 #````````````````````````````Helper functions`````````````````````````````````
 def gaussian(x, sigma):
@@ -43,7 +43,7 @@ def peaks(x, *par, noiseLevel=0.):
     return peaks + noise
 #````````````````````````````Lite Data Objects````````````````````````````````
 class Dev(Device):
-    """ Derived from liteServer.Device.
+    """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self, name, no_float32=False):
@@ -155,7 +155,7 @@ pp = generate_pars(n)
 
 parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    ,epilog=f'litePeakSimulator version {__version__}, liteServer {liteServer.__version__}')
+    ,epilog=f'litePeakSimulator version {__version__}, liteserver {liteserver.__version__}')
 parser.add_argument('-b', '--background', default=str_of_numbers(pp[:3])
 , help=('Three coefficients (comma-separated) of the quadratic background'))
 parser.add_argument('-d','--doubles', action='store_true'
@@ -179,9 +179,9 @@ pargs = parser.parse_args()
 pargs.background = [float(i) for i in pargs.background.split(',')]
 pargs.peaks = [float(i) for i in pargs.peaks.split(',')]
 
-liteServer.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
+liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
 devices = [Dev('dev1', no_float32=pargs.doubles)]
 
-server = liteServer.Server(devices, interface=pargs.interface,
+server = liteserver.Server(devices, interface=pargs.interface,
     port=pargs.port)
 server.loop()

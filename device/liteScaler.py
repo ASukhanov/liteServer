@@ -6,9 +6,9 @@ import sys, time, threading
 from timeit import default_timer as timer
 import numpy as np
 
-from liteServer import liteServer
-LDO = liteServer.LDO
-Device = liteServer.Device
+from liteserver import liteserver
+LDO = liteserver.LDO
+Device = liteserver.Device
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printi(msg): print('LiteScaler:INFO: '+msg)
@@ -19,7 +19,7 @@ def printd(msg):
         print('LiteScaler:dbgScaler: '+str(msg))
 #````````````````````````````Lite Data Objects````````````````````````````````
 class Scaler(Device):
-    """ Derived from liteServer.Device.
+    """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name, bigImage=False, no_float32=False):
@@ -89,7 +89,7 @@ class Scaler(Device):
         periodic_update = time.time()
         maxChanks = 0
         while not self.aborted():
-            #TODO: with LiteServer-v76 we have to use value[0]
+            #TODO: with liteserver-v76 we have to use value[0]
             #waitTime = 1./self.frequency.value - (time.time() - timestamp)
             waitTime = 1./self.frequency.value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
@@ -150,7 +150,7 @@ class Scaler(Device):
                 self.publishingSpeed.value = ss
                 #printd(f'publishing speed of {self.name}: {ss}')
                 self.dataSize.value = round(shippedBytes/1000.,1)
-                self.chunks.value = (shippedBytes-1)//liteServer.ChunkSize + 1
+                self.chunks.value = (shippedBytes-1)//liteserver.ChunkSize + 1
                 maxChanks = max(maxChanks, self.chunks.value)
         print('Scaler '+self.name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,S,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -158,7 +158,7 @@ class Scaler(Device):
 import argparse
 parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    ,epilog=f'liteScaler version {__version__}, liteServer {liteServer.__version__}')
+    ,epilog=f'liteScaler version {__version__}, liteserver {liteserver.__version__}')
 parser.add_argument('-d','--doubles', action='store_true'
 , help='Encode floats as doubles, use it when you need precision higher than 7 dighits')
 parser.add_argument('-b','--bigImage', action='store_true', help=\
@@ -177,13 +177,13 @@ parser.add_argument('-s','--scalers', type=int, default=1, help=\
 parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
 pargs = parser.parse_args()
 
-liteServer.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
+liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
 devices = [
   Scaler('dev'+str(i+1), bigImage=pargs.bigImage, no_float32=pargs.doubles)\
   for i in range(pargs.scalers)]
 
 print('Serving:'+str([dev.name for dev in devices]))
 
-server = liteServer.Server(devices, interface=pargs.interface,
+server = liteserver.Server(devices, interface=pargs.interface,
     port=pargs.port)
 server.loop()

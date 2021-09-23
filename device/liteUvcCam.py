@@ -12,11 +12,11 @@ except ImportError:
     print("ERROR pyuvc not installed")
     exit(1)
 
-from liteServer import liteServer
-LDO = liteServer.LDO
-Device = liteServer.Device
+from liteserver import liteserver
+LDO = liteserver.LDO
+Device = liteserver.Device
 EventExit = Device.EventExit
-printd = liteServer.printd
+printd = liteserver.printd
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printw(msg): print('WARNING: '+msg)
@@ -107,9 +107,9 @@ class Camera(Device):
 import argparse
 parser = argparse.ArgumentParser(description = __doc__
 ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-,epilog=f'liteUvcCam: {__version__}, liteServer: {liteServer.__version__}')
+,epilog=f'liteUvcCam: {__version__}, liteserver: {liteserver.__version__}')
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
-defaultIP = liteServer.ip_address('')
+defaultIP = liteserver.ip_address('')
 parser.add_argument('-i','--interface', default = defaultIP, help=\
 'network interface')
 pargs = parser.parse_args()
@@ -120,8 +120,8 @@ devices = [
 
 print('Serving:'+str([dev.name for dev in devices]))
 
-liteServer.Server.Dbg = pargs.dbg
-server = liteServer.Server(devices, interface=pargs.interface)
+liteserver.Server.Dbg = pargs.dbg
+server = liteserver.Server(devices, interface=pargs.interface)
 server.loop()
 #print(f'loop finished threads: {threading.enumerate()}')
 

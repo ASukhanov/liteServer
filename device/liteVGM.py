@@ -8,10 +8,10 @@ print(f'version: {__version__}')
 #TODO, issue: the vgm_command lasts timeout time, it should finish after transfer
 
 import sys, serial, time
-from liteServer import liteServer
+from liteserver import liteserver
 
-LDO = liteServer.LDO
-Device = liteServer.Device
+LDO = liteserver.LDO
+Device = liteserver.Device
 
 #`````````````````````````````Helper methods```````````````````````````````````
 def printe(msg):
@@ -20,7 +20,7 @@ def printw(msg):
     print('WARNING '+msg)
 #def printd(msg): pass#print('DBG: '+msg)
 def printd(msg):
-    if liteServer.Server.Dbg: print('dbgVGM:'+str(msg))
+    if liteserver.Server.Dbg: print('dbgVGM:'+str(msg))
     
 def decode_data_point(dp):
     """Decode 6 bytes of a data point"""
@@ -117,10 +117,10 @@ class Gaussmeter(Device):
 import argparse
 parser = argparse.ArgumentParser(description = __doc__
 ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-,epilog=f'liteVGM: {__version__}, liteServer: {liteServer.__version__}')
+,epilog=f'liteVGM: {__version__}, liteserver: {liteserver.__version__}')
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
 parser.add_argument('-p','--port',type=int, help='IP port', default=9700)
-defaultIP = liteServer.ip_address('')
+defaultIP = liteserver.ip_address('')
 parser.add_argument('-i','--interface', default = defaultIP, help=\
 'Network interface.')
 parser.add_argument('-t','--timeout',type=float,default=0.2\
@@ -129,7 +129,7 @@ parser.add_argument('comPorts',nargs='*',default=['/dev/ttyUSB0'])#['COM1'])
 pargs = parser.parse_args()
 print(f'comports: {pargs.comPorts}')
 
-liteServer.Server.Dbg = pargs.dbg
+liteserver.Server.Dbg = pargs.dbg
 #devices = [Gaussmeter('Gaussmeter%d'%i,comPort=p) for i,p in enumerate(pargs.comPorts)]
 devices = []
 for i,p in enumerate(pargs.comPorts):
@@ -141,7 +141,7 @@ if len(devices) == 0:
     printe('No devices to serve')
     sys.exit(1)
 print('Serving:'+str([dev.name for dev in devices]))
-server = liteServer.Server(devices, interface=pargs.interface,
+server = liteserver.Server(devices, interface=pargs.interface,
     port=pargs.port)
 
 try:
