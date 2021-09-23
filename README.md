@@ -9,8 +9,10 @@ which makes it very fast and efficient.
 - Provide control for devices connected to non-linux machines. 
 - The simplicity of the protocol makes it possible to implement in CPU-less FPGA device.
 - The server is running on a remote machine. Device parameters can be 
-manipulated using liteAccess.py.
-The liteAccess.py is the base class for accessing the server parameters.
+manipulated using **liteserver.liteAccess** module.
+
+### Data logging and retrieving
+Data objects can be logged and retrieved using an **apstrim** package (https://pypi.org/project/apstrim).
 
 ### Bridged usage
 To monitor and control liteServer-served devices from an existing architecture 
@@ -54,20 +56,22 @@ objects to client and the callback function on the client will be invoked.
    - [Image analysis](https://github.com/ASukhanov/Imagin)
 
 ### Installation
-Prerequisites:
- - **python3**: preferrably python3.6+ (it keeps dictionaries sorted)
- - **py-ubjson**: versions 0.12+ provides greatly improved performance for multi-dimensional arrays
- - **pyQT5**: for GUI
- - **opencv-python**: for liteUSBCam
+
+    python3 pip install liteserver
+
+Additional libraries may be required for specific devices.
 
 ### Key Components
 - **liteServer**: Module, providing classes Server, Device and LDO for building
 liteServer application.
 - **liteAccess.py**: Module for for accessing the Process Variables.
-- **liteCNS.py**:    lite name service module, provides file-based (**liteCNS.yaml**) or network-based name service (**liteCNSserver.py**).
+- **liteCNS.py**:    Lite name service module, provides file-based (**liteCNS.yaml**) or network-based name service (**liteCNSserver.py**).
 
 ### Supportted devices
-Server implementation for various devices are located in .device sub-module. 
+Server implementation for various devices are located in .device sub-package. 
+A device server can be started using following command:
+
+    python3 -m liteserver.device.<deviceName> <Arguments>
 
 - **device.liteScaler**: test implementation of the liteServer
 , supporting 1000 of up/down counters as well as multi-dimensional arrays.
@@ -78,22 +82,21 @@ a background noise.
 - **device.liteUvcCam**: Server for USB camera using UVC library, allows for 
 pan, zoom and tilt control.
 - **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
+- **device.liteLabjack**: LabJack U3 analog and digital IO module.
 - **device.senstation**: Server for various devices, connected to Raspberry Pi
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
 Buzzer, RGB LED indicator, OmegaBus serial sensors. Coming soon: NUCLEO-STM33 
 mixed signal MCU boards, connected to Raspberry Pi.
 
-### Status
-Revision 4 released.
-
 ## Examples
 Most convenient way to test base class functionality is by using **ipython3**, 
-```python
-#``````````````````Usage:`````````````````````````````````````````````````````
-Start a server liteScaler on a local host:
-python3 -m device.liteScaler -ilo
 
-ipython3
+Start a server liteScaler on a local host:
+
+    python3 -m liteserver.device.liteScaler -ilo
+    ipython3
+
+```python
 from liteAccess import liteAccess as LA 
 from pprint import pprint
 
