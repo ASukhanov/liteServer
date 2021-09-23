@@ -10,7 +10,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="liteserver",
-    version="1.0.0",# 2021-09-22
+    version="1.0.3",# 2021-09-22
     description="Lightweight control system for scientific instruments. Like EPICS but much simpler",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -23,7 +23,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
     ],
-    packages=["liteserver"],
+    packages=["liteserver","liteserver.device"],
     include_package_data=True,
     install_requires=["py-ubjson"],
     #entry_points={
