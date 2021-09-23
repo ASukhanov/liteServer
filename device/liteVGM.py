@@ -1,24 +1,17 @@
 #!/usr/bin/env python3
-"""Process Variables Server of the Gaussmeter VGM from AlphaLab Inc.
+"""Process Variables Server of the Gaussmeters VGM and GM-2 from AlphaLab Inc.
 The Device Communication Protocol is described in 
 https://www.alphalabinc.com/wp-content/uploads/2018/02/alphaapp_comm_protocol.pdf
 """
-#__version__ = 'v01 2018-12-27'# created
-#__version__ = 'v02 2018-05-07'# better error handling
-#__version__ = 'v03 2018-05-08'# longer (0.5s) time.sleep on opening, it helps
-#__version__ = 'v04 2011-11-07'# support new liteServer 
-#__version__ = 'v05 2011-11-09'# parent abandoned, global serialDev
-#__version__ = 'v06 2011-11-10'# parent is back, it is simplest way to provide PVD with the proper serial device
-#__version__ = 'v07 2011-11-22'# IMPORTANT: _serialDev replaces serialDev, non-underscored members are treated as parameters
-__version__ = 'v08 2011-11-26'# 
+__version__ = 'v14 2021-09-21'# 
+print(f'version: {__version__}')
+#TODO, issue: the vgm_command lasts timeout time, it should finish after transfer
 
 import sys, serial, time
-#Python3 = sys.version_info.major == 3
-import liteServer
+from liteServer import liteServer
 
-PV = liteServer.PV
+LDO = liteServer.LDO
 Device = liteServer.Device
-EventExit = liteServer.EventExit
 
 #`````````````````````````````Helper methods```````````````````````````````````
 def printe(msg):
@@ -46,14 +39,14 @@ def decode_data_point(dp):
 
 def vgm_command(cmd,serDev):
     """execute command on a gaussmeter with serial interface ser"""
-    printd('>vgm_command: '+str(cmd))
+    printd('>vgm_command for %s :'%serDev.name+str(cmd))
     serDev.write(cmd)
     dps = serDev.read(100)
     ldps = len(dps)
-    printd('read %d'%ldps+' bytes')
+    printd(f'Read {ldps} bytes: {dps}')
 
     if ldps == 0:
-        print('No data')
+        print('No data from '+serDev.name)
         return []
         
     if dps[-1] != 8:
@@ -66,19 +59,25 @@ def vgm_command(cmd,serDev):
     return r
 
 #````````````````````````````Process Variables````````````````````````````````
-class PVD(PV):
+class LDOmy(LDO):
     # override data updater
+    def __init__(self, f, d, v, serialDev='/dev/ttyUSB0'):
+        super().__init__(f, d, v)
+        self._serialDev = serialDev
+
     def update_value(self):
-        r = vgm_command(b'\x03'*6,self._parent._serialDev)
+        r = vgm_command(b'\x03'*6,self._serialDev)
         printd('getv:'+str(r))
         self.value = r
+        self.timestamp = time.time()
+        printd(f'v,t = {r,self.timestamp}')
         
 class Gaussmeter(Device):
     #``````````````Attributes, same for all class instances```````````````````    Dbg = False
     Dbg = False
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Instantiation``````````````````````````````````````````````
-    def __init__(self,name,comPort='COM1'):
+    def __init__(self, name, comPort='COM1'):
     
         #device specific initialization
         def open_serial():
@@ -98,37 +97,52 @@ class Gaussmeter(Device):
             print('Succesfully open '+name+' at '+comPort)
 
         # create parameters
-        pars = {'DP': PVD('R','Data Points',[0.]*5,parent=self)}
+        pars = {
+        #'DP':   LDOmy('R','Data Points',[0.]*5,parent=self),
+        'DP':   LDOmy('R', 'Data Points', [0.]*5, serialDev=self._serialDev),
+        'Reset':LDO('W','Start new streaming session',[False]\
+                ,setter=self.reset_VGM_timestamp),
+        }
         super().__init__(name,pars)
-        
-        # test
-        #pars['DP'].update_values()
-    #``````````````Overridables```````````````````````````````````````````````
-    def start(self):        
-        print('Gaussmeter %s started.'%self._name)
-        r = vgm_command(b'\x04'*6,self._serialDev)
-        print('response:'+repr(r))
+        self.reset_VGM_timestamp()
+
+    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+    #``````````````Device-specific methods````````````````````````````````````
+    def reset_VGM_timestamp(self):
+        print('Reset timestamp on '+self.name)
+        r = vgm_command(b'\x04'*6, self._serialDev)
+        print('reply:'+repr(r))
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # parse arguments
 import argparse
-parser = argparse.ArgumentParser(description=\
-  'Process Variable liteServer for Gaussmeters from AlphaLab Inc')
+parser = argparse.ArgumentParser(description = __doc__
+,formatter_class=argparse.ArgumentDefaultsHelpFormatter
+,epilog=f'liteVGM: {__version__}, liteServer: {liteServer.__version__}')
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
-#parser.add_argument('-H','--host',help='host IP address',default='localhost')
-#parser.add_argument('-p','--port',type=int,help='IP port',default=9700)
-parser.add_argument('-t','--timeout',type=float,default=.5\
-,help='serial port timeout')
+parser.add_argument('-p','--port',type=int, help='IP port', default=9700)
+defaultIP = liteServer.ip_address('')
+parser.add_argument('-i','--interface', default = defaultIP, help=\
+'Network interface.')
+parser.add_argument('-t','--timeout',type=float,default=0.2\
+,help='serial port timeout')# 0.1 is too fast for reading from VGM 
 parser.add_argument('comPorts',nargs='*',default=['/dev/ttyUSB0'])#['COM1'])
 pargs = parser.parse_args()
+print(f'comports: {pargs.comPorts}')
 
 liteServer.Server.Dbg = pargs.dbg
 #devices = [Gaussmeter('Gaussmeter%d'%i,comPort=p) for i,p in enumerate(pargs.comPorts)]
 devices = []
 for i,p in enumerate(pargs.comPorts):
-    try:    devices.append(Gaussmeter('Gaussmeter%d'%i,comPort=p))
-    except Exception as e:  printw('opening serial: '+str(e))
+    if True:#try:
+        devices.append(Gaussmeter('Gaussmeter%d'%i, comPort=p))
+    #except Exception as e:  printw('opening serial: '+str(e))
 
-server = liteServer.Server(devices)#,host=pargs.host, port=pargs.port)
+if len(devices) == 0:
+    printe('No devices to serve')
+    sys.exit(1)
+print('Serving:'+str([dev.name for dev in devices]))
+server = liteServer.Server(devices, interface=pargs.interface,
+    port=pargs.port)
 
 try:
     server.loop()
