@@ -1,5 +1,5 @@
 # liteServer
-Very Lightweight Data Object Server. 
+Very Lightweight Data Object Server and Client. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
 UDP protocol. Data encoding is implemented using UBJSON specification, 
