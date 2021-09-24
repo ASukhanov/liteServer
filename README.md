@@ -97,7 +97,7 @@ Start a server liteScaler on a local host:
     ipython3
 
 ```python
-from liteserver import liteAccess import liteAccess as LA 
+from liteserver import liteAccess as LA 
 from pprint import pprint
 
 Host = 'localhost'
