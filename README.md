@@ -93,7 +93,7 @@ Start a server liteScaler on a local host:
     ipython3
 
 ```python
-from liteserv import liteAccess as LA 
+from liteserver import liteAccess as LA 
 from pprint import pprint
 
 Host = 'localhost'
@@ -108,7 +108,6 @@ LA.Access.info((LAserver,'*'))
 LA.Access.get((LAserver,'*'))
 LA.Access.set((LAdev1,'frequency',[2.0]))
 LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
-LA.Access.subscribe(LA.testCallback,(LAdev2,'time'))
 LA.Access.unsubscribe()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,	
 #``````````````````Object-oriented way````````````````````````````````````````
@@ -132,7 +131,7 @@ server_multiple_parameters = LA.PVs((LAserver,('perf','run')))
 pprint(server_multiple_parameters.info())
 pprint(server_multiple_parameters.get())
 
-server_multiple_devPars = LA.PVs((LAdev1,('time','frequency')),(LAserver,('statistics','perf'))
+server_multiple_devPars = LA.PVs((LAdev1,('time','frequency')),(LAserver,('statistics','perf')))
 pprint(server_multiple_devPars.get())
 
 # setting
