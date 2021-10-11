@@ -80,7 +80,7 @@ mixed signal MCU boards, connected to Raspberry Pi over USB.
 ### Installation
 Python3 should be 3.6 or higher.
 
-    python3 pip install liteserver
+    python3 -m pip install liteserver
 
 Additional libraries may be required for specific devices.
 
