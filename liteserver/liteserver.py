@@ -25,59 +25,24 @@ Supported commands:
 
 Example usage:
 - start liteServer for 2 Scalers on a remote host:
-liteScaler.py
+python3 -m liteserver.device.liteScaler -ilo
 - use ipython3 to communicate with devices:
 ipython3
-from liteAccess import liteAccess as LA
-LA.Access.info(('Scaler1:server','*'))
-LA.Access.info(('Scaler1:dev1','*'))
-LA.Access.set(('Scaler1:dev1','run','Stop'))
-LA.Access.set(('Scaler1:dev1','run','Run'))
-LA.Access.get(('Scaler1:dev1','run'))
-LA.Access.subscribe(LA.testCallback,('Scaler1:server','clientsInfo'))
-
-Known issues:
+Host = 'localhost'
+LAserver = Host+':server'
+LAdev1   = Host+':dev1'
+list(LA.Access.info((Host+':*','*')))# list of all devices on the Host
+LA.Access.info((LAserver,'*'))
+LA.Access.get((LAserver,'*'))
+LA.Access.set((LAdev1,'frequency',[2.0]))
+LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
+LA.Access.unsubscribe()
+"""
+"""Known issues:
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-#__version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
-#__version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
-#__version__ = 'v42 2020-02-25'# start command added
-#__version__ = 'v43 2020-02-27'# serverState and setServerStatusText
-#__version__ = 'v44 2020-02-29'# do not except if type mismatch in set
-#__version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
-#__version__ = 'v46 2020-03-04'# test for publishing
-#__version__ = 'v47 2020-03-06'# Subscription OK
-#__version__ = 'v48 2020-03-07'
-#__version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
-#__version__ = 'v50a 2020-03-26'# error propagation to clients
-#__version__ = 'v52 2020-12-17'# NSDelimiter=':' to conform EPICS and ADO
-#__version__ = 'v53b 2020-12-18'# .v and .t replaced with .value and .timestamp to be consistent with ADO and EPICS
-#__version__ = 'v54 2020-12-23'# publish() delivers parameters which have been changed since previous delivery. Unsubscribe is supported, may need locking.
-#__version__ = 'v55d 2020-12-31'# unsubscribing all, timeShift replaces time 
-#__version__ = 'v56 2021-01-01'# major update.
-#__version__ = 'v57 2021-01-02'# heartbeat thread
-#__version__ = 'v58 2021-01-04'# 'run' PV added to Device, 'start' PV removed from server, Device.aborted()
-#__version__ = 'v60e 2021-01-06'# itemsLost counter, send_udp got arg: subscribed 
-#__version__ = 'v61 2021-01-06'# Reasonably good
-#__version__ = 'v62 2021-01-12'# scalar allowed in parameter definition, it will be treated as array[1]
-#__version__ = 'v63 2021-04-08'# more informative exception handling
-#__version__ = 'v64 2021-04-11'# Server.Dbg is boolean
-#__version__ = 'v65 2021-04-12'# handling of a wrong command format exception
-#__version__ = 'v66 2021-04-20'# all threads should be non-daemonic
-#__version__ = 'v67 2021-04-21'# numpy array attribute is 'numpy', not 'n'
-#__version__ = 'v68 2021-04-22'# oplimits are violated when value is out of bounds
-#__version__ = 'v69 2021-04-24'# handling retransmissions
-#__version__ = 'v70 2021-04-29'# works OK for data  up to 5MB
-#__version__ = 'v71 2021-05-01'# added getter to LDO, removed second argument in LDO.setter
-#__version__ = 'v72 2021-05-03'# don't need to use value[0] most cases, require Ack even for 1-chunk messages
-#__version__ = 'v73 2021-05-05'# parent removed.
-#__version__ = 'v74 2021-05-19'# targeted un-subscribing
-#__version__ = 'v76 2021-05-26'# ItemLostLimit reduced to 1, with MaxAckCount = 10, parameters are copied, not bound in LDO.__init__
-#__version__ = 'v77 2021-05-27'# LDO._name replaced with LDO.name
-#__version__ = 'v78 2021-06-10'# runFlag removed, added LDO.start() LDO.stop()
-#__version__ = 'v79 2021-07-06'# use float32 for encoding, could be overridded by setting Device.no_float32=True. Server.Dbg handled properly
-__version__ = 'v80 2021-07-07'# opLimits for debug
+__version__ = '1.0.5 2021-10-07'#
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -130,14 +95,17 @@ def printe(msg):
     #Device.setServerStatusText(msg)
 
 def printd(msg):
-    if Server.Dbg: print(croppedText('LS.DBG:'+str(msg)))
+    if Server.Dbg >= 1: print(croppedText('LS.DBG:'+str(msg)))
+
+def printdd(msg):
+    if Server.Dbg >= 2: print(croppedText('LS.DBG:'+str(msg)))
 
 def ip_address(interface = ''):
     """Platform-independent way to get local host IP address"""
     def ip_fromGoogle():
         ipaddr = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
           for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
-        printi(f'IP address is obtained using Google')
+        printi(f'IP address {ipaddr} is obtained using Google')
         return ipaddr
     if len(interface) > 0:
         #assume it is linux
@@ -148,7 +116,7 @@ def ip_address(interface = ''):
             tokens = r.stdout.split()
             ipaddr = tokens[tokens.index(b'inet')+1].decode().split('/')[0]
         except Exception as e:
-            printw(f'Could not get IP address using ip command: {e}')
+            #printw(f'Could not get IP address using ip command: {e}')
             ipaddr = ip_fromGoogle()
     else: # get it from Google
         ipaddr = ip_fromGoogle()
@@ -164,7 +132,12 @@ class LDO():
     value, count, timestamp, features, decription.
     value should be iterable! It simplifies internal logic.
     The type and count is determined from default value.
-    Features is string, containing letters from 'RWD'.
+    Features is string, containing letters from 'RWDEI'.
+    R stands for Readable
+    W - for Writable
+    D - for Discrete
+    E - for Editable
+    I - for diagnostic
     More properties can be added in derived classes"""
     def __init__(self,features='RW', desc='', value=[0], units=None,
             opLimits=None, legalValues=None, setter=None,
@@ -218,11 +191,11 @@ class LDO():
         except:
             l = 1
             self.value = [self.value]
-
-        if l == 1 and isinstance(self.value[0],bool):
+        valueType = type(self.value[0])
+        if l == 1 and valueType == bool:
             vals = [True] if vals[0] else [False] 
 
-        if type(vals[0]) is not type(self.value[0]):
+        if valueType != type(None) and type(vals[0]) != valueType:
             msg='Setting %s: '%self.name+str(type(vals[0]))+' to '\
             +str(type(self.value[0]))
             #raise TypeError(msg)
@@ -242,8 +215,9 @@ class LDO():
                 %self.name+str(vals[0]))
 
         prev = self.value
-        printd(f'set {self.name}={vals}')
-        self.value = vals
+        if valueType != type(None):
+            printd(f'set {self.name}={vals}')
+            self.value = vals
         self.timestamp = time.time()
 
         # call LDO setting method with new value
@@ -284,9 +258,9 @@ class Device():
 
         requiredParameters = {
           'run':    LDO('RWE','Stop/Run/Exit', ['Running'],legalValues\
-            = ['Exit'] if self.name == 'server' else ['Run','Stop']\
+            = ['Run','Stop', 'Exit'] if self.name == 'server' else ['Run','Stop']\
             , setter=self._set_run),
-          'status': LDO('R','Device status', ['']),
+          'status': LDO('RWE','Device status', ['']),
         }
         parDefs = requiredParameters
         parDefs.update(pars)
@@ -295,6 +269,10 @@ class Device():
             setattr(self,p,v)
             par = getattr(self,p)
             par.name = p
+
+    def add_parameter(self, name, ldo):
+        setattr(self, name, ldo)
+        getattr(self,name).name = name
 
     def aborted(self):
         self.stop()
@@ -380,11 +358,11 @@ class Device():
         If data have changed several times since the last update then only 
         the last change will be published.
         Call this when the data are ready to be published to subscribers.
-        usually at the end of the data pocessing.
+        usually at the end of the data processing.
         """
         if len(self.subscribers) == 0:
             return 0
-        #print('>pub')
+        printdd('>publish')
         bytesShipped = 0
         blocked = not publish_Lock.acquire(blocking=False)
         if blocked:
@@ -406,7 +384,7 @@ class Device():
             sockAddr = (socket,hostPort)
             if sockAddr in list(_myUDPServer.ackCounts):
                 ackCount = _myUDPServer.ackCounts[(sockAddr)][0]
-                #print(f'Posting to {hostPort} dropped as it did not acknowlege previous delivery: {ackCount}')
+                printd(f'Posting to {hostPort} dropped as it did not acknowlege previous delivery: {ackCount}')
                 Server.Perf['Dropped'] += 1
                 #if ackCount < MaxAckCount:
                 if ackCount <= 0:
@@ -432,11 +410,11 @@ class Device():
             # do publish
             self.subscribers[hostPort][3] = currentTime# update lastDelivered time
 
-            # _reply() will deliver only parameters with modified timestamp
+            # _reply('read',...) will deliver only parameters with modified timestamp
             #tn = timer(); dt[0] += tn - ts
             r = _reply(['read',request], socket, hostPort
             , no_float32=self.no_float32)
-            #printd(f'<_reply: {r}')
+            printdd(f'<_reply: {r}')
             #tn = timer(); dt[1] += tn - ts
             bytesShipped += r
         self.lastPublishTime = time.time()
@@ -462,6 +440,16 @@ class Device():
         else:
             raise ValueError(f'LS:not accepted setting for "run": {val[0]}') 
         self.run.value[0] = val
+
+    def poll(self):
+        """Override this method if device need to react on periodic polling 
+        from server."""
+        #printi(f'Device {self.name} polled')# at {time.time()}, serverTS:{Server.Timestamp}')
+        pass
+
+    def reset(self):
+        """Overriddable. Called when Reset clicked on server."""
+        pass
 
     def stop(self):
         """Overriddable. Called when run is stopped."""
@@ -544,10 +532,9 @@ def _send_UDP(buf, socket, hostPort):
 
 def _replyData(cmdArgs):
     """Prepare data for reply"""
-    #printd('>_replyData')
+    #printdd(f'>_replyData {cmdArgs}')
     try:    cmd,args = cmdArgs
     except: 
-        #printd(f'cmdArgs: {cmdArgs}')
         if cmdArgs[0] == 'info':
             devs = list(Server.DevDict)
             return devs
@@ -616,7 +603,7 @@ def _process_parameters(cmd, parNames, devName, propNames, vals):
     #print('parNames:'+str(parNames))
     for idx,parName in enumerate(parNames):
         pv = getattr(dev,parName)
-        #print('parName',parName,type(pv),isinstance(pv,LDO))
+        #printdd('parName',parName,type(pv),isinstance(pv,LDO))
         if not isinstance(pv,LDO):
             continue
         features = getattr(pv,'features','')
@@ -641,7 +628,7 @@ def _process_parameters(cmd, parNames, devName, propNames, vals):
         if cmd in ('get', 'read'):
             ts = timer()
             timestamp = getattr(pv,'timestamp',None)
-            #printd(f'parName {parName}, ts:{timestamp}, lt:{dev.lastPublishTime}')
+            #printdd(f'parName {parName}, ts:{timestamp}, lt:{dev.lastPublishTime}')
             if not timestamp: 
                 printw('parameter '+parName+' does ot have timestamp')
                 timestamp = time.time()
@@ -649,7 +636,7 @@ def _process_parameters(cmd, parNames, devName, propNames, vals):
             #if dt < 0.:
             #    printw(f'timestamp issue with parameter {parNmame}: {dt}') 
             if cmd == 'read' and dt < 0.:
-                #printd(f'parameter {parName} is skipped as it did not change since last update: {dt}')
+                #printdd(f'parameter {parName} is skipped as it did not change since last update: {dt}')
                 continue
                 
             pv.update_value()
@@ -707,10 +694,13 @@ def _reply(cmd, socket, client_address=None, no_float32=False):
             r = f'ERR.LS. Exception for cmd {cmd}: {e}'
             exc = traceback.format_exc()
             print('LS.Traceback: '+repr(exc))
-    #printd(croppedText(f'reply object: {r}'))
+    #print(croppedText(f'reply_object={r}',100000))
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)
     
-    reply = ubjson.dumpb(r, no_float32)# 75% time is spent here
+    try:
+        reply = ubjson.dumpb(r, no_float32)# 75% time is spent here
+    except Exception as e:
+        reply = ubjson.dumpb(f'ERR.LS. Exception in dumpb: {e}')
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)
     #printd(f'reply {len(reply)} bytes, doubles={no_float32}')
     host,port = client_address# the port here is temporary
@@ -738,7 +728,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             sockAddr = socket,self.client_address
             if data == b'ACK':
                 with send_UDP_Lock: # we need to wait when sending is done
-                    #DNPprinti('Got ACK from %s'%str(self.client_address))
+                    printdd(f'Got ACK from {self.client_address}')
                     if (sockAddr) not in self.server.ackCounts:
                         #DNPprintw('no ACK to delete from '+str(self.client_address))
                         pass
@@ -770,6 +760,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         except:
             pass
 
+        printd(f'Got command {cmd} from {self.client_address}')
         try:    cmdArgs =  cmd['cmd']
         except: raise  KeyError("'cmd' key missing in request")
 
@@ -778,7 +769,6 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
             for devName,dev in Server.DevDict.items():
                 printi(f'unsubscribing {self.client_address} from {devName}')
                 dev.unsubscribe(self.client_address)
-            printi('<unsubscribe')
             return
 
         if cmdArgs[0] == 'retransmit':
@@ -804,9 +794,10 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
         try:
             devName= cmdArgs[1][0][0].split(NSDelimiter)[1]
             #print('subscriber for device '+devName)
-            dev = Server.DevDict[devName]
+            if devName != '*':
+                dev = Server.DevDict[devName]
         except KeyError:
-            printe(f'Device not supported: devName')
+            printe(f'Device not supported: {devName}')
         except:
             printe(f'unexpected exception, cmdArgs: {cmdArgs}')
             raise NameError(('Subscription should be of the form:'\
@@ -849,8 +840,8 @@ class _myUDPServer(SocketServer.UDPServer):
             if ackCount < -10:
                 printw(f'abnormal unsubscribing of {sockAddr}')
                 with ackCount_Lock:
-                	del _myUDPServer.ackCounts[sockAddr]
-                	return
+                    del _myUDPServer.ackCounts[sockAddr]
+                    return
             with ackCount_Lock:
                 _myUDPServer.ackCounts[sockAddr][0] -= 1
             send_ack(sock, hostPort)
@@ -872,13 +863,92 @@ class LDO_clientsInfo(LDO):
         self.value = [pformat(d)]
         self.timestamp = currentTime
 
+class ServerDev(Device):
+    """Unique server device"""
+    PollingInterval = 1.
+    def __init__(self, name):
+        # create parameters
+        pars = {
+            'version':LDO('','liteServer',[__version__]),
+            'host':   LDO('','Host name',[socket.gethostname()]),
+            'status': LDO('R','Messages from liteServer',['']),
+            'debug':  LDO('RWE','Debugging level', [Server.Dbg],
+              opLimits=[0,10], setter=self._debug_set),
+            'devsPollingInterval': LDO('RWE',('Time interval of calling'
+            ' poll() method for all devices'), [ServerDev.PollingInterval],
+              units='s'),
+            'Reset':  LDO('WE','Reset all devices on the server',[None],
+              setter=self._reset),
+            'lastPID': LDO('','report source of the last request ',['?']),
+            'perf':   LDO('R'\
+            ,'Performance: RQ,MBytes,MBytes/s,Retransmits,Losts,Dropped'\
+            ,[0., 0., 0., 0, 0, 0]),
+            'statistics': LDO('R','Number of items and subscriptions in circulations',[0,0]),
+            'clientsInfo': LDO_clientsInfo('R','Info on all subscriptions',['']),
+        }
+        super().__init__(name, pars)
+        self.heartbeatPrevs = [0.,0.]
+        thread = threading.Thread(target=self._heartbeat, daemon=True)
+        thread.start()
+
+    def _debug_set(self, *_):
+        par_debug =self.debug.value
+        printi(f'par_debug: {par_debug}')
+        Server.Dbg = par_debug[0]
+        printi('Debugging level set to '+str(Server.Dbg))
+
+    def _heartbeat(self):
+        printi('Heartbeat thread started')
+        while not Device.EventExit.is_set():
+            Device.EventExit.wait(10)
+            self._heartbeat_proc()
+        printi('Heartbeat stopped')
+
+    def _heartbeat_proc(self):
+        #print(f'HB_proc {time.time()}')
+        ts = time.time()
+        subscriptions = 0
+        nItems = 0
+        nSockets = 0
+        for devName,dev in Server.DevDict.items():
+            ns,ni,*_ = dev.get_statistics()
+            #printi(f'dev {devName}, has {ns} subscriptions for for total of {ni} items')
+            nItems += ni
+            nSockets += ns
+        self.statistics.value = [nItems,nSockets]
+        # timestamps need to be updated for published parameters 
+        self.statistics.timestamp = ts
+        try:
+            dt = Server.Perf['Seconds'] - self.heartbeatPrevs[1]
+            mbps = round((Server.Perf['MBytes'] - self.heartbeatPrevs[0])/dt, 1)
+        except:
+            mbps = 0.
+        self.perf.timestamp = ts
+        self.perf.value = [Server.Perf['Sends'],
+            round(Server.Perf['MBytes'],3), mbps,
+            Server.Perf['Retransmits'], Server.Perf['ItemsLost'],
+            Server.Perf['Dropped']]
+        self.heartbeatPrevs = Server.Perf['MBytes'], Server.Perf['Seconds']
+        self.publish()
+
+    def _reset(self):
+        """Execute reset on all devices"""
+        for name,dev in Server.DevDict.items():
+            if name != 'server':
+                #dev.reset()# We should quickly return
+                thread = threading.Thread(target=dev.reset, daemon=True)
+                thread.start()
+                time.sleep(.10)# just in case
+
 class Server():
-    """liteServer object"""
+    """The Server"""
     #``````````````Attributes`````````````````````````````````````````````````
+    #TODO: Make most of the items as class attributes.
     Dbg = 0
     DevDict = {}
     Perf= {'Sends': 0, 'MBytes': 0., 'Seconds': 0., 'Retransmits': 0,
         'ItemsLost': 0, 'Dropped':0}
+    Timestamp = time.time()
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Instantiation`````````````````````````````````````````````
     def __init__(self, devices=[], interface='', port=PORT
@@ -886,20 +956,7 @@ class Server():
         printi(f'Server.Dbg: {Server.Dbg}')
         # create Device 'server'
         if serverPars:
-            serverDev = Device('server',{\
-              'version':LDO('','liteServer',[__version__]),
-              'host':   LDO('','Host name',[socket.gethostname()]),
-              'status': LDO('R','Messages from liteServer',['']),
-              'debug':  LDO('RWE','Debugging'\
-              ,[Server.Dbg], opLimits=[0,10], setter=self._debug_set),
-              'lastPID': LDO('','report source of the last request ',['?']),
-              'perf':   LDO('R'\
-                ,'Performance: RQ,MBytes,MBytes/s,Retransmits,Losts,Dropped'\
-                ,[0., 0., 0., 0, 0, 0]),
-              'statistics': LDO('R','Number of items and subscriptions in circulations',[0,0]),
-              'clientsInfo': LDO_clientsInfo('R','Info on all subscriptions',['']),
-            })
-            self.DevDict[serverDev.name] = serverDev
+            self.DevDict['server'] = ServerDev('server')
         
         for dev in devices:
             self.DevDict[dev.name] = dev
@@ -911,43 +968,31 @@ class Server():
         self.server.allow_reuse_address = True
         self.server.server_bind()
         self.server.server_activate()
-        printi(f'Server for {self.host}:{self.port} have been instantiated')
-        printi(f'devices: {list(self.DevDict.keys())}')
-        thread = threading.Thread(target=self._heartbeat, daemon=True)
-        thread.start()
+        printi(f'Server for {self.host}:{self.port} is serving devices:')
+        print(f'{list(self.DevDict.keys())}')
+        threadDevsPoll = threading.Thread(target=self._devsPoll, daemon=True)
+        threadDevsPoll.start()
 
-    def _heartbeat(self):
-        printi('heartbeat thread started')
+    def _devsPoll(self):
+        # periodically call poll() method on all devices except server
+        time.sleep(.5)# Give time for devices to settle
+        printd('Device polling started')
         prevs = [0.,0.]
+        lasttime = time.time()
+        interval = 0.
         while not Device.EventExit.is_set():
-            Device.EventExit.wait(10)
-            ts = time.time()
-            subscriptions = 0
-            nItems = 0
-            nSockets = 0
-            for devName,dev in self.DevDict.items():
-                ns,ni,*_ = dev.get_statistics()
-                #printi(f'dev {devName}, has {ns} subscriptions for for total of {ni} items')
-                nItems += ni
-                nSockets += ns
-            Device.server.statistics.value = [nItems,nSockets]
-            # timestamps need to be updated for published parameters 
-            Device.server.statistics.timestamp = ts
-            try:
-                dt = Server.Perf['Seconds'] - prevs[1]
-                mbps = round((Server.Perf['MBytes'] - prevs[0])/dt, 1)
-            except:
-                mbps = 0.
-            Device.server.perf.timestamp = ts
-            Device.server.perf.value = [Server.Perf['Sends'],
-                round(Server.Perf['MBytes'],3), mbps,
-                Server.Perf['Retransmits'], Server.Perf['ItemsLost'],
-                Server.Perf['Dropped']]
-            prevs = Server.Perf['MBytes'], Server.Perf['Seconds']
-
-            Device.server.publish()
-            #printi(f'hearbeat duration: {timer() - ts}')# ~10 us
-        printi('heartbeat stopped')
+            newInterval = Device.server.devsPollingInterval.value[0]
+            if interval != newInterval:
+                printi(f'Polling interval changed from {interval} to {newInterval}')
+            interval = newInterval
+            waitTime = interval - (time.time() - lasttime)
+            if waitTime > 0.:
+                Device.EventExit.wait(waitTime)
+            lasttime = time.time()
+            Server.Timestamp = lasttime
+            for name,dev in self.DevDict.items():
+                if name != 'server':
+                    dev.poll()
 
     def loop(self):
         Device.server = self.DevDict['server']
@@ -957,17 +1002,6 @@ class Server():
         except KeyboardInterrupt:
             printe('KeyboardInterrupt in server loop')
             Device.EventExit.set()
-        
-    def _debug_set(self, *_):
-        par_debug = Device.server.debug.value
-        printi(f'par_debug: {par_debug}')
-        Server.Dbg = par_debug[0]
-        printi('Debugging level set to '+str(Server.Dbg))
-
-    def par_set(self, par):
-        """Generic parameter setter"""
-        parVal = par.value
-        printi('par_set %s='%par.name + str(parval))
 
 def isHostPortSubscribed(hostPort):
     """For testing purposes"""
@@ -975,6 +1009,4 @@ def isHostPortSubscribed(hostPort):
         if hostPort in dev.subscribers:
             return True
     return False
-
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# see liteScaler.py, liteAccess.py

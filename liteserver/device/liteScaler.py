@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = 'v32 2021-07-06'# no_float32 and ServerDbg are handled properly
+__version__ = '1.0.1 2021-09-29'# 
  
 import sys, time, threading
 from timeit import default_timer as timer
 import numpy as np
 
-from liteserver import liteserver
+try:
+    from liteserv import liteserver
+except:
+    from liteserver import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 
@@ -160,20 +163,21 @@ parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'liteScaler version {__version__}, liteserver {liteserver.__version__}')
 parser.add_argument('-d','--doubles', action='store_true'
-, help='Encode floats as doubles, use it when you need precision higher than 7 dighits')
+, help='Encode floats as doubles, use it when you need precision higher than 7 digits.')
 parser.add_argument('-b','--bigImage', action='store_true', help=\
-'Generate big image >64kB')
-parser.add_argument('-i','--interface', default = '', help=\
-'Network interface. Default is the interface, which connected to internet')
+'Generate big image >64kB.')
+defaultIP = liteserver.ip_address('')
+parser.add_argument('-i','--interface', default = defaultIP, help=\
+'Network interface. Default is the interface, which connected to internet.')
 n = 1100# to fit liteScaler volume into one chunk
 parser.add_argument('-n','--nCounters', type=int, default=n,
-  help=f'Number of counters in each scaler, default: {n}, one transmission is 16K')
+  help=f'Number of counters in each scaler, one transmission is 16K.')
   #default liteAcces accepts 1100 doubles, 9990 int16s
   #the UDP socket size is limited to 64k bytes
 parser.add_argument('-p','--port', type=int, default=9700, help=\
-'Serving port, default: 9700') 
+'Serving port.') 
 parser.add_argument('-s','--scalers', type=int, default=1, help=\
-'Number of devices/scalers (2)')
+'Number of devices/scalers.')
 parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
 pargs = parser.parse_args()
 

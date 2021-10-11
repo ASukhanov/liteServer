@@ -1,9 +1,79 @@
-# Change Log for tek5ScopeMan manager.
+# Change Log for liteServer project.
  
-## [1.0.0] - 2021-09-22
+## [1.0.5] - 2021-10-07
 
+## Changed
+
+### liteserver.py
+
+Device server.run now have ['Run','Stop', 'Exit']
+
+Added
+- Device.add_parameter(self, name, ldo).
+- Device.poll(self).
+- Device.reset(self).
+- Class ServerDev(Device): it is separated from the Server class.
+- Use printd() and printdd() for 2-level debugging. 
+- Do not change button-like parameter from None to int during setting.
+
+### liteVGM.py
+Cleanup
+- PAUSE_AFTER_WRITE = 0.05.
+- 2-level debugging.
+- frequency parameter removed.
+- set_status(), poll() and reset_VGM_timestamp() rewritten.
+
+### liteGQ.py
+Added
+
+### liteserver/device/liteVGM.py
+
+- Determine available serial ports using serial.tools.list_ports.comports.
+- Use .value[0] instead of .value. That is more correct.
+- Thread state_machine removed. The job done in a poll() method.
+- Overridden: reset().
 
 ## [old] - 2021-09-21
+
+### liteServer
+- version__ = 'v40 2020-02-21'# rev3. value,timestamp and numpy keys shortened to v,t,n
+- version__ = 'v41 2020-02-24'# err handling for missed chunks, 'pid' corruption fixed
+- version__ = 'v42 2020-02-25'# start command added
+- version__ = 'v43 2020-02-27'# serverState and setServerStatusText
+- version__ = 'v44 2020-02-29'# do not except if type mismatch in set
+- version__ = 'v45 2020-03-02'# Exiting, numpy array unpacked
+- version__ = 'v46 2020-03-04'# test for publishing
+- version__ = 'v47 2020-03-06'# Subscription OK
+- version__ = 'v48 2020-03-07'
+- version__ = 'v49 2020-03-09'# Read and subscription deliver only changed objects, subscriptions are per-device basis
+- version__ = 'v50a 2020-03-26'# error propagation to clients
+- version__ = 'v52 2020-12-17'# NSDelimiter=':' to conform EPICS and ADO
+- version__ = 'v53b 2020-12-18'# .v and .t replaced with .value and .timestamp to be consistent with ADO and EPICS
+- version__ = 'v54 2020-12-23'# publish() delivers parameters which have been changed since previous delivery. Unsubscribe is supported, may need locking.
+- version__ = 'v55d 2020-12-31'# unsubscribing all, timeShift replaces time 
+- version__ = 'v56 2021-01-01'# major update.
+- version__ = 'v57 2021-01-02'# heartbeat thread
+- version__ = 'v58 2021-01-04'# 'run' PV added to Device, 'start' PV removed from server, Device.aborted()
+- version__ = 'v60e 2021-01-06'# itemsLost counter, send_udp got arg: subscribed 
+- version__ = 'v61 2021-01-06'# Reasonably good
+- version__ = 'v62 2021-01-12'# scalar allowed in parameter definition, it will be treated as array[1]
+- version__ = 'v63 2021-04-08'# more informative exception handling
+- version__ = 'v64 2021-04-11'# Server.Dbg is boolean
+- version__ = 'v65 2021-04-12'# handling of a wrong command format exception
+- version__ = 'v66 2021-04-20'# all threads should be non-daemonic
+- version__ = 'v67 2021-04-21'# numpy array attribute is 'numpy', not 'n'
+- version__ = 'v68 2021-04-22'# oplimits are violated when value is out of bounds
+- version__ = 'v69 2021-04-24'# handling retransmissions
+- version__ = 'v70 2021-04-29'# works OK for data  up to 5MB
+- version__ = 'v71 2021-05-01'# added getter to LDO, removed second argument in LDO.setter
+- version__ = 'v72 2021-05-03'# don't need to use value[0] most cases, require Ack even for 1-chunk messages
+- version__ = 'v73 2021-05-05'# parent removed.
+- version__ = 'v74 2021-05-19'# targeted un-subscribing
+- version__ = 'v76 2021-05-26'# ItemLostLimit reduced to 1, with MaxAckCount = 10, parameters are copied, not bound in LDO.__init__
+- version__ = 'v77 2021-05-27'# LDO._name replaced with LDO.name
+- version__ = 'v78 2021-06-10'# runFlag removed, added LDO.start() LDO.stop()
+- version__ = 'v79 2021-07-06'# use float32 for encoding, could be overridded by setting Device.no_float32=True. Server.Dbg handled properly
+- version__ = 'v80 2021-07-07'# opLimits for debug
 
 ### liteAccess
 __version__ = 'v42 2020-02-21'# liteServer-rev3.

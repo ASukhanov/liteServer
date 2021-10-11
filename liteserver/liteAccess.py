@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = 'v66 2021-09-22'# subscription sockets are blocking now
+__version__ = '1.0.4 2021-09-24'# Do not proceed if host IP is not resolved
 
 #TODO: replace ubjson with mgspack
 
@@ -107,7 +107,8 @@ def _hostPort(cnsNameDev:tuple):
     try:
         h = socket.gethostbyname(h)
     except:
-        _printe(f'Could not resolve host name {h}') 
+        _printe(f'Could not resolve host name {h}')
+        sys.exit(1)
     return h,p
 
 retransmitInProgress = None
@@ -576,10 +577,6 @@ class PVs(object): #inheritance from object is needed in python2 for properties 
         # _printd(f',,,,,,,,,,,,,,,,,,,channelList constructed: {channelList}')
         self.channels = [Channel(*i) for i in channelList]
         return
-
-    def devices(self):
-        """Return list of devices on associated host;port"""
-        return self.channels[0]._llTransaction({'cmd':['info']})
 
     def info(self):
         for channel in self.channels:

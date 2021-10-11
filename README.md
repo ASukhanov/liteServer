@@ -1,28 +1,22 @@
-# liteServer
-Very Lightweight Data Object Server and Client. 
+# liteserv
+Very Lightweight Data Object Server. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
 UDP protocol. Data encoding is implemented using UBJSON specification, 
 which makes it very fast and efficient.
 
-### Motivation
-- Provide control for devices connected to non-linux machines. 
-- The simplicity of the protocol makes it possible to implement in CPU-less FPGA device.
-- The server is running on a remote machine. Device parameters can be 
-manipulated using **liteserver.liteAccess** module.
-
 ### Data logging and retrieving
 Data objects can be logged and retrieved using an **apstrim** package (https://pypi.org/project/apstrim).
 
 ### Bridged usage
-To monitor and control liteServer-served devices from an existing architecture 
+To monitor and control liteserv-served devices from an existing architecture 
 one can use or build a simple bridge:
 ##### A bridge for RHIC ADO Control architecture is liteServerMan.py
-    liteServerMan.py -HmyHost myADO 
+    liteServerMan.py -HmyHost myADO.
 An ADO manager liteServerMan.py connects to a liteServer, running on myHost and 
 creates the myADO. 
-  - all input objects of the liteServer are translated to myADO input parameters
-  - all output parameters of the myADO are translated to the liteServer objects
+  - All input LDOs are translated to myADO input parameters.
+  - All output parameters of the myADO are translated to LDOs.
 
 ##### For EPICS Control architecture
 The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example:
@@ -54,13 +48,7 @@ objects to client and the callback function on the client will be invoked.
  - Architectures. All programs are 100% python. Tested on Linux and Windows.
  - Supported applications:
    - [Image analysis](https://github.com/ASukhanov/Imagin)
-
-### Installation
-Python3 should be 3.6 or higher.
-
-    python3 pip install liteserver
-
-Additional libraries may be required for specific devices.
+   - [Data Logger](https://github.com/ASukhanov/apstrim)
 
 ### Key Components
 - **liteServer**: Module for building liteServer applications.
@@ -71,7 +59,7 @@ Additional libraries may be required for specific devices.
 Server implementations for various devices are located in .device sub-package. 
 A device server can be started using following command:
 
-    python3 -m liteserver.device.<deviceName> <Arguments>
+    python3 -m liteserv.device.<deviceName> <Arguments>
 
 - **device.liteScaler**: test implementation of the liteServer
 , supporting 1000 of up/down counters as well as multi-dimensional arrays.
@@ -87,22 +75,31 @@ pan, zoom and tilt control.
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
 Buzzer, RGB LED indicator, OmegaBus serial sensors. Coming soon: NUCLEO-STM33 
 mixed signal MCU boards, connected to Raspberry Pi over USB.
+- **device.liteGQ**: Geiger Counter and a gyro sensor GMC-500 from GQ Electronics.
+
+### Installation
+Python3 should be 3.6 or higher.
+
+    python3 pip install liteserver
+
+Additional libraries may be required for specific devices.
 
 ## Examples
 Most convenient way to test base class functionality is by using **ipython3**, 
 
 Start a server liteScaler on a local host:
 
-    python3 -m liteserver.device.liteScaler -ilo -n2
+    python3 -m liteserver.device.liteScaler -ilo -s2
     ipython3
 
 ```python
-from liteserver import liteAccess import liteAccess as LA 
+from liteserv import liteAccess as LA 
 from pprint import pprint
 
 Host = 'localhost'
 LAserver = Host+':server'
 LAdev1   = Host+':dev1'
+LAdev2   = Host+':dev2'
 
 #``````````````````Programmatic way, using Access`````````````````````````````
 # Advantage: The previuosly created PVs are reused.
