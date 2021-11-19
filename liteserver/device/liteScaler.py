@@ -59,10 +59,15 @@ class Scaler(Device):
           'udpSpeed':   LDO('R', 'Instanteneous socket.send spped', 0., units='MB/s'),
         }
         super().__init__(name,pars, no_float32=no_float32)
+        self.start()
+    #``````````````Overridables```````````````````````````````````````````````        
+    def start(self):
+        printi('liteScaler started')
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = False
         thread.start()
-        
+    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+
     def reset(self):
         print('resetting scalers of %s'%self.name)
         for i in range(len(self.counters.value)):
@@ -91,8 +96,10 @@ class Scaler(Device):
         timestamp = time.time()
         periodic_update = time.time()
         maxChanks = 0
-        while not self.aborted():
+        while not Device.EventExit.is_set():
             #TODO: with liteserver-v76 we have to use value[0]
+            if self.run.value[0][:4] == 'Stop':
+                break
             #waitTime = 1./self.frequency.value - (time.time() - timestamp)
             waitTime = 1./self.frequency.value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)

@@ -3,7 +3,8 @@
 9 Digital IOs"""
 #__version__ = 'v02 2021-05-01'# DAC supported
 #__version__ = 'v03 2021-05-03'# Counters supported, QuickSampling provides ~350 readouts/s
-__version__ = 'v04 2021-05-05'# set_DO(), softPulsing, RGB LEDs
+#__version__ = 'v04 2021-05-05'# set_DO(), softPulsing, RGB LEDs
+__version__ = '1.0.6 2021-11-19'# do not call aborted()
 
 print(f'liteLabjack {__version__}')
 
@@ -92,7 +93,7 @@ class LLJ(Device):
         timestamp = time.time()
         periodic_update = timestamp
 
-        while not self.aborted():
+        while not self.EventExit.is_set():
             #printi(f'cycle of {self.name}:{self.cycle.value}')
             waitTime = self.hardPoll.value[0] - (time.time() - timestamp)
             if waitTime > 0:

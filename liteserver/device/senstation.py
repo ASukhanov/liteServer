@@ -21,7 +21,8 @@ TODO: connection to RPi Pico RP2040 MCU which will provide:
 #__version__ = 'v03 2021-05-31'# publish1 can accept iterable values now
 #__version__ = 'v04 2021-06-09'# seldomThread starts after publish! setters activated in add_more_parameters
 #__version__ = 'v05 2021-06-09'# Omegabus was not published because of lagging timestamp.
-__version__ = 'v06 2021-06-10'# don't read_temperature after opening 1Wire it could be not ready
+#__version__ = 'v06 2021-06-10'# don't read_temperature after opening 1Wire it could be not ready
+__version__ = 'v07 2021-11-19'
 
 #TODO: take care of microsecond ticks in callback
 print(f'senstation {__version__}')
@@ -64,58 +65,60 @@ def printd(msg):
         print('SS:dbg: '+str(msg))
 
 #````````````````````````````Initialization
-import pigpio
-pi = pigpio.pi()
+def init_gpio():
+    global PiGPIO, pigpio, measure_temperature
+    import pigpio
+    PiGPIO = pigpio.pi()
 
-# Configure 1Wire pin 
-pi.set_mode( GPIO['Temp0'], pigpio.INPUT)
-pi.set_pull_up_down( GPIO['Temp0'], pigpio.PUD_UP)
-pi.set_glitch_filter( GPIO['Counter0'], 500)# require it stable for 500 us
+    # Configure 1Wire pin 
+    PiGPIO.set_mode( GPIO['Temp0'], pigpio.INPUT)
+    PiGPIO.set_pull_up_down( GPIO['Temp0'], pigpio.PUD_UP)
+    PiGPIO.set_glitch_filter( GPIO['Counter0'], 500)# require it stable for 500 us
 
-#````````````````````````Service for DS18B20 thermometer
-# Check if DS18B20 is connected
-base_dir = '/sys/bus/w1/devices/'
-OneWire_folder = None
-for i in range(10):
-    try:
-        OneWire_folder = glob.glob(base_dir + '28*')[0]
-        break
-    except IndexError:
-        time.sleep(1)
-        continue
-if OneWire_folder is None:
-    print('WARNING: Thermometer sensor is not connected')
-    def measure_temperature(): return 0
-else:
-    device_file = OneWire_folder + '/w1_slave'
-    print(f'Thermometer driver is: {device_file}')
-     
-    def read_temperature():
-        f = open(device_file, 'r')
-        lines = f.readlines()
-        f.close()
-        return lines
-    #read_temperature()
-
-    def measure_temperature():
-        temp_c = None
+    #````````````````````````Service for DS18B20 thermometer
+    # Check if DS18B20 is connected
+    base_dir = '/sys/bus/w1/devices/'
+    OneWire_folder = None
+    for i in range(10):
         try:
-            lines = read_temperature()
-            if len(lines) != 2:
-                printw(f'no data from temperature sensor')
-                return temp_c
-            #print(f'>mt: {lines}')
-            #['80 01 4b 46 7f ff 0c 10 67 : crc=67 YES\n', '80 01 4b 46 7f ff 0c 10 67 t=24000\n']
-            while lines[0].strip()[-3:] != 'YES':
-                time.sleep(0.2)
+            OneWire_folder = glob.glob(base_dir + '28*')[0]
+            break
+        except IndexError:
+            time.sleep(1)
+            continue
+    if OneWire_folder is None:
+        print('WARNING: Thermometer sensor is not connected')
+        def measure_temperature(): return 0
+    else:
+        device_file = OneWire_folder + '/w1_slave'
+        print(f'Thermometer driver is: {device_file}')
+         
+        def read_temperature():
+            f = open(device_file, 'r')
+            lines = f.readlines()
+            f.close()
+            return lines
+        #read_temperature()
+
+        def measure_temperature():
+            temp_c = None
+            try:
                 lines = read_temperature()
-            equals_pos = lines[1].find('t=')
-            if equals_pos != -1:
-                temp_string = lines[1][equals_pos+2:]
-                temp_c = float(temp_string) / 1000.0
-        except Exception as e:
-            printe(f'Exception in measure_temperature: {e}')
-        return temp_c
+                if len(lines) != 2:
+                    printw(f'no data from temperature sensor')
+                    return temp_c
+                #print(f'>mt: {lines}')
+                #['80 01 4b 46 7f ff 0c 10 67 : crc=67 YES\n', '80 01 4b 46 7f ff 0c 10 67 t=24000\n']
+                while lines[0].strip()[-3:] != 'YES':
+                    time.sleep(0.2)
+                    lines = read_temperature()
+                equals_pos = lines[1].find('t=')
+                if equals_pos != -1:
+                    temp_string = lines[1][equals_pos+2:]
+                    temp_c = float(temp_string) / 1000.0
+            except Exception as e:
+                printe(f'Exception in measure_temperature: {e}')
+            return temp_c
 #````````````````````````````Initialization of serial devices
 OmegaBus = None
 def init_serial():
@@ -173,11 +176,12 @@ class SensStation(Device):
 
         # connect callback function to a GPIO pulse edge 
         for eventParName in EventGPIO:
-            pi.callback(GPIO[eventParName], pigpio.RISING_EDGE, callback)
+            PiGPIO.callback(GPIO[eventParName], pigpio.RISING_EDGE, callback)
+        self.start()
 
     #``````````````Overridables```````````````````````````````````````````````
     def start(self):
-        print('Senstation started')
+        printi('Senstation started')
         # invoke setters of all parameters
         for par,ldo in self.par.items():
             setter = ldo._setter
@@ -187,7 +191,7 @@ class SensStation(Device):
         thread.start()
 
     def stop(self):
-        print(f"Senstation stopped {self.par['cycle'].value[0]}")
+        printi(f"Senstation stopped {self.par['cycle'].value[0]}")
         prev = self.par['PWM0_Duty'].value[0]
         self.par['PWM0_Duty'].value[0] = 0.
         self.par['PWM0_Duty']._setter()
@@ -209,34 +213,34 @@ class SensStation(Device):
         v = self.par[parName].value[0]
         key = parName.split('_')[0]
         gpio = GPIO[key]
-        print(f'gpiov {gpio,v}')
+        printd(f'gpiov {gpio,v}')
         return gpio,v
         
     def set_PWM_frequency(self, pwm):
         parName = pwm + '_Freq'
         gpio, v = self.gpiov(parName)
-        #r = pi.hardware_PWM(gpio, int(v))
+        #r = PiGPIO.hardware_PWM(gpio, int(v))
         dutyCycle = int(MaxPWMRange*self.par[pwm+'_Duty'].value[0])
-        r = pi.hardware_PWM(gpio, int(v), dutyCycle)
-        r = pi.get_PWM_frequency(gpio)
+        r = PiGPIO.hardware_PWM(gpio, int(v), dutyCycle)
+        r = PiGPIO.get_PWM_frequency(gpio)
         self.publish1(parName, r)
 
     def set_PWM_dutycycle(self, pwm):
         parName = pwm + '_Duty'
         gpio, v = self.gpiov(parName)
         f = int(self.par[pwm + '_Freq'].value[0])
-        print(f'dc: {f, int(v*MaxPWMRange)}')
-        r = pi.hardware_PWM(gpio, f, int(v*MaxPWMRange))
-        r = pi.get_PWM_dutycycle(gpio)
+        printd(f'set_PWM_dutycycle: {f, int(v*MaxPWMRange)}')
+        r = PiGPIO.hardware_PWM(gpio, f, int(v*MaxPWMRange))
+        r = PiGPIO.get_PWM_dutycycle(gpio)
         self.publish1(parName, r/MaxPWMRange)
 
     def set_DO(self, parName):
         gpio,v = self.gpiov(parName)
-        pi.write(gpio, int(v))
+        PiGPIO.write(gpio, int(v))
 
     def set_Buzz(self):
         if self.Buzz.value == '0':
-            pi.write(GPIO['Buzz'], 0)
+            PiGPIO.write(GPIO['Buzz'], 0)
         else:
             thread = threading.Thread(target=buzzThread, daemon=False)
             thread.start()
@@ -244,15 +248,15 @@ class SensStation(Device):
     def set_RGB(self):
         v = int(self.par['RGB'].value[0])
         for i in range(3):
-            pi.write(GPIO['RGB'][i], v&1)
+            PiGPIO.write(GPIO['RGB'][i], v&1)
             v = v >> 1
 
     def _state_machine(self):
-        print('State machine started')
+        printi('State machine started')
         timestamp = time.time()
         periodic_update = timestamp
         #prevCounter0 = self.Counter0.value.value[0]
-        while not self.aborted():
+        while not Device.EventExit.is_set():
             if self.run.value[0][:4] == 'Stop':
                 break
             waitTime = self.cyclePeriod.value[0] - (time.time() - timestamp)
@@ -312,36 +316,43 @@ def callback(gpio, level, tick):
 def buzzThread():
     # buzzing for a duration
     duration = SensStationDev1.BuzzDuration.value[0]
-    pi.write(GPIO['Buzz'], 1)
+    PiGPIO.write(GPIO['Buzz'], 1)
     time.sleep(duration)
     SensStationDev1.publish1('Buzz', '0')
-    pi.write(GPIO['Buzz'], 0)
+    PiGPIO.write(GPIO['Buzz'], 0)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# parse arguments
-import argparse
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-d','--dbg', action='store_true', help='Debugging mode')
-parser.add_argument('-i','--interface', default = '', help=\
-'Network interface. Default is the interface, which connected to internet')
-n = 12000# to fit liteScaler volume into one chunk
-parser.add_argument('-p','--port', type=int, default=9700, help=\
-'Serving port, default: 9700')
-parser.add_argument('-s','--serial', default = '', help=\
-'Comma separated list of serial devices to support, e.g.:OmegaBus')
-parser.add_argument('-u','--update', type=float, default=1.0, help=\
-'Updating period')
-pargs = parser.parse_args()
+#``````````````````Man````````````````````````````````````````````````````````
+if __name__ == "__main__":
+    # parse arguments
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__
+    ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    ,epilog=f'senstation: {__version__}')
+    parser.add_argument('-d','--dbg', action='store_true', help='Debugging mode')
+    parser.add_argument('-i','--interface', default = '', help=\
+    'Network interface. Default is the interface, which connected to internet')
+    n = 12000# to fit liteScaler volume into one chunk
+    parser.add_argument('-p','--port', type=int, default=9700, help=\
+    'Serving port, default: 9700')
+    parser.add_argument('-s','--serial', default = '', help=\
+    'Comma separated list of serial devices to support, e.g.:OmegaBus')
+    parser.add_argument('-u','--update', type=float, default=1.0, help=\
+    'Updating period')
+    pargs = parser.parse_args()
 
-if pargs.serial != '':
-    import serial
-    init_serial()
+    init_gpio()
 
-liteserver.Server.Dbg = pargs.dbg
-SensStationDev1 = SensStation('dev1')
-devices = [SensStationDev1]
+    if pargs.serial != '':
+        import serial
+        init_serial()
 
-print('Serving:'+str([dev.name for dev in devices]))
+    liteserver.Server.Dbg = pargs.dbg
+    SensStationDev1 = SensStation('dev1')
+    devices = [SensStationDev1]
 
-server = liteserver.Server(devices, interface=pargs.interface,
-    port=pargs.port)
-server.loop()
+    printi('Serving:'+str([dev.name for dev in devices]))
+
+    server = liteserver.Server(devices, interface=pargs.interface,
+        port=pargs.port)
+    server.loop()

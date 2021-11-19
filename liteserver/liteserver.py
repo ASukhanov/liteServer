@@ -42,7 +42,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '1.0.5 2021-10-07'#
+__version__ = '1.0.6 2021-11-19'# remove aborted(), it is confusing, check Device.EventExit instead
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -274,10 +274,6 @@ class Device():
         setattr(self, name, ldo)
         getattr(self,name).name = name
 
-    def aborted(self):
-        self.stop()
-        return Device.EventExit.is_set()
-
     def setServerStatusText(txt):
         """Not thread safe. Publish text in server.status pararameter"""
         print(f'setServerStatusText() not safe: {txt}')
@@ -426,6 +422,7 @@ class Device():
     def _set_run(self):
         """special treatment of the setting of the 'run' parameter"""
         val = self.run.value[0]
+        printd(f'_set_run {val}')
         if val == 'Stop':
             val = 'Stopped'
             self.stop()

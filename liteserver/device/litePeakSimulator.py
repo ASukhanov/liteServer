@@ -3,7 +3,8 @@
 #__version__ = 'v01 2021-05-26'# created
 #__version__ = 'v02 2021-05-27'# defaults changed frequency=100Hz, swing=10%.CPU=5% 
 #__version__ = 'v03 2021-07-08'# no_float32 and ServerDbg are handled properly, 
-__version__ = 'v04 2021-07-17'# added yMin, yMax
+#__version__ = 'v04 2021-07-17'# added yMin, yMax
+__version__ = '1.0.6 2021-11-19'# do not call aborted()
 
 import sys, time, threading
 from timeit import default_timer as timer
@@ -103,7 +104,7 @@ class Dev(Device):
         prevCycle = 0
         timestamp = time.time()
         periodic_update = timestamp
-        while not self.aborted():
+        while not self.EventExit.is_set():
             waitTime = 1./self.frequency.value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
             timestamp = time.time()

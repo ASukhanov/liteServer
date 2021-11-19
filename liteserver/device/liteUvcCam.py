@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """LiteServer for an USB camera using pyuvc"""
-__version__ = 'v01 2021-04-21'# created
+__version__ = '1.0.6 2021-11-19'# created
 print(f'liteUvcCam {__version__}')
 
 import sys, time, threading
 from timeit import default_timer as timer
 import numpy as np
+
 try:
     import uvc
-except ImportError:
-    print("ERROR pyuvc not installed")
+except ImportError as e:
+    print(f"ERROR pyuvc not installed: {e}")
     exit(1)
 
 from liteserver import liteserver
@@ -67,7 +68,7 @@ class Camera(Device):
 
         periodic_update = time.time()
         periodic_count = 0
-        while not self.aborted():
+        while not EventExit.is_set():
             EventExit.wait(self.sleep.value[0])
             try:
                 frame = self._cap.get_frame_robust()

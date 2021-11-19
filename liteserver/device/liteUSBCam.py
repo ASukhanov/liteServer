@@ -3,7 +3,8 @@
 #__version__ = 'v01 2019-06-03'# created
 #__version__ = 'v02 2019-06-10'# using latest liteServer
 #__version__ = 'v03 2021-04-21'# pause parameter not needed, timestamping before publishing is not necessary
-__version__ = 'v04 2021-09-21'# argparse 
+#__version__ = 'v04 2021-09-21'# argparse
+__version__ = '1.0.6 2021-19-21'# removed call aborted()
 
 #TODO: sometimes it does not start/stop nicely, Action required: disconnect camera, then run guvcview
 
@@ -77,7 +78,7 @@ class Camera(Device):
         #print(f'thread started: {threading.enumerate()}')
         
     def _state_machine(self):
-        while not self.aborted():
+        while not self.EventExit.is_set():
             EventExit.wait(self.sleep.value[0])
             ret, img = self._cv2_cap.read()
             if not ret:
