@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '1.0.4 2021-09-24'# Do not proceed if host IP is not resolved
+__version__ = '1.0.6 2021-11-10'# timeout in PV is not used, removed.
 
 #TODO: replace ubjson with mgspack
 
@@ -539,8 +539,7 @@ class PVs(object): #inheritance from object is needed in python2 for properties 
     Dbg = False
     subscriptionsCancelled = True
 
-    def __init__(self, *ldoPars, timeout=5):
-        self.timeout = timeout
+    def __init__(self, *ldoPars):
         # _printd(f'``````````````````Instantiating PVs ldoPars:{ldoPars}')        
         # unpack arguments to hosRequest map
         self.channelMap = {}

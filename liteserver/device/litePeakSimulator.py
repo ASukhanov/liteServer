@@ -140,9 +140,9 @@ import argparse
 
 #default coeffs for --background
 n = 1000
-linmin = 1
-linmax = 30
-quadmax = 20
+linmin = 1.
+linmax = 30.
+quadmax = 20.
 def generate_pars(n):
     a = -4*quadmax/n**2
     b = -a*n + (linmax-linmin)/n
@@ -160,7 +160,7 @@ parser.add_argument('-b', '--background', default=str_of_numbers(pp[:3])
 , help=('Three coefficients (comma-separated) of the quadratic background'))
 parser.add_argument('-d','--doubles', action='store_true'
 , help='Encode floats as doubles, use it when you need precision higher than 7 digits')
-parser.add_argument('-F','--frequency', type=float, default=1, help=\
+parser.add_argument('-F','--frequency', type=float, default=1., help=\
     'Update frequency')
 parser.add_argument('-i','--interface', default = '', help=\
 'Network interface. Default is the interface, which is connected to internet')

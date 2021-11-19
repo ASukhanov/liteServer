@@ -1,5 +1,18 @@
 # Change Log for liteServer project.
  
+## [not released] 2021-11-19
+
+### Added 
+Support for Radiation Monitor and  Gyro sensor GMC-500 from GQ Electronics:
+liteserver/device/liteGQ.py
+
+### Changed
+
+Minor bug fixing in:
+
+   liteserver/device/litePeakSimulator.py
+   liteserver/liteAccess.py
+
 ## [1.0.5] - 2021-10-07
 
 ## Changed
@@ -8,7 +21,7 @@
 
 Device server.run now have ['Run','Stop', 'Exit']
 
-Added
+ Added
 - Device.add_parameter(self, name, ldo).
 - Device.poll(self).
 - Device.reset(self).
