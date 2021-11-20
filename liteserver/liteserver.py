@@ -42,7 +42,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '1.0.6 2021-11-19'# remove aborted(), it is confusing, check Device.EventExit instead
+__version__ = '1.0.6 2021-11-19'# remove no_float32 and aborted(), they are confusing, check Device.EventExit instead
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -243,15 +243,11 @@ class Device():
     server = None# It will keep the server device after initialization
     EventExit = threading.Event()
 
-    def __init__(self, name='?', pars={}, no_float32=False):
+    def __init__(self, name='?', pars={}):
         """
         pars:   dictionary of {parameterName:LDO}
-        no_float32 (bool): Never use float32 to store float numbers (other than
-                           for zero). Disabling this might save space at the
-                           loss of precision.
         """
         self.name = name
-        self.no_float32 = no_float32
         self.lastPublishTime = 0.
         self.subscribers = {}
         printd(croppedText('pars '+str(pars)))
@@ -408,8 +404,7 @@ class Device():
 
             # _reply('read',...) will deliver only parameters with modified timestamp
             #tn = timer(); dt[0] += tn - ts
-            r = _reply(['read',request], socket, hostPort
-            , no_float32=self.no_float32)
+            r = _reply(['read',request], socket, hostPort)
             printdd(f'<_reply: {r}')
             #tn = timer(); dt[1] += tn - ts
             bytesShipped += r
@@ -612,15 +607,12 @@ def _process_parameters(cmd, parNames, devName, propNames, vals):
 
         def valueDict(value):
             try: # if value is numpy array:
-                if dev.no_float32 == False:
-                    value = value.astype('f4')
-                shape,dtype = value.shape, str(value.dtype)
-            except Exception as e:
-                #printd('not numpy %s, %s'%(pv.name,str(e)))
-                return {'value':value}
-            else:
-                #printd("numpy array %s, shape,type:%s, add key 'numpy'"%(str(pv.name),str((shape,dtype))))
+                dtype = str(value.dtype)
+                shape, dtype = value.shape, dtype
                 return {'value':value.tobytes(), 'numpy':(shape,dtype)}
+            except Exception:
+                #printd(f'not numpy {pv.name}')
+                return {'value':value}
 
         if cmd in ('get', 'read'):
             ts = timer()
@@ -680,7 +672,7 @@ def _process_parameters(cmd, parNames, devName, propNames, vals):
         else:   raise ValueError(f'command "{cmd}" not accepted')
     return devDict
 
-def _reply(cmd, socket, client_address=None, no_float32=False):
+def _reply(cmd, socket, client_address=None):
     """Build a reply data and send it to client"""
     #ts = []; ts.append(timer())
     try:
@@ -693,9 +685,8 @@ def _reply(cmd, socket, client_address=None, no_float32=False):
             print('LS.Traceback: '+repr(exc))
     #print(croppedText(f'reply_object={r}',100000))
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)
-    
     try:
-        reply = ubjson.dumpb(r, no_float32)# 75% time is spent here
+        reply = ubjson.dumpb(r, no_float32=False)# 75% time is spent here
     except Exception as e:
         reply = ubjson.dumpb(f'ERR.LS. Exception in dumpb: {e}')
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)

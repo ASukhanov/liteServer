@@ -4,7 +4,7 @@
 #__version__ = 'v02 2019-06-10'# using latest liteServer
 #__version__ = 'v03 2021-04-21'# pause parameter not needed, timestamping before publishing is not necessary
 #__version__ = 'v04 2021-09-21'# argparse
-__version__ = '1.0.6 2021-19-21'# removed call aborted()
+__version__ = '1.0.6 2021-19-21'#--verbose, do not call aborted()
 
 #TODO: sometimes it does not start/stop nicely, Action required: disconnect camera, then run guvcview
 
@@ -29,7 +29,7 @@ printd = liteserver.printd
 def printw(msg): print('WARNING: '+msg)
 def printe(msg): print('ERROR: '+msg)
 def printd(msg): 
-    if pargs.dbg:
+    if pargs.verbose:
         print('DBG:'+str(msg))
 #````````````````````````````Process Variables````````````````````````````````
 class Camera(Device):
@@ -85,7 +85,7 @@ class Camera(Device):
                 printw("Error reading image")
                 continue
             timestamp = time.time()
-            printd(f'img.shape {img.shape}, data: {str(img)[:200]}...\n')            
+            printd(f'img.shape {img.shape}{img.dtype}, data: {str(img)[:200]}...\n')
             if self.shape.value[0] == 0:
                 self.shape.value = img.shape
                 self.shape.timestamp = timestamp
@@ -98,6 +98,7 @@ class Camera(Device):
             #self.status.value[0] = msg
             #self.status.timestamp = timestamp
             shippedBytes = self.publish()
+            printd(f'shippedBytes: {shippedBytes}')
 
         self._cv2_cap.release()
         #cv2.destroyAllWindows()
@@ -109,10 +110,12 @@ import argparse
 parser = argparse.ArgumentParser(description = __doc__
 ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
 ,epilog=f'liteUSBCam: {__version__}, liteServer: {liteserver.__version__}')
-parser.add_argument('-d','--dbg', action='store_true', help='debugging')
 defaultIP = liteserver.ip_address('')
 parser.add_argument('-i','--interface', default = defaultIP, help=\
 'network interface')
+parser.add_argument('-v','--verbose', nargs='*',help=\
+'Print more logging info, (-vv even more)')
+
 pargs = parser.parse_args()
 
 devices = [
@@ -121,7 +124,12 @@ devices = [
 
 print('Serving:'+str([dev.name for dev in devices]))
 
-liteserver.Server.Dbg = pargs.dbg
+if pargs.verbose == None:
+    dbg = 0
+else:
+    try:    dbg = len(pargs.verbose[0])+1
+    except: dbg = 1
+liteserver.Server.Dbg = dbg
 server = liteserver.Server(devices, interface=pargs.interface)
 server.loop()
 #print(f'loop finished threads: {threading.enumerate()}')

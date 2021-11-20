@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '1.0.1 2021-09-29'# 
+__version__ = '1.0.6 2021-11-19'# no_float32 removed 
  
 import sys, time, threading
 from timeit import default_timer as timer
@@ -25,7 +25,7 @@ class Scaler(Device):
     """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
-    def __init__(self,name, bigImage=False, no_float32=False):
+    def __init__(self,name, bigImage=False):
         #initials = (np.random.rand(pargs.nCounters)*1000).round().astype(int).tolist()
         initials = [0]*pargs.nCounters
         #2000,3000,3 #works on localhost with 1ms delay 50MB/s, server busy 200%
@@ -58,7 +58,7 @@ class Scaler(Device):
           'chunks':     LDO('R', 'Number of chunks in UDP transfer, for lowest latency it should be 1', 0.),
           'udpSpeed':   LDO('R', 'Instanteneous socket.send spped', 0., units='MB/s'),
         }
-        super().__init__(name,pars, no_float32=no_float32)
+        super().__init__(name,pars)
         self.start()
     #``````````````Overridables```````````````````````````````````````````````        
     def start(self):
@@ -169,8 +169,6 @@ import argparse
 parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'liteScaler version {__version__}, liteserver {liteserver.__version__}')
-parser.add_argument('-d','--doubles', action='store_true'
-, help='Encode floats as doubles, use it when you need precision higher than 7 digits.')
 parser.add_argument('-b','--bigImage', action='store_true', help=\
 'Generate big image >64kB.')
 defaultIP = liteserver.ip_address('')
@@ -190,7 +188,7 @@ pargs = parser.parse_args()
 
 liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
 devices = [
-  Scaler('dev'+str(i+1), bigImage=pargs.bigImage, no_float32=pargs.doubles)\
+  Scaler('dev'+str(i+1), bigImage=pargs.bigImage)\
   for i in range(pargs.scalers)]
 
 print('Serving:'+str([dev.name for dev in devices]))
