@@ -42,7 +42,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '1.0.6 2021-11-19'# remove no_float32 and aborted(), they are confusing, check Device.EventExit instead
+__version__ = '1.0.6 2021-11-22'# remove no_float32 and aborted(), they are confusing, check Device.EventExit instead
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -767,7 +767,7 @@ class _LDO_Handler(SocketServer.BaseRequestHandler):
                     #for key in _myUDPServer.ackCounts:
                     #    print(key)
                     
-            printw(croppedText(f'Retransmitting: {cmd}'))#: {_myUDPServer.ackCounts[sockAddr][0],_myUDPServer.ackCounts[sockAddr][1].keys()}'))
+            #printw(croppedText(f'Retransmitting: {cmd}'))#: {_myUDPServer.ackCounts[sockAddr][0],_myUDPServer.ackCounts[sockAddr][1].keys()}'))
             offsetSize = tuple(cmdArgs[1])
             try:
                 chunk = _myUDPServer.ackCounts[sockAddr][1][offsetSize]
