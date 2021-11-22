@@ -51,9 +51,13 @@ class Camera(Device):
         print(dev_list)
         self._cap = uvc.Capture(dev_list[0]["uid"])
         print(f'available modes: {self._cap.avaible_modes}')
-        self._cap.frame_mode = (640, 480, 30)
-        #self._cap.frame_mode = (960, 720, 15)
-        self.fps.value[0] = self._cap.frame_mode[2]
+        frame_mode = (640, 480, 30)
+        try:
+            self._cap.frame_mode = (640, 480, 30)
+            #self._cap.frame_mode = (960, 720, 15)
+            self.fps.value[0] = self._cap.frame_mode[2]
+        except Exception as e:
+            printw(f'Failed to setup frame mode {frame_mode}: {e}')
 
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = False
