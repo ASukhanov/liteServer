@@ -3,7 +3,7 @@
 The Device Communication Protocol is described in
 https://www.gqelectronicsllc.com/download/GQ-RFC1201.txt
 """
-__version__ = 'v1.0.4 2021-11-12'# 
+__version__ = 'v1.0.7 2021-11-24'# Added mR_h
 
 import sys, serial, time, threading
 try: # to import development version of the liteserver
@@ -23,7 +23,7 @@ def printe(msg):
     print(f'ERROR_GQ@{printTime()}: {msg}')
 def printw(msg):
     print(f'WARNING_GQ@{printTime()}: {msg}')
-def printi(msg): 
+def printi(msg):
     print(f'INFO_GQ@{printTime()}: '+msg)
 def printd(msg):
     if Server.Dbg: print(f'dbgGQ@{printTime()}: {msg}')
@@ -38,7 +38,7 @@ def serial_command(cmd, expectBytes=100):
         r = serDev.read(expectBytes)
         lr = len(r)
         printd(f'Read {lr} bytes: {r}')
-    
+
         if lr == 0 and expectBytes > 0:
             msg = f'WARNING: No data from '+serDev.name
             return msg
@@ -51,7 +51,7 @@ class GeigerCounterGQ(Device):
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Instantiation``````````````````````````````````````````````
     def __init__(self, name, comPort='COM1'):
-    
+
         #device specific initialization
         def open_serial():
             return serial.Serial(comPort, 115200, timeout = pargs.timeout)
@@ -82,7 +82,8 @@ class GeigerCounterGQ(Device):
         'frequency':  LDO('RWE', 'Device readout frequency', pargs.frequency\
             ,units='Hz', opLimits=(0.01,101.)),
         'cycle':LDO('R','Cycle number', [0]),
-        'CPM':     LDO('R','Counts per minute', [0]),
+        'CPM':     LDO('R','Counts per minute (device-specific)', [0]),
+        'mR_h':    LDO('R','milliRoentgen per hour', [0.], units='mR/h'),
         'Gyro':    LDO('R','Gyroscopic data, X, Y, Z', [0, 0, 0]),
         'errors':   LDO('RI', 'Errors detected', [0]),
         'warnings': LDO('RI', 'Warnings detected', [0]),
@@ -118,6 +119,8 @@ class GeigerCounterGQ(Device):
         self.CPM.value[0] = int.from_bytes(r,'big')
         self.CPM.timestamp = timestamp
         printd(f'CPM: {self.CPM.value[0],timestamp}')
+        self.mR_h.value[0] = self.CPM.value[0]*0.000650# device-spicific
+        self.mR_h.timestamp = timestamp
 
         r = serial_command(b'<GETGYRO>>')
         if len(r) != 7:

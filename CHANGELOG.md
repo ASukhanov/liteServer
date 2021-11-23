@@ -1,6 +1,11 @@
 # Change Log for liteServer project.
- 
-## [not released] 2021-11-19
+
+## [Not released yet] 2021-11-23 
+
+## Changed
+liteserver/device/liteGQ.py added parameter:mR/h
+
+## 1.0.6 2021-11-19
 
 ### Added 
 Support for Radiation Monitor and  Gyro sensor GMC-500 from GQ Electronics:
