@@ -8,7 +8,7 @@ from timeit import default_timer as timer
 import numpy as np
 
 if True:#try:
-    from liteserv import liteserver
+    from liteserver import liteserver
 else:#except Exception as e:
     print(f'ERROR: Could not import liteserv.liteserver: {e}')
     #from liteserver import liteserver
