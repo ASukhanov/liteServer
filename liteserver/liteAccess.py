@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '2.0.1a 2022-09-04'# Returned dict keyed as in ADO: with tuple (host:dev,par)
+__version__ = '2.0.0 2023-01-16'#
 
 #TODO: replace ubjson with mgspack
 
@@ -390,7 +390,7 @@ class SubscriptionSocket():
                     dictio = _receive_dictio(self.socket, self.hostPort)
                 except Exception as e:
                     _printe(f'Exception in subscription thread: {e}')
-                    break
+                    continue
             #except socket.timeout as e:
             #except RuntimeError as e:
             except Exception as e:
