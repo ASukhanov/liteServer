@@ -191,7 +191,6 @@ class LDO():
         self._getter = getter
 
     def __str__(self):
-        #printi('LDO object desc: %s at %s'%(self.desc,id(self)))
         return(f'LDO({self.features}, {self.desc},  {self.value})')
 
     def update_value(self):
@@ -256,7 +255,6 @@ class LDO():
         # call LDO setting method with new value
         #print('self._setter of %s is %s'%(self.name,self._setter))
         if self._setter is not None:
-            #self._setter(self) # (self) is important!
             try:
                 self._setter() # (self) is important!
             except:
@@ -299,8 +297,6 @@ class Device():
             printv(croppedText(f'PV {p}: {v}'))
 
     def add_parameter(self, name, ldo):
-        #setattr(self, name, ldo)
-        #getattr(self,name).name = name
         self.PV[name] = ldo
 
     def setServerStatusText(txt):
@@ -584,12 +580,6 @@ def _replyData(cmdArgs):
         else:   
             propNames = '*' if cmd == 'info' else 'value'
             vals = None
-        #try:
-        #    vals = sParPropVals[2]
-        #except Exception as e:
-        #    #vals = None
-        #    msg = f'Could not get value for {devParPropVal}'
-        #    raise NameError(msg)
         if devName == '*':
             for devName in Server.DevDict:
                 #cdn = NSDelimiter.join((cnsHost,devName))
@@ -598,30 +588,15 @@ def _replyData(cmdArgs):
                 #returnedDict[cdn] = devDict
                 returnedDict = devDict
         else:
-            '''
-            if cnsDevName not in returnedDict:
-                #print('add new cnsDevName',cnsDevName)
-                devDict = _process_parameters(cmd, parNames, devName\
-                , propNames, vals)
-                if len(devDict) > 0:
-                    returnedDict[cnsDevName] = devDict
-                else:
-                    #printv(f'no fresh data for {devName,parNames}')
-                    pass
-            else:'''
-            #devDict = returnedDict[cnsDevName]
             additionalDevDict = _process_parameters(cmd, parNames,
               cnsDevName, propNames, vals)
             #printv(croppedText(f'additional devDict: {additionalDevDict}'))
             returnedDict.update(additionalDevDict)
-            #returnedDict[cnsDevName] = devDict
     #print(f'retDict: {returnedDict}')
     return returnedDict
 
-#LastUpdateTime = 0.
 def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
     """part of _replyData"""
-    #global LastUpdateTime
     devDict = {}
     host,devName = cnsDevName.split(':',1)
     try:    dev = Server.DevDict[devName]
@@ -631,19 +606,17 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
         raise NameError(msg)
 
     if parNames[0][0] == '*':
-        #parNames = vars(dev)
         parNames = dev.PV.keys()
     
     #print('parNames:'+str(parNames))
     for idx,parName in enumerate(parNames):
-        #pv = getattr(dev,parName)
         pv = dev.PV.get(parName)
         if not isinstance(pv,LDO):
             msg = f'No such name: {cnsDevName,parName}'
             printe(msg)
             raise NameError(msg)
             continue
-        features = getattr(pv,'features','')
+        features = getattr(pv,'features')
 
         if cmd == 'read' and 'R' not in features:
             #print('par %s is not readable, it will not be replied.'%parName)
@@ -661,7 +634,7 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
 
         if cmd in ('get', 'read'):
             ts = timer()
-            timestamp = getattr(pv,'timestamp',None)
+            timestamp = getattr(pv,'timestamp')
             #printvv(f'parName {parName}, ts:{timestamp}, lt:{dev.lastPublishTime}')
             if not timestamp: 
                 printw('parameter '+parName+' does ot have timestamp')
@@ -685,7 +658,7 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
             vd = valueDict(value)
             #printv(croppedText(f'vd:{vd}'))
             parDict.update(vd)
-            parDict['timestamp'] = getattr(pv,'timestamp',None)
+            parDict['timestamp'] = getattr(pv,'timestamp')
 
         elif cmd == 'set':
             try:
@@ -711,7 +684,6 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
                 propNames = pv.info()
             #printv('propNames of %s: %s'%(pv.name,str(propNames)))
             for propName in propNames:
-                #pv = getattr(dev,parName)
                 pv = dev.PV[parName]
                 propVal = getattr(pv,propName)
                 if propName == 'value':
@@ -944,32 +916,29 @@ class ServerDev(Device):
         printi('Heartbeat thread started')
         while not Device.EventExit.is_set():
             Device.EventExit.wait(10)
-            self._heartbeat_proc()
+            #print(f'HB_proc {time.time()}')
+            ts = time.time()
+            subscriptions = 0
+            nItems = 0
+            nSockets = 0
+            for devName,dev in Server.DevDict.items():
+                ns,ni,*_ = dev.get_statistics()
+                #printi(f'dev {devName}, has {ns} subscriptions for for total of {ni} items')
+                nItems += ni
+                nSockets += ns
+            self.PV['statistics'].set_valueAndTimestamp([nItems,nSockets], ts)
+            try:
+                dt = Server.Perf['Seconds'] - self.heartbeatPrevs[1]
+                mbps = round((Server.Perf['MBytes'] - self.heartbeatPrevs[0])/dt, 1)
+            except:
+                mbps = 0.
+            self.PV['perf'].set_valueAndTimestamp([Server.Perf['Sends'],
+                round(Server.Perf['MBytes'],3), mbps,
+                Server.Perf['Retransmits'], Server.Perf['ItemsLost'],
+                Server.Perf['Dropped']], ts)
+            self.heartbeatPrevs = Server.Perf['MBytes'], Server.Perf['Seconds']
+            self.publish()
         printi('Heartbeat stopped')
-
-    def _heartbeat_proc(self):
-        #print(f'HB_proc {time.time()}')
-        ts = time.time()
-        subscriptions = 0
-        nItems = 0
-        nSockets = 0
-        for devName,dev in Server.DevDict.items():
-            ns,ni,*_ = dev.get_statistics()
-            #printi(f'dev {devName}, has {ns} subscriptions for for total of {ni} items')
-            nItems += ni
-            nSockets += ns
-        self.PV['statistics'].set_valueAndTimestamp([nItems,nSockets], ts)
-        try:
-            dt = Server.Perf['Seconds'] - self.heartbeatPrevs[1]
-            mbps = round((Server.Perf['MBytes'] - self.heartbeatPrevs[0])/dt, 1)
-        except:
-            mbps = 0.
-        self.PV['perf'].set_valueAndTimestamp([Server.Perf['Sends'],
-            round(Server.Perf['MBytes'],3), mbps,
-            Server.Perf['Retransmits'], Server.Perf['ItemsLost'],
-            Server.Perf['Dropped']], ts)
-        self.heartbeatPrevs = Server.Perf['MBytes'], Server.Perf['Seconds']
-        self.publish()
 
     def _reset(self):
         """Execute reset on all devices"""
@@ -1049,7 +1018,7 @@ class Server():
             sock = self.socketServer.sock
         else:
             pollingInterval = 0.5
-        while True:
+        while not Device.EventExit.is_set():
             try:
                 if UDP:
                     data, address = sock.recvfrom(4096)

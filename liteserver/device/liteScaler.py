@@ -60,7 +60,7 @@ class Scaler(Device):
           'publishingSpeed': LDO('R', 'Instanteneous publishing speed of published data', 0., units='MB/s'),
           'dataSize':   LDO('R', 'Size of published data', 0., units='KB'),
           'chunks':     LDO('R', 'Number of chunks in UDP transfer, for lowest latency it should be 1', 0.),
-          'udpSpeed':   LDO('R', 'Instanteneous socket.send spped', 0., units='MB/s'),
+          'udpSpeed':   LDO('R', 'Instanteneous socket.send speed', 0., units='MB/s'),
         }
         super().__init__(name)
         self.PV.update(pars)
@@ -184,7 +184,6 @@ class Scaler(Device):
                 ss = round(shippedBytes / (timer() - ts) / 1.e6, 3)
                 #print(f'sb: {shippedBytes}')            
                 pv_publishingSpeed.value = ss
-                #printd(f'publishing speed of {self.name}: {ss}')
                 pv_dataSize.value = round(shippedBytes/1000.,1)
                 pv_chunks.value = (shippedBytes-1)//liteserver.ChunkSize + 1
                 maxChanks = max(maxChanks, pv_chunks.value)
