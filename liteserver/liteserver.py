@@ -180,7 +180,6 @@ class LDO():
         self.desc = desc
         self.units = units
         if ptype is None:
-            printv(f'python type: {type(self.value[0])}')
             self.type = str(type(self.value[0])).split('\'')[1]
         else:
             self.type = ptype
@@ -285,7 +284,6 @@ class Device():
         self.name = name
         self.lastPublishTime = 0.
         self.subscribers = {}
-        printv(croppedText('pars '+str(pars)))
 
         requiredParameters = {
           #'name':   LDO('R', 'Device name', ['']),
@@ -295,14 +293,10 @@ class Device():
           'status': LDO('RWE','Device status', ['']),
         }
         self.PV = requiredParameters
-        self.PV.update(pars)
         # Add parameters
-        #for p,v in list(parDefs.items()):
-        #    printv(croppedText(f'PV {p}: {v}'))
-        #    setattr(self,p,v)
-        #    par = getattr(self,p)
-        #    par.name = p
         self.PV.update(pars)
+        for p,v in (self.PV.items()):
+            printv(croppedText(f'PV {p}: {v}'))
 
     def add_parameter(self, name, ldo):
         #setattr(self, name, ldo)
@@ -319,7 +313,6 @@ class Device():
             Device.server.publish()
         except Exception as e:
             print(f'Exception in setServerStatusText: {e}')
-
     #````````````````````````Subscriptions````````````````````````````````````
     #@staticmethod
     def register_subscriber(self, hostPort, sock, serverCmdArgs):
@@ -456,7 +449,7 @@ class Device():
 
     def _set_run(self):
         """special treatment of the setting of the 'run' parameter"""
-        val = self.run.value[0]
+        val = self.PV['run'].value[0]
         printv(f'_set_run {val}')
         if val == 'Stop':
             val = 'Stopped'
@@ -471,7 +464,7 @@ class Device():
             sys.exit()
         else:
             raise ValueError(f'LS:not accepted setting for "run": {val[0]}') 
-        self.run.value[0] = val
+        self.PV['run'].value[0] = val
 
     def poll(self):
         """Override this method if device need to react on periodic polling 
@@ -491,6 +484,9 @@ class Device():
         """Overriddable. Called when run is started."""
         pass
 
+    def exit(self):
+        printi(f'Device {self.name} is exiting')
+        Device.EventExit.set()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #``````````````````functions for socket data preparation and sending``````````
 if UDP:
@@ -847,7 +843,7 @@ def handle_socketData(data:str, sockAddr=None):
         "[['host,dev1', [parameters]]]\ngot: "+str(cmdArgs[1])))
 
     if  cmdArgs[0] == 'subscribe':
-        print(f'>register_subscriber {client_address} for cmd {cmdArgs}, sock: {sock}')
+        printv(f'>register_subscriber {client_address} for cmd {cmdArgs}, sock: {sock}')
         dev.register_subscriber(client_address, sock, cmdArgs[1])                
         return
 
@@ -1041,6 +1037,7 @@ class Server():
             for name,dev in self.DevDict.items():
                 if name != 'server':
                     dev.poll()
+        printv('Device polling stopped')
 
     def loop(self):
         """Processing of the network requests, should be called after instantiation"""

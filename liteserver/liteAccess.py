@@ -371,11 +371,10 @@ class SubscriptionSocket():
             print(f'Subscriber connected by {addr}, hp:{self.hostPort}')
         '''
         self.callback = None# holds the callback for checking
-        self.socket.settimeout(1)
         dispatchMode = 'Thread'
         if dispatchMode == 'Thread':
             self.selector = None
-            #self.socket.settimeout(10)
+            self.socket.settimeout(20)
             self.thread = threading.Thread(target=self.receivingThread)
             self.thread.daemon = True
             self.event.clear()
