@@ -459,7 +459,7 @@ class Device():
             time.sleep(1)
             sys.exit()
         else:
-            raise ValueError(f'LS:not accepted setting for "run": {val[0]}') 
+            raise ValueError(f'LS:not accepted setting for "run": {val}') 
         self.PV['run'].value[0] = val
 
     def poll(self):

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-#__version__ = '1.0.6 2021-11-19'# no_float32 removed 
-__version__ = '1.0.7 2022-08-06'#
+__version__ = '2.0.0 2023-02-27'#
 
 import sys, time, threading
 from timeit import default_timer as timer
@@ -62,8 +61,7 @@ class Scaler(Device):
           'chunks':     LDO('R', 'Number of chunks in UDP transfer, for lowest latency it should be 1', 0.),
           'udpSpeed':   LDO('R', 'Instanteneous socket.send speed', 0., units='MB/s'),
         }
-        super().__init__(name)
-        self.PV.update(pars)
+        super().__init__(name, pars)
         self.start()
     #``````````````Overridables```````````````````````````````````````````````        
     def start(self):
