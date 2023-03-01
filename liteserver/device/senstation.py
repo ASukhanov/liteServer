@@ -15,7 +15,7 @@ TODO: connection to RPi Pico RP2040 MCU which will provide:
   - 1 us timestamping
   - real time
 """
-__version__ = '2.0.0 2023-02-27'
+__version__ = '2.0.0 2023-02-28'
 
 #TODO: take care of microsecond ticks in callback
 print(f'senstation {__version__}')
@@ -25,7 +25,6 @@ from timeit import default_timer as timer
 from functools import partial
 #import numpy as np
 
-from gpiozero import CPUTemperature
 from liteserver import liteserver
 
 #````````````````````````````Globals``````````````````````````````````````````
@@ -44,7 +43,6 @@ GPIO = {
     'DO4':  24,
     'DHT':  21,
 }
-
 EventGPIO = {'Counter0':0.} # event-generated GPIOs, store the time when it was last published
 #CallbackMinimalPublishPeiod = 0.01
 MaxPWMRange = 1000000 # for hardware PWM0 and PWM1
@@ -133,13 +131,63 @@ def init_serial():
     except Exception as e:
         printe(f'Could not open communication to OmegaBus: {e}')
         sys.exit(1)
-#````````````````````````````liteserver methods```````````````````````````````
+
+#`````````````````````````````I2C Devices``````````````````````````````````````
+class I2CDev():
+    def __init__(self, devAddr):
+        print(f'>I2CDev {devAddr}')
+        self.devAddr = devAddr
+        self.devName,self.addr = devAddr.split('_')
+        print(f'I2CDev created: {self.devName,self.addr}')
+
+    def read(self, timestamp):
+        print(f'update not implemented for {self.devName}')
+        return
+
+class I2C_MMC5983MA(I2CDev):
+    def __init__(self, devAddr):
+        super().__init__(devAddr)
+        self.pars = {
+        devAddr+'_Temp': LDO('R','Sensor temperature', 0., units='C'),
+        devAddr+'_X': LDO('R','X-axis field', 0., units='G'),
+        devAddr+'_Y': LDO('R','Y-axis field', 0., units='G'),
+        devAddr+'_Z': LDO('R','Z-axis field', 0., units='G'),
+        }
+        print(f'Created  MMC5983MA:{self.addr}')
+
+    def read(self, timestamp):
+        da = self.devAddr
+        print(f'>read {da}')
+        self.pars[da+'_X'].set_valueAndTimestamp([time.time()], timestamp)
+        self.pars[da+'_Y'].set_valueAndTimestamp([time.time()], timestamp)
+        self.pars[da+'_Z'].set_valueAndTimestamp([time.time()], timestamp)
+
+class I2C_ADC111x(I2CDev):
+    def __init__(self, devNameAddr):
+        super().__init__(devNameAaddr)
+        printe(f'ADC111x:{self.addr} not supported yet')
+
+#````````````````````````````liteserver methods````````````````````````````````
 class SensStation(Device):
     """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name):
-        pars = {
+        pars = {}
+        self.i2cDev = {}
+        if pargs.I2C is not None: # create I2C devices and adopt their PVs
+            devClassMap = {'MMC5983MA':I2C_MMC5983MA, 'ADC111x':I2C_ADC111x}
+            for devAddr in pargs.I2C.split(','):
+                devName,address = devAddr.split('_')
+                devClass = devClassMap.get(devName)
+                if devClass is not None:
+                    dev = devClass(devAddr)
+                    self.i2cDev[devAddr] = dev
+                    devPars = dev.pars
+                    #print(f'devPars: {devPars}')
+                    pars.update(self.i2cDev[devAddr].pars)
+            print(f'pars: {pars.keys()}')
+        pars.update({
           'boardTemp':    LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
           'cycle':      LDO('R', 'Cycle number', 0),
           'cyclePeriod':LDO('RWE', 'Cycle period', pargs.update, units='s'),
@@ -166,7 +214,7 @@ class SensStation(Device):
           'Buzz':       LDO('RWE', f'Buzzer at GPIO {GPIO["Buzz"]}, activates when the Counter0 changes',
             '0', legalValues=['0','1'], setter=self.set_Buzz),
           'BuzzDuration': LDO('RWE', f'Buzz duration', 5., units='s'),
-        }
+        })
         if pargs.oneWire:
             pars['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,     units='C'),
         if 'OmegaBus' in pargs.serial:
@@ -257,17 +305,20 @@ class SensStation(Device):
         printi('State machine started')
         timestamp = time.time()
         periodic_update = timestamp
+        self.prevCPUTempTime = 0.
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
                 break
             waitTime = self.PV['cyclePeriod'].value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
+            for i2cDev in self.i2cDev.values():
+                i2cDev.read(timestamp)
             self.PV['cycle'].value[0] += 1
             self.PV['cycle'].timestamp = timestamp
             if self.PV['RGBControl'].value[0] == 'RGBCycle':
-                self.PV['RGB'].value[0] = self.PV['cycle'].value[0] & 0x7
-                self.PV['RGB'].timestamp = timestamp
+                self.PV['RGB'].set_valueAndTimestamp(\
+                    [self.PV['cycle'].value[0] & 0x7], timestamp)
                 self.set_RGB()
             self.publish()# publish all fresh parameters
 
@@ -283,22 +334,30 @@ class SensStation(Device):
     def seldomThread(self):
         #print(f'>seldomThread: {timestamp}')
         #ts = timer()
-        self.PV['boardTemp'].value[0] = CPUTemperature().temperature
-        #print(f'CPUTemperature time: {round(timer()-ts,6)}')
-        self.PV['boardTemp'].timestamp = time.time()
+        ctime = time.time()
+        try:
+            if ctime - self.prevCPUTempTime > 60.:
+                self.prevCPUTempTime = ctime
+                with open(r"/sys/class/thermal/thermal_zone0/temp") as f:
+                    r = f.readline()
+                    temperature = float(r.rstrip()) / 1000.
+                    self.PV['boardTemp'].set_valueAndTimestamp([temperature])
+        except Exception as e:
+            printw(f'Could not read CPU temperature `{r}`: {e}')
         temp = measure_temperature()# 0.9s spent here
         #print(f'Temp0 time: {round(timer()-ts,6)}')
         if temp is not None:
-            self.PV['Temp0'].value[0] = temp
-            self.PV['Temp0'].timestamp = time.time()
+            self.PV['Temp0'].set_valueAndTimestamp([temp])
         if 'OmegaBus' in pargs.serial:
             OmegaBus.write(b'$1RD\r\n')
             r = OmegaBus.read(100)
             #print(f'OmegaBus read: {r}')
             if len(r) != 0:
-                self.PV['OmegaBus'].value[0] = float(r.decode()[2:])/1000.
-                self.PV['OmegaBus'].timestamp = time.time()
+                self.PV['OmegaBus'].set_valueAndTimestamp([float(r.decode()[2:])/1000.])
         #print(f'<seldomThread time: {round(timer()-ts,6)}')
+
+    def set_status(self, msg):
+        self.PV['status'].set_valueAndTimestamp(msg)
 
 def callback(gpio, level, tick):
     #print(f'callback: {gpio, level, tick}')
@@ -309,8 +368,7 @@ def callback(gpio, level, tick):
             MgrInstance.PV[gName].value[0] += 1
             MgrInstance.PV[gName].timestamp = timestamp
             # start buzzer
-            MgrInstance.PV['Buzz'].value = '1'
-            MgrInstance.PV['Buzz'].timestamp = timestamp
+            MgrInstance.PV['Buzz'].set_valueAndTimestamp(['1'], timestamp)
             MgrInstance.set_Buzz()
     MgrInstance.publish()
 
@@ -333,6 +391,8 @@ if __name__ == "__main__":
     parser.add_argument('-i','--interface', default = '', help=\
     'Network interface. Default is the interface, which connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
+    parser.add_argument('-I','--I2C', help=\
+    'Comma separated list of I2C device_address, e.g. MMC5983MA_48,ADC1115_72'),#choices=['MMC5983MA']),
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port, default: 9700')
     parser.add_argument('-s','--serial', default = '', help=\
@@ -345,8 +405,9 @@ if __name__ == "__main__":
         'Show more log messages, (-vv: show even more).')
     pargs = parser.parse_args()
     pargs.verbose = 0 if pargs.verbose is None else len(pargs.verbose)+1
-    liteserver.Server.Dbg = pargs.verbose
+    print(f'pargs.I2C: {pargs.I2C}')
 
+    liteserver.Server.Dbg = pargs.verbose
     init_gpio()
 
     if pargs.serial != '':

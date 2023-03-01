@@ -42,7 +42,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '2.0.1 2022-09-04'# Returned dict keyed as in ADO: with tuple (host:dev,par)
+__version__ = '2.0.0 2023-02-28'#(host:dev,par)
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -202,8 +202,9 @@ class LDO():
     def is_writable(self): return 'W' in self.features
     def is_readable(self): return 'R' in self.features
 
-    def set_valueAndTimestamp(self, value, timestamp):
+    def set_valueAndTimestamp(self, value, timestamp=None):
         self.value = value
+        if timestamp is None:   timestamp = time.time()
         self.timestamp = timestamp
 
     def set(self, vals):#, prop='value'):
