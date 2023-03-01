@@ -133,12 +133,24 @@ def init_serial():
         sys.exit(1)
 
 #`````````````````````````````I2C Devices``````````````````````````````````````
+I2CBus = None
+I2CSMBus = 1
+try:
+    import smbus
+except: printe('I2C is not supported on that host')
+else:
+    try:    I2CBus = smbus.SMBus(I2CSMBus)
+    except:
+        printe(f'I2C SMBus {I2CSMBus} does not exist, try `i2cdetect -l`.')
+
 class I2CDev():
     def __init__(self, devAddr):
+        if I2CBus == None:
+            sys.exit(1)
         print(f'>I2CDev {devAddr}')
         self.devAddr = devAddr
-        self.devName,self.addr = devAddr.split('_')
-        print(f'I2CDev created: {self.devName,self.addr}')
+        self.devName,addr = devAddr.split('_')
+        self.addr = int(addr)
 
     def read(self, timestamp):
         print(f'update not implemented for {self.devName}')
@@ -147,6 +159,14 @@ class I2CDev():
 class I2C_MMC5983MA(I2CDev):
     def __init__(self, devAddr):
         super().__init__(devAddr)
+        devID = I2CBus.read_byte_data(self.addr, 0x2f)
+        sensStatus = I2CBus.read_byte_data(self.addr, 0x8)
+        print(f'sensStatus: {sensStatus}')
+        if sensStatus&0x10 == 0:
+            raise RuntimeError('Chip could not read its memory')
+        printi(f'MMC5983MA ID: {devID}')
+        print(f'Sensor detected: {self.devName,self.addr}')
+        
         self.pars = {
         devAddr+'_Temp': LDO('R','Sensor temperature', 0., units='C'),
         devAddr+'_X': LDO('R','X-axis field', 0., units='G'),
@@ -157,10 +177,18 @@ class I2C_MMC5983MA(I2CDev):
 
     def read(self, timestamp):
         da = self.devAddr
-        print(f'>read {da}')
-        self.pars[da+'_X'].set_valueAndTimestamp([time.time()], timestamp)
-        self.pars[da+'_Y'].set_valueAndTimestamp([time.time()], timestamp)
-        self.pars[da+'_Z'].set_valueAndTimestamp([time.time()], timestamp)
+        v = I2CBus.read_byte_data(self.addr,0x8)
+        t = I2CBus.read_byte_data(self.addr,0x7)
+        xyz = 6*[0.]
+        for i in range(6):
+            xyz[i] = I2CBus.read_byte_data(self.addr, i)
+        I2CBus.write_byte_data(self.addr,0x09,0x3)
+        print(f'>read {da}, CTRL0: {v}, T: {t}, xyz:{[hex(i) for i in xyz]}')
+        temp = -75. + t*0.8
+        self.pars[da+'_Temp'].set_valueAndTimestamp([temp], timestamp)       
+        #self.pars[da+'_X'].set_valueAndTimestamp([time.time()], timestamp)
+        #self.pars[da+'_Y'].set_valueAndTimestamp([time.time()], timestamp)
+        #self.pars[da+'_Z'].set_valueAndTimestamp([time.time()], timestamp)
 
 class I2C_ADC111x(I2CDev):
     def __init__(self, devNameAddr):
