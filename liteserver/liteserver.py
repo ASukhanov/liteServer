@@ -42,7 +42,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '2.0.0 2023-02-28'#(host:dev,par)
+__version__ = '2.0.1 2023-03-05'# convert type of the right operand to left operand for set action. Set pv.name in Device.__init__.
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -232,6 +232,8 @@ class LDO():
             +str(type(self.value[0]))
             #raise TypeError(msg)
             printw(msg)
+            # convert to proper type:
+            vals[0] = valueType(vals[0])
             
         if self.opLimits is not None:
             #print(f'checking for opLimits {vals,self.opLimits}')
@@ -242,7 +244,7 @@ class LDO():
                 + str(vals[0]))
 
         if self.legalValues is not None:
-            #printi('checking for legalValues %s = '%self.name+str(vals[0]))
+            #printi(f'checking for legalValues {self.name,vals[0],type(vals[0])}')
             if vals[0] not in self.legalValues:
                 raise ValueError('not a legal value of %s:'\
                 %self.name+str(vals[0]))
@@ -295,6 +297,7 @@ class Device():
         # Add parameters
         self.PV.update(pars)
         for p,v in (self.PV.items()):
+            v.name = p
             printv(croppedText(f'PV {p}: {v}'))
 
     def add_parameter(self, name, ldo):
