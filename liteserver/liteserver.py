@@ -28,6 +28,7 @@ Example usage:
 python3 -m liteserver.device.liteScaler -ilo
 - use ipython3 to communicate with devices:
 ipython3
+import liteAccess as LA
 Host = 'localhost'
 LAserver = Host+':server'
 LAdev1   = Host+':dev1'

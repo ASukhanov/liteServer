@@ -11,7 +11,7 @@ Supported:
   - I2C devices: ADS1115, MMC5983MA
   - OmegaBus serial sensors
 """
-__version__ = '2.0.1 2023-03-06'#
+__version__ = '2.0.2 2023-03-07'# Multiple of I2C devices supported, ADS1015 and ADS1115 are corrected.
 
 #TODO: take care of microsecond ticks in callback
 print(f'senstation {__version__}')
@@ -145,7 +145,6 @@ class I2CDev():
     def __init__(self, devAddr):
         if I2CBus == None:
             sys.exit(1)
-        print(f'>I2CDev {devAddr}')
         self.devAddr = devAddr
         self.devName,addr = devAddr.split('_')
         self.addr = int(addr)
@@ -207,29 +206,34 @@ class ADS1115_bits_ConfigReg(ctypes.LittleEndianStructure):
 class ADS1115_ConfigReg(ctypes.Union):
     _fields_ = [("b", ADS1115_bits_ConfigReg),
                 ("w", c_uint16),]
+ADS1115_SingleShot = 1# 1: Single-shot, 0: Continuous conversion
 class I2C_ADS1115(I2CDev):
-    def __init__(self, devAddr):
+    def __init__(self, devAddr, model='ADS1115'):
         super().__init__(devAddr)
         self.configReg = ADS1115_ConfigReg()
         self.config = ADS1115_ConfigReg()
         self.config.w = I2CBus.read_word_data(self.addr,1)
-        self.config.b.MODE = 1# Set Single-shot mode
+        self.config.b.MODE = ADS1115_SingleShot
         I2CBus.write_word_data(self.addr, 1, self.config.w)
-        
         lvPGA = (6.144,4.096,2.048,1.024,0.512,0.256)
-        lvDR = (8,16,32,64,128,250,475,860)
+        lvDR = {'ADS1115': (8,     16,   32,   64,  128,  250,  475,  860),
+                'ADS1015': (128,  250,  490,  920, 1600, 2400, 3300, 3300)}
         self.pPV = {
+        devAddr+'_rlength': LDO('RWE', 'Record length, ', 1),
+        devAddr+'_tAxis': LDO('R', 'Time axis for samples', [0.], units='s'),
+        devAddr+'_nCh': LDO('RWE', 'Number of active ADC channels. Select 1 for faster performance.',
+            4, legalValues=[4,1]),
         devAddr+'_diff': LDO('RWE', 'Differential mode, Ch0=AIN0-AIN1, Ch1=AIN2-AIN3', 'Single-ended', legalValues=['Single-ended','Diff']),
-        devAddr+'_Ch0': LDO('R', 'Result of the last conversion', 0., units='V'),
-        devAddr+'_Ch1': LDO('R', 'Result of the last conversion', 0., units='V'),
-        devAddr+'_Ch2': LDO('R', 'Result of the last conversion', 0., units='V'),
-        devAddr+'_Ch3': LDO('R', 'Result of the last conversion', 0., units='V'),
+        devAddr+'_Ch0': LDO('R', 'ADC channel 0', [0.], units='V'),
+        devAddr+'_Ch1': LDO('R', 'ADC channel 1', [0.], units='V'),
+        devAddr+'_Ch2': LDO('R', 'ADC channel 2', [0.], units='V'),
+        devAddr+'_Ch3': LDO('R', 'ADC channel 3', [0.], units='V'),
         devAddr+'_PGA': LDO('RWE', 'FSR, Full scale range is [-FSR:+FSR]',
             lvPGA[self.config.b.PGA], legalValues=lvPGA, units='V',
             setter=partial(self.set_pv,'PGA')),
-        #devAddr+'_DR': LDO('RWE', 'Data rate',
-        #    lvDR[self.config.b.DR], units='SPS',
-        #    legalValues=lvDR, setter=partial(self.set_pv, 'DR')),
+        devAddr+'_DR': LDO('RWE', 'Data rate',
+            lvDR[model][self.config.b.DR], units='SPS',
+            legalValues=lvDR[model], setter=partial(self.set_pv, 'DR')),
         }
         '''The following parts are handled internally
         devAddr+'_MODE': LDO('RWE', 'Device operating mode', self.config.b.MODE,
@@ -252,38 +256,64 @@ class I2C_ADS1115(I2CDev):
             self.config.b.COMP_MODE,
             opLimits=(0,1), setter=partial(self.set_pv, 'COMP_MODE')),
         '''
-        print(f'Created  ADS1115_{self.addr}')
+        printi(f'Created  {model}_{self.addr}')
 
     def read(self, timestamp):
+        sleepTime = max(0, 1./(self.pPV[self.devAddr+'_DR'].value[0]) - 0.0013)# 1.3ms is tuned correction
         def wait_conversion():
             tswc = time.time()
-            v = None
-            while time.time() - tswc < .2:
-                self.config.w = I2CBus.read_word_data(self.addr,1)
-                if self.config.b.OS == 0:   continue
-                v = I2CBus.read_word_data(self.addr,0)
-                v = int(((v&0xff)<<8) + ((v>>8)&0xff))# swap bytes
-                if v & 0x8000:  v = v - 0x10000
-                v = v/0x10000*self.pPV[da+'_PGA'].value[0]*2.
-                break
-            if v is None:
-                raise OSError.TimeoutError('in I2C_ADS1115')
+            if self.config.b.MODE == 1:# wait when OS bit = 1
+                while True:
+                    self.config.w = I2CBus.read_word_data(self.addr,1)
+                    if self.config.b.OS == 1:
+                        break
+                    if time.time() - tswc > .2:
+                        raise TimeoutError('Timeout in I2C_ADS1115')
+            else:
+                time.sleep(sleepTime)
+            v = I2CBus.read_word_data(self.addr,0)
+            v = int(((v&0xff)<<8) + ((v>>8)&0xff))# swap bytes
+            if v & 0x8000:  v = v - 0x10000
+            v = v/0x10000*self.pPV[da+'_PGA'].value[0]*2.
             return v
-        ts = timer()
-        #tt = []
+
         self.config.w = I2CBus.read_word_data(self.addr,1)
         da = self.devAddr
+        nCh = self.pPV[da+'_nCh'].value[0]
         if self.pPV[da+'_diff'].value[0].startswith('Diff'):
-            listCmd = ((0,'_Ch0'), (3,'_Ch1'))
+            listCmd = [(0,'_Ch0'), (3,'_Ch1')]
         else:
-            listCmd = ((4,'_Ch0'), (5,'_Ch1'), (6,'_Ch2'), (7,'_Ch3'))
-        for mux,ch in listCmd:
-            self.config.b.MUX = mux
-            I2CBus.write_word_data(self.addr, 1, self.config.w)
-            v = wait_conversion()
-            self.pPV[da+ch].set_valueAndTimestamp([v], timestamp)
-            #tt.append(round(timer()-ts,6))
-        #print(f'read time: {tt}')# 14 ms for 4-ch
+            listCmd = [(4,'_Ch0'), (5,'_Ch1'), (6,'_Ch2'), (7,'_Ch3')]
+        # set mux for first item of the list
+        self.config.b.MUX = listCmd[0][0]
+        self.config.b.MODE = 0 if nCh == 1 else ADS1115_SingleShot
+        I2CBus.write_word_data(self.addr, 1, self.config.w)
+
+        # init the sample data
+        nSamples = self.pPV[self.devAddr+'_rlength'].value[0]
+        self.pPV[da+'_tAxis'].value = [0.]*nSamples
+        for mux,ch in listCmd[:nCh]:
+            self.pPV[da+ch].value = [0.]*nSamples
+        t0 = time.time()
+        #ts = timer(), #tt = []
+
+        # collect samples
+        for sample in range(nSamples):
+            for mux,ch in listCmd[:nCh]:
+                if nCh > 1:
+                    self.config.b.MUX = mux
+                    I2CBus.write_word_data(self.addr, 1, self.config.w)
+                #tt.append(round(timer()-ts,6))
+                v = wait_conversion()
+                self.pPV[da+ch].value[sample] = v
+            self.pPV[da+'_tAxis'].value[sample] = round(time.time() - t0,6)
+
+        # invalidate timestamps to schedule PVs for publishing
+        for mux,ch in listCmd[:nCh]:
+            self.pPV[da+ch].timestamp = timestamp
+        self.pPV[da+'_tAxis'].timestamp = timestamp
+        #tt.append(round(timer()-ts,6))
+        #print(f'read time: {tt}')
 
     def set_pv(self, field):
         pv = self.pPV[self.devAddr+'_'+field]        
@@ -296,6 +326,10 @@ class I2C_ADS1115(I2CDev):
         #print(f'new: {hex(self.config.w)}')
         I2CBus.write_word_data(self.addr, 1, self.config.w)
 
+class I2C_ADS1015(I2C_ADS1115):
+    def __init__(self, devAddr):
+        print(f'>I2C_ADS1015')
+        super().__init__(devAddr, 'ADS1015')
 #````````````````````````````liteserver methods````````````````````````````````
 class SensStation(Device):
     """ Derived from liteserver.Device.
@@ -305,7 +339,8 @@ class SensStation(Device):
         pars = {}
         self.i2cDev = {}
         if pargs.I2C is not None: # create I2C devices and adopt their PVs
-            devClassMap = {'MMC5983MA':I2C_MMC5983MA, 'ADS1115':I2C_ADS1115}
+            devClassMap = {'MMC5983MA':I2C_MMC5983MA,
+                'ADS1115':I2C_ADS1115, 'ADS1015':I2C_ADS1015}
             for devAddr in pargs.I2C.split(','):
                 devName,address = devAddr.split('_')
                 devClass = devClassMap.get(devName)
@@ -364,7 +399,7 @@ class SensStation(Device):
             if setter is not None:
                 if str(par) == 'run':  continue
                 setter()
-        thread = threading.Thread(target=self._state_machine, daemon=False)
+        thread = threading.Thread(target=self._threadRun, daemon=False)
         thread.start()
 
     def stop(self):
@@ -429,8 +464,8 @@ class SensStation(Device):
             PiGPIO.write(GPIO['RGB'][i], v&1)
             v = v >> 1
 
-    def _state_machine(self):
-        printi('State machine started')
+    def _threadRun(self):
+        printi('threadRun started')
         timestamp = time.time()
         periodic_update = timestamp
         self.prevCPUTempTime = 0.
@@ -441,7 +476,11 @@ class SensStation(Device):
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
             for i2cDev in self.i2cDev.values():
-                i2cDev.read(timestamp)
+                try:
+                    i2cDev.read(timestamp)
+                except Exception as e:
+                    printw(f'Exception in threadRun: {e}')
+                    continue
             self.PV['cycle'].value[0] += 1
             self.PV['cycle'].timestamp = timestamp
             if self.PV['RGBControl'].value[0] == 'RGBCycle':
@@ -456,7 +495,7 @@ class SensStation(Device):
                 periodic_update = timestamp
                 thread = threading.Thread(target=self.seldomThread)
                 thread.start()
-        printi('State machine stopped')
+        printi('threadRun stopped')
         self.stop()
 
     def seldomThread(self):
@@ -520,7 +559,8 @@ if __name__ == "__main__":
     'Network interface. Default is the interface, which connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
     parser.add_argument('-I','--I2C', help=\
-    'Comma separated list of I2C device_address, e.g. MMC5983MA_48,ADS1115_72'),#choices=['MMC5983MA']),
+    ('Comma separated list of I2C device_address, e.g. MMC5983MA_48,'
+    'ADS1115_72, ADS1015_72')),#choices=['MMC5983MA']),
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port, default: 9700')
     parser.add_argument('-s','--serial', default = '', help=\
