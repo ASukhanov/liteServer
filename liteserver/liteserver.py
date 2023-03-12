@@ -43,7 +43,7 @@ LA.Access.unsubscribe()
   The implemented UDP-based transport protocol works reliable on 
   point-to-point network connection but may fail on a multi-hop network. 
 """
-__version__ = '2.0.1 2023-03-05'# convert type of the right operand to left operand for set action. Set pv.name in Device.__init__.
+__version__ = '2.0.1 2023-03-11'#
 
 #TODO: test retransmit
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
@@ -618,8 +618,9 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
         pv = dev.PV.get(parName)
         if not isinstance(pv,LDO):
             msg = f'No such name: {cnsDevName,parName}'
-            printe(msg)
-            raise NameError(msg)
+            #printe(msg)
+            #raise NameError(msg)
+            printv('WARNING '+msg)
             continue
         features = getattr(pv,'features')
 
