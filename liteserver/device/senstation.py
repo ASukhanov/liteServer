@@ -11,7 +11,7 @@ Supported:
   - I2C devices: ADS1115, MMC5983MA, HMC5883, QMC5983
   - OmegaBus serial sensors
 """
-__version__ = '2.0.2 2023-03-12'# Support of the QMC5983
+__version__ = '2.0.2 2023-03-14'# exception handling in HMC5883.read()
 
 #TODO: take care of microsecond ticks in callback
 #TODO: HMC5883 calibration
@@ -300,7 +300,11 @@ class I2C_HMC5883(I2CDev):
         # 0x3 = X MSB, 0x4 = X LSB
         # 0x5 = Y MSB, 0x6 = Y LSB
         # 0x7 = Z MSB, 0x8 = Z LSB
-        r = self.read_i2c_block_data(0x03, 6)
+        try:
+            r = self.read_i2c_block_data(0x03, 6)
+        except Exception as e:
+            printw(f'in I2C_HMC5883.read: {e}')
+            return
         x,y,z = struct.unpack('>3h', bytearray(r))
         ovf = -4096
         g = self.fsr/2048
@@ -369,51 +373,80 @@ class I2C_QMC5883(I2CDev):
 
     def read(self, timestamp):
         pv = {'X':0., 'Y':0., 'Z':0., 'M':0.,'T':0.}
-        r = self.read_i2c_block_data(0x00, 12)
-        printv(f'conf,status: {hex(r[0x9]), hex(r[0x6])}')
-        printv(f'read: {[hex(i) for i in r]}')
+        # note: reading more than 6 bytes may give wrong result when cable is long
+        try:
+            r = self.read_i2c_block_data(0x00, 6)
+        except Exception as e:
+            printw(f'in I2C_QMC5883.read: {e}')
+            return
+        #printv(f'conf,status: {hex(r[0x9]), hex(r[0x6])}')
+        #printv(f'read: {[hex(i) for i in r]}')
         g = self.fsr/32768.
         xyz = struct.unpack('<3h', bytearray(r[:6]))
         pv['X'],pv['Y'],pv['Z'] = [round(g*i,6) for i in xyz]
         pv['M'] = round(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2), 6)
-        pv['T'] = round(struct.unpack('<h', bytearray(r[7:9]))[0]/100. + 30.,2)
+        #t = self.read_word_data(0x07)
+        r = self.read_i2c_block_data(0x07, 2)
+        pv['T'] = round(struct.unpack('<h', bytearray(r))[0]/100. + 30.,2)
+        #print(f"pvT: {pv['T']}")
         for suffix,value in pv.items():
             self.pPV[self.devAddr+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
 #```````````````````MMC5983MA compass```````````````````````````````````````````
 class I2C_MMC5983MA(I2CDev):
+    cm_freq = 0x0# Continuous mode, frequency=1Hz
+    FSR = 8# Full scale range in Gauss
     def __init__(self, devAddr):
         super().__init__(devAddr)
-        devID = self.read_byte_data( 0x2f)
-        sensStatus = self.read_byte_data( 0x8)
+        devID = self.read_byte_data(0x2f)
+        sensStatus = self.read_byte_data(0x8)
         print(f'sensStatus: {sensStatus}')
         if sensStatus&0x10 == 0:
             raise RuntimeError('Chip could not read its memory')
+        if devID != 0x30:
+            raise RuntimeError(f'MMC5983 has wrong address: {devID}')
         printi(f'MMC5983MA ID: {devID}')
         print(f'Sensor detected: {self.devName,self.addr}')
+        self.write_byte_data(0x9, 0x0)
+        self.write_byte_data(0xa, 0x3)
+        self.write_byte_data(0xb, I2C_MMC5983MA.cm_freq)
+        self.write_byte_data(0xc, 0x0)
 
         self.pPV = {
-        devAddr+'_Temp': LDO('R','Sensor temperature', 0., units='C'),
         devAddr+'_X': LDO('R','X-axis field', 0., units='G'),
         devAddr+'_Y': LDO('R','Y-axis field', 0., units='G'),
         devAddr+'_Z': LDO('R','Z-axis field', 0., units='G'),
+        devAddr+'_M': LDO('R','Magnitude', 0., units='G'),
+        devAddr+'_T': LDO('R','Sensor temperature', 0., units='C'),
         }
         print(f'Created  MMC5983MA:{self.addr}')
 
     def read(self, timestamp):
+        pv = {'X':0., 'Y':0., 'Z':0., 'M':0.,'T':0.}
         da = self.devAddr
-        v = self.read_byte_data(0x8)
+        if I2C_MMC5983MA.cm_freq == 0:
+            self.write_byte_data(0x09,0x2)
+            time.sleep(0.01)
         t = self.read_byte_data(0x7)
-        xyz = 6*[0.]
-        for i in range(6):
-            xyz[i] = self.read_byte_data( i)
-        self.write_byte_data(0x09,0x3)
-        #print(f'>read {da}, CTRL0: {v}, T: {t}, xyz:{[hex(i) for i in xyz]}')
-        temp = -75. + t*0.8
-        self.pPV[da+'_Temp'].set_valueAndTimestamp([temp], timestamp)       
-        #self.pPV[da+'_X'].set_valueAndTimestamp([time.time()], timestamp)
-        #self.pPV[da+'_Y'].set_valueAndTimestamp([time.time()], timestamp)
-        #self.pPV[da+'_Z'].set_valueAndTimestamp([time.time()], timestamp)
+        #printv(f't: {hex(t)}')
+        pv['T']= round(-75. + t*0.8,2)
+        if I2C_MMC5983MA.cm_freq == 0:
+            self.write_byte_data(0x09,0x1)
+            time.sleep(0.01)
+        v = self.read_byte_data(0x8)
+        try:
+            r = self.read_i2c_block_data(0x00, 7)
+        except Exception as e:
+            printw(f'in I2C_HMC5883.read: {e}')
+            return
+        #TODO: extract 18-bit precision from r[7]
+        #printv(f'r: {[hex(i) for i in r]}')
+        pv['X'],pv['Y'],pv['Z'] = [round((i/0x8000-1.)*I2C_MMC5983MA.FSR,6)\
+            for i in struct.unpack('>3H', bytearray(r[:6]))]
+        pv['M'] = round(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2), 6)
+        #printv(f">read {da}, CTRL0: {hex(v)}, xyzmt:{pv.values()}")
+        for suffix,value in pv.items():
+            self.pPV[self.devAddr+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
 #```````````````````ADS1115, ADS1015```````````````````````````````````````````
 # 4-channel 16/12 bit ADC.
