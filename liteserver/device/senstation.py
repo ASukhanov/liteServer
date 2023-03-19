@@ -815,7 +815,6 @@ def buzzThread():
 if __name__ == "__main__":
     # parse arguments
     import argparse
-    parser = argparse.ArgumentParser(description=__doc__)
     parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'senstation: {__version__}')

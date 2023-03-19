@@ -9,11 +9,11 @@ __version__='v02 2023-03-17'# use python-based configuration
 
 import sys
 
-CNSHostPort = None#'acnlin23;9699'# host;port of the liteServer
+CNSHostPort = None#'hostName;9699'# host;port of the liteServer
 
 #`````````````````````````````````````````````````````````````````````````````
-def hostPort(cnsName):
-    if CNSHostPort is not None:
+def hostPort(cnsName='*', server=CNSHostPort):
+    if server is not None:
         # CNSHostPort is defined, use liteCNSServer
         raise NameError('ERROR:CNS, liteCNSServer is not supported yet')
 
@@ -25,5 +25,8 @@ def hostPort(cnsName):
     print(f'importing {moduleName}')
     ConfigModule = import_module(moduleName)
     print(f'Imported: {configDir}/{moduleName}')
-    r = ConfigModule.hosts['pi108']
+    if cnsName == '*':
+        r = ConfigModule.hosts
+    else:
+        r = ConfigModule.hosts[cnsName]
     return r
