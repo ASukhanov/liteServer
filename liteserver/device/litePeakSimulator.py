@@ -68,7 +68,7 @@ class Dev(Device):
           'rps':        LDO('R','Cycles per second',0.,units='Hz'),
           'cycle':      LDO('R','Cycle number',0),
         }
-        super().__init__(name, pars, no_float32=no_float32)
+        super().__init__(name, pars)
 
         self.set_peaks()
 
@@ -77,59 +77,59 @@ class Dev(Device):
         thread.start()
 
     def update_peaks(self):
-        pars = self.background.value + self.peakPars.value
-        return peaks(self.x.value, *pars, noiseLevel=self.noise.value[0])
+        pars = self.PV['background'].value + self.PV['peakPars'].value
+        return peaks(self.PV['x'].value, *pars, noiseLevel=self.PV['noise'].value[0])
 
     def set_peaks(self):
-        n = self.nPoints.value[0]
+        n = self.PV['nPoints'].value[0]
         pp = generate_pars(n)
-        self.background.value = pp[:3]
-        self.peakPars.value = pp[3:]
-        pars={i.name:(type(i.value[0]),i.value) for i in (self.nPoints
-        ,self.background, self.peakPars, self.noise)}
-        self.x.value = np.arange(n)
-        self.y.value = self.update_peaks()
-        #print(f'y:{self.y.value}')
+        self.PV['background'].value = pp[:3]
+        self.PV['peakPars'].value = pp[3:]
+        pars={i.name:(type(i.value[0]),i.value) for i in (self.PV['nPoints']
+        ,self.PV['background'], self.PV['peakPars'], self.PV['noise'])}
+        self.PV['x'].value = np.arange(n)
+        self.PV['y'].value = self.update_peaks()
+        #print(f'y:{self.PV['y'].value}')
 
     def swing_peaks(self):
-        n = self.nPoints.value[0]
-        deviation = np.sin(self.cycle.value/10*np.pi)*self.swing.value[0]/100*n
-        for i in range(0,len(self.peakPars.value),3):
-            self.peakPars.value[i] += deviation
+        n = self.PV['nPoints'].value[0]
+        deviation = np.sin(self.PV['cycle'].value/10*np.pi)*self.PV['swing'].value[0]/100*n
+        for i in range(0,len(self.PV['peakPars'].value),3):
+            self.PV['peakPars'].value[i] += deviation
 
     def _state_machine(self):
         time.sleep(.2)# give time for server to startup
 
-        self.cycle.value = 0
+        self.PV['cycle'].value = 0
         prevCycle = 0
         timestamp = time.time()
         periodic_update = timestamp
         while not self.EventExit.is_set():
-            waitTime = 1./self.frequency.value[0] - (time.time() - timestamp)
+            waitTime = 1./self.PV['frequency'].value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
             dt = timestamp - periodic_update
             if dt > 10.:
                 periodic_update = timestamp
                 if server.Dbg > 0:
-                    print(f'cycle of {self.name}:{self.cycle.value}, wt:{round(waitTime,4)}')
+                    print(f"cycle of {self.name}:{self.PV['cycle'].value}, wt:{round(waitTime,4)}")
                 #print(f'periodic update: {dt}')
                 msg = f'periodic update {self.name} @{round(timestamp,3)}'
-                self.status.value = msg
-                self.status.timestamp = timestamp
-                self.rps.value = (self.cycle.value - prevCycle)/dt
-                self.rps.timestamp = timestamp
-                prevCycle = self.cycle.value
-            self.cycle.value += 1
+                self.PV['status'].value = msg
+                self.PV['status'].timestamp = timestamp
+                self.PV['rps'].value = (self.PV['cycle'].value - prevCycle)/dt
+                self.PV['rps'].timestamp = timestamp
+                prevCycle = self.PV['cycle'].value
+            self.PV['cycle'].value += 1
 
-            if self.swing.value[0] != 0.:
+            if self.PV['swing'].value[0] != 0.:
                 self.swing_peaks()
-            self.y.value = self.update_peaks().round(3)
-            self.yMin.value = float(self.y.value.min())
-            self.yMax.value = float(self.y.value.max())
+            self.PV['y'].value = self.update_peaks().round(3)
+            self.PV['yMin'].value = float(self.PV['y'].value.min())
+            self.PV['yMax'].value = float(self.PV['y'].value.max())
             # invalidate timestamps for changing variables, otherwise the
             # publish() will ignore them
-            for i in [self.cycle, self.y, self.yMin, self.yMax]:
+            for i in [self.PV['cycle'], self.PV['y'], self.PV['yMin'], self.PV['yMax']]:
                 i.timestamp = timestamp
 
             shippedBytes = self.publish()

@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '2.0.0 2023-01-16'#
+__version__ = '2.0.0 2023-03-20'#
 
 #TODO: replace ubjson with mgspack
 
@@ -26,7 +26,7 @@ Username = getpass.getuser()
 Program = sys.argv[0]
 PID = getpid()
 def get_user():
-	print(f'liteAcces user:{Username}, PID:{PID}, program:{Program}')
+    print(f'liteAcces user:{Username}, PID:{PID}, program:{Program}')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #````````````````````````````Helper functions`````````````````````````````````
 MaxPrint = 500
@@ -57,11 +57,22 @@ def _croppedText(txt, limit=200):
         txt = txt[:limit]+'...'
     return txt
 
-def testCallback(args):
+def testCallbackPrint(args):
     _printi(_croppedText(f'>testCallback({args})'))
 
-def _printCallback(args):
-    print(f'subcribed item received:\n{args}')
+ReceiverStatistics = {'records':0, 'acks':0, 'bytes':0., 'retrans':0, 'time':0.}
+ReceiverStatisticsLast = ReceiverStatistics.copy()
+def testCallback(args):
+    global ReceiverStatisticsLast
+    dt = 10.
+    ct = time.time()
+    if ct - ReceiverStatisticsLast["time"] >= dt:
+        stat = ReceiverStatistics.copy()
+        del stat['time']
+        for i in stat:
+            stat[i] = (stat[i] - ReceiverStatisticsLast[i])
+        print(f'Received in last {dt}s: {stat}')
+        ReceiverStatisticsLast = ReceiverStatistics.copy()
 
 def ip_address():
     """Platform-independent way to get local host IP address"""
@@ -125,6 +136,7 @@ def _recvUdp(sock, socketSize):
 
     def ask_retransmit(offsetSize):
         global retransmitInProgress
+        ReceiverStatistics['retrans'] += 1
         retransmitInProgress = tuple(offsetSize)
         cmd = {'cmd':('retransmit',offsetSize)}
         _printi(f'Asking to retransmit port {port}: {cmd}')
@@ -133,6 +145,10 @@ def _recvUdp(sock, socketSize):
     while tryMore:
         try:
             buf, addr = sock.recvfrom(socketSize)
+            ReceiverStatistics["records"] += 1
+            ReceiverStatistics["bytes"] += len(buf)
+            ReceiverStatistics["time"] = time.time()
+            
         #else:#except Exception as e:
         except socket.timeout as e:
             msg = f'Timeout in recvfrom port {port}'
@@ -269,13 +285,17 @@ def _receive_dictio(sock, hostPort:tuple):
     if UDP:
         data, addr = _recvUdp(sock, socketSize)
         # acknowledge the receiving
-        try:
-        	sock.sendto(b'ACK', hostPort)
-        except OSError as e:
-        	_printw(f'OSError: {e}')
-        # _printv(f'ACK sent to {hostPort}')
-        #self.sock.sendto(b'ACK', self.hostPort)
-        #_printv('ACK2 sent to '+str(self.hostPort))
+        if Access.dbgDrop_Ack > 0:
+            Access.dbgDrop_Ack -= 1
+        else:
+            try:
+                sock.sendto(b'ACK', hostPort)
+                ReceiverStatistics['acks'] += 1
+            except OSError as e:
+                _printw(f'OSError: {e}')
+            # _printv(f'ACK sent to {hostPort}')
+            #self.sock.sendto(b'ACK', self.hostPort)
+            #_printv('ACK2 sent to '+str(self.hostPort))
     else:
         print(f'>recv timeout:{sock.gettimeout()} `{sock}`')
         if True:#try:
@@ -648,6 +668,7 @@ class Access():
     _Subscriptions = []
     __version__ = __version__
     Dbg = False
+    dbgDrop_Ack = 0# Debugging. Number of ACK to drop.
 
     def info(*devParNames):
         return PVs(*devParNames).info()
