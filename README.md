@@ -1,4 +1,4 @@
-# liteserv
+# liteserver
 Very Lightweight Data Object Server. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
@@ -7,20 +7,6 @@ which makes it very fast and efficient.
 
 ### Data logging and retrieving
 Data objects can be logged and retrieved using an **apstrim** package (https://pypi.org/project/apstrim).
-
-### Bridged usage
-To monitor and control liteserv-served devices from an existing architecture 
-one can use or build a simple bridge:
-##### A bridge for RHIC ADO Control architecture is liteServerMan.py
-    liteServerMan.py -HmyHost myADO.
-An ADO manager liteServerMan.py connects to a liteServer, running on myHost and 
-creates the myADO. 
-  - All input LDOs are translated to myADO input parameters.
-  - All output parameters of the myADO are translated to LDOs.
-
-##### For EPICS Control architecture
-The bridge liteServer-EPICS can be developed using a python-based implementation of IOC, for example:
-[caproto](https://nsls-ii.github.io/caproto/)
 
 ### Features
  - Simplicity. The network protocol is **UDP**, error correction of 
