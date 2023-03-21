@@ -1,5 +1,16 @@
 # Change Log for liteServer project.
 
+## 2.0.0 2023-03-20. Major upgrade
+
+## Changed
+liteserver
+PVs are not class memmbers but items of a self.PV dictionary.
+The UDP is much more stable.
+Object encoding changed to MessagePack instead of UBJSON.
+
+## Added
+I2C devices to senstation: ADC: ADS1115, Magnetometers: MMC5983MA, HMC5883, QMC5983.
+
 ## [Not released yet] 2021-11-23 
 
 ## Changed
