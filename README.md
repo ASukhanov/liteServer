@@ -2,7 +2,7 @@
 Very Lightweight Data Object Server. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
-UDP protocol. Data encoding is implemented using UBJSON specification, 
+UDP protocol. Data encoding is implemented using MessagePack specification, 
 which makes it very fast and efficient.
 
 ### Data logging and retrieving
@@ -24,10 +24,9 @@ The bridge liteServer-EPICS can be developed using a python-based implementation
 
 ### Features
  - Simplicity. The network protocol is **UDP**, error correction of 
-late/missing/mangled data is
-implemented. The serialization protocol is **UBJSON**: binary, easier than RPC, 
-provides all JSON features. All this makes it possible to implement liteServer 
-on a CPU-less FPGA.
+late/missing/mangled data is implemented. The serialization protocol is 
+**MessagePack**: binary, easier than RPC, provides all JSON features.
+All this makes it possible to implement liteServer on a CPU-less FPGA.
  - Low latency, connection-less.
  - Supported requests:
    - **info()**, returns dictionary with information on requested LDOs and 
@@ -53,7 +52,8 @@ objects to client and the callback function on the client will be invoked.
 ### Key Components
 - **liteServer**: Module for building liteServer applications.
 - **liteAccess**: Module for for accessing the Process Variables from a liteServer.
-- **liteCNS.py**: Name service module, it provides file-based (**liteCNS.yaml**) or network-based name service (**liteCNSserver.py**).
+- **liteCNS.py**: Name service module, it provides file-based 
+(**liteCNS_resolv.py**) or network-based name service (**liteCNSserver.py**).
 
 ### Supportted devices
 Server implementations for various devices are located in .device sub-package. 
@@ -61,21 +61,22 @@ A device server can be started using following command:
 
     python3 -m liteserv.device.<deviceName> <Arguments>
 
+- **device.litePeakSimulator**: Waveform simulator with multiple peaks and
 - **device.liteScaler**: test implementation of the liteServer
 , supporting 1000 of up/down counters as well as multi-dimensional arrays.
-- **device.litePeakSimulator**: Waveform simulator with multiple peaks and
 a background noise.
-- **device.liteVGM**: Server for multiple gaussmeters from AlphaLab Inc.
-- **device.liteUSBCam**: Server for USB cameras.
-- **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
 pan, zoom and tilt control.
-- **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
-- **device.liteLabjack**: LabJack U3 analog and digital IO module.
 - **device.senstation**: Server for various devices, connected to Raspberry Pi
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
-Buzzer, RGB LED indicator, OmegaBus serial sensors. Coming soon: NUCLEO-STM33 
-mixed signal MCU boards, connected to Raspberry Pi over USB.
+Buzzer, RGB LED indicator, OmegaBus serial sensors. 
+Various I2C devices: ADC: ADS1115, Magnetometers: MMC5983MA, HMC5883, QMC5983.
+NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteGQ**: Geiger Counter and a gyro sensor GMC-500 from GQ Electronics.
+- **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
+- **device.liteLabjack**: LabJack U3 analog and digital IO module.
+- **device.liteUSBCam**: Server for USB cameras.
+- **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
+- **device.liteVGM**: (Obsolete) Server for multiple gaussmeters from AlphaLab Inc.
 
 ### Installation
 Python3 should be 3.6 or higher.
@@ -102,7 +103,6 @@ LAdev1   = Host+':dev1'
 LAdev2   = Host+':dev2'
 
 #``````````````````Programmatic way, using Access`````````````````````````````
-# Advantage: The previuosly created PVs are reused.
 list(LA.Access.info((Host+':*','*')))# list of all devices on the Host
 LA.Access.info((LAserver,'*'))
 LA.Access.get((LAserver,'*'))
@@ -111,6 +111,7 @@ LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
 LA.Access.unsubscribe()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,	
 #``````````````````Object-oriented way````````````````````````````````````````
+# Advantage: The previuosly created PVs are reused.
 allServerParameters = LA.PVs((LAserver,'*'))
 pprint(allServerParameters.info())
 pprint(allServerParameters.get())# get all parameters from device LAserver

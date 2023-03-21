@@ -22,9 +22,9 @@ def hostPort(cnsName='*', server=CNSHostPort):
     moduleName = 'liteCNS_resolv'
     sys.path.append(configDir)
     from importlib import import_module#, reload
-    print(f'importing {moduleName}')
+    #print(f'importing {moduleName}')
     ConfigModule = import_module(moduleName)
-    print(f'Imported: {configDir}/{moduleName}')
+    #print(f'Imported: {configDir}/{moduleName}')
     if cnsName == '*':
         r = ConfigModule.hosts
     else:

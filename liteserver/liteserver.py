@@ -3,11 +3,7 @@ It hosts the Lite Data Objects and responds to get/set/monitor/info commands.
 
 Transport protocol: UDP with handshaking and re-transmission. 
 
-Encoding protocol: UBJSON. It takes care about parameter types.
-
-Dependecies: py-ubjson, very simple and efficient data serialization protocol
-
-Performance: liteServer is fastest possible python access to parameters over ethernet.
+Object bynary encoding protocol: MessagePack
 
 message format:
   {'cmd':[command,[[dev1,dev2,...],[arg1,arg2,...]]],
@@ -24,27 +20,27 @@ Supported commands:
 - unsubscribe
 
 Example usage:
-- start liteServer for 2 Scalers on a remote host:
-python3 -m liteserver.device.liteScaler -ilo
-- use ipython3 to communicate with devices:
-ipython3
-import liteAccess as LA
-Host = 'localhost'
-LAserver = Host+':server'
-LAdev1   = Host+':dev1'
-list(LA.Access.info((Host+':*','*')))# list of all devices on the Host
-LA.Access.info((LAserver,'*'))
-LA.Access.get((LAserver,'*'))
-LA.Access.set((LAdev1,'frequency',[2.0]))
-LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
+
+- start liteServer for litePeakSimulator on a remote host 192.168.1.108:
+python3 -m liteserver.device.litePeakSimulator
+
+- use python to communicate with devices:
+python3
+from liteserver import liteAccess as LA
+# view parameters, served by dev1 on host bpc
+bpc = '192.168.1.108':dev1'
+LA.Access.info((bpc,'cycle'))
+LA.Access.info((bpc,'*')).keys()
+dict_keys(['run', 'status', 'frequency', 'nPoints', 'background', 'noise', 'peakPars', 'swing', 'x', 'y', 'yMin', 'yMax', 'rps', 'cycle'])
+# get parameters yMin,yMax:
+LA.Access.get((bpc,('yMin','yMax')))
+{('192.168.1.132:dev1', 'yMin'): {'value': 101.017, 'timestamp': 1679343794.4135463}, ('192.168.1.132:dev1', 'yMax'): {'value': 219.963, 'timestamp': 1679343794.4135463}}
+# subscribe to parameter y:
+LA.Access.subscribe(LA.testCallback,(bpc,'y'))
+Received in last 10.0s: {'records': 1240, 'acks': 10, 'bytes': 80005600.0, 'retrans': 7}
 LA.Access.unsubscribe()
 """
-"""Known issues:
-  The implemented UDP-based transport protocol works reliable on 
-  point-to-point network connection but may fail on a multi-hop network. 
-"""
-__version__ = '2.0.1 2023-03-20'# works fine over WiFi for 1MB records
-
+__version__ = '2.0.0 2023-03-20'# use MessagePack as object encoder
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -55,7 +51,15 @@ send_UDP_Lock = threading.Lock()
 from timeit import default_timer as timer
 import socket
 import array
-import ubjson
+
+# object encoding, uncomment encoder of your choice: msgpack or ubjson:
+#import ubjson
+#encoderDump = ubjson.dumpb
+#encoderLoad = ubjson.loadb
+import msgpack# More popular than ubjson
+encoderDump = msgpack.dumps
+encoderLoad = msgpack.loads
+
 import selectors
 Selector = selectors.DefaultSelector()
 LastPID = '?'
@@ -70,7 +74,7 @@ if UDP:
     #SendSleep = 0.001
     MaxAckCount = 10# Number of attempts to ask for delivery acknowledge
     ItemLostLimit = 2# Number of failed deliveries before considering that the client is dead.
-    AckInterval = 10.#0.5# interval of acknowledge checking (default=0.5)
+    AckInterval = 10.# Not used. Interval of acknowledge checking
 
 defaultServerPort = 9700# Communication port number
 NSDelimiter = ':'# delimiter in the name field
@@ -305,7 +309,6 @@ class Device():
         except Exception as e:
             print(f'Exception in setServerStatusText: {e}')
     #````````````````````````Subscriptions````````````````````````````````````
-    #@staticmethod
     def register_subscriber(self, hostPort, sock, serverCmdArgs):
         printv(f'register subscriber for {serverCmdArgs}: {sock}')
         # the first dev,ldo in the list will trigger the publishing
@@ -361,7 +364,7 @@ class Device():
         """Publish fresh data to subscribers. 
         The data, which timestamp have not changed since the last update
         will not be published.
-        If data have changed several times since the last update then only 
+        If data have changed several times since the last update, then only 
         the last change will be published.
         Call this when the data are ready to be published to subscribers.
         usually at the end of the data processing.
@@ -496,8 +499,7 @@ if UDP:
             #DNPprinti(f'chunk[{iChunk}]: {offsetSize}')
             chunksInfo[(offsetSize)] = prefixed # <1 % here
             #ts[4] = timer()
-            #TODO: the sending takes no time
-            sock.sendto(prefixed, hostPort) # 90% here
+            sock.sendto(prefixed, hostPort) # 90% time spent here
             if nChunks > 1:
                 time.sleep(ChunkSleep)
 
@@ -680,10 +682,10 @@ def _reply(cmd, sock, client_address=None):
     #printv(croppedText(f'reply_object={r}',100000))
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)
     try:
-        #reply = ubjson.dumpb(r, no_float32=False)# 75% time is spent here. no_float32 results in wrong timestamp
-        reply = ubjson.dumpb(r)#
+        #reply = encoderDump(r, no_float32=False)# 75% time is spent here. no_float32 results in wrong timestamp
+        reply = encoderDump(r)#
     except Exception as e:
-        reply = ubjson.dumpb(f'ERR.LS. Exception in dumpb: {e}')
+        reply = encoderDump(f'ERR.LS. Exception in dumpb: {e}')
     #ts.append(timer()); ts[-2] = round(ts[-1] - ts[-2],4)
     #printv(f'reply {len(reply)} bytes, doubles={no_float32}')
     #printv(croppedText(f'sending back {len(reply)} bytes to {client_address}'))
@@ -716,7 +718,7 @@ def handle_socketData(data:str, sockAddr=None):
     data = data.strip()
     #printv(f'data: {data}')
     try:
-        cmd = ubjson.loadb(data)
+        cmd = encoderLoad(data)
     except:
         msg = f'ERR.LS: Wrong command format (not ubjson): {data}'
         printw(msg)
@@ -792,7 +794,6 @@ if UDP:
   class _myUDPServer():
     ackCounts = {}
     def __init__(self, hostPort):#, handler):
-        #super().__init__(hostPort, handler, False)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(1)
         # Bind the socket to the port
@@ -815,7 +816,6 @@ class LDO_clientsInfo(LDO):
             d[devName] = {}
             for hostPort,value in dev.subscribers.items():
                 sock, request, itemsLost, lastDelivered = value
-                #print(f'hps:{hostPort,sock}')
                 dt = round(currentTime - lastDelivered, 6)
                 d[devName][hostPort] = dt,request
         self.value = [pformat(d)]

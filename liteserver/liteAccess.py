@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '2.0.0 2023-03-20'#
+__version__ = '2.0.0a 2023-03-20'# MessagePack encoding
 
 #TODO: replace ubjson with mgspack
 
@@ -12,7 +12,14 @@ import threading
 recvLock = threading.Lock()
 receive_dictio_lock = threading.Lock()
 #from pprint import pformat, pprint
-import ubjson
+
+# object encoding
+#import ubjson
+#encoderDump = ubjson.dumpb
+#encoderLoad = ubjson.loadb
+import msgpack
+encoderDump = msgpack.dumps
+encoderLoad = msgpack.loads
 
 #````````````````````````````Globals``````````````````````````````````````````
 UDP = True
@@ -140,7 +147,7 @@ def _recvUdp(sock, socketSize):
         retransmitInProgress = tuple(offsetSize)
         cmd = {'cmd':('retransmit',offsetSize)}
         _printi(f'Asking to retransmit port {port}: {cmd}')
-        sock.sendto(ubjson.dumpb(cmd),addr)
+        sock.sendto(encoderDump(cmd),addr)
     
     while tryMore:
         try:
@@ -256,7 +263,7 @@ def _send_dictio(dictio, sock, hostPort:tuple):
     dictio['program'] = Program
     dictio['pid'] = PID
     # _printv(f'send_dictio to {hostPort}: {dictio}')
-    encoded = ubjson.dumpb(dictio)
+    encoded = encoderDump(dictio)
     if UDP:
         sock.sendto(encoded, hostPort)
     else:
@@ -317,7 +324,7 @@ def _receive_dictio(sock, hostPort:tuple):
         _printw(f'empty reply for: {LastDictio}')
         return {}
     try:
-        decoded = ubjson.loadb(data)
+        decoded = encoderLoad(data)
     except Exception as e:
         _printw(f'exception in ubjson.load Data[{len(data)}]: {e}')
         #print(str(data)[:150])
