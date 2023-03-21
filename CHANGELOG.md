@@ -4,6 +4,7 @@
 
 ## Changed
 liteserver
+
 PVs are not class memmbers but items of a self.PV dictionary.
 The UDP is much more stable.
 Object encoding changed to MessagePack instead of UBJSON.
