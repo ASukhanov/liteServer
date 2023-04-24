@@ -55,7 +55,8 @@ pan, zoom and tilt control.
 - **device.senstation**: Server for various devices, connected to Raspberry Pi
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
 Buzzer, RGB LED indicator, OmegaBus serial sensors. 
-Various I2C devices: ADC: ADS1115, Magnetometers: MMC5983MA, HMC5883, QMC5983.
+Various I2C devices: ADC: ADS1x15, Magnetometers: MMC5983MA, HMC5883, QMC5983.
+I2C multiplexing using TCA9548 or PCA9546.
 NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteGQ**: Geiger Counter and a gyro sensor GMC-500 from GQ Electronics.
 - **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
