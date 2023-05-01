@@ -65,7 +65,13 @@ NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
 - **device.liteVGM**: (Obsolete) Server for multiple gaussmeters from AlphaLab Inc.
 
-### Installation
+## I2C Support
+
+To detect available devices on the multiplexed I2C chain:
+
+    python -m utils.i2cmux
+
+## Installation
 Python3 should be 3.6 or higher.
 
     python3 -m pip install liteserver
@@ -79,6 +85,10 @@ Start a server liteScaler on a local host:
 
     python3 -m liteserver.device.liteScaler -ilo -s2
     ipython3
+
+Start server of all available senstation devices:
+
+    python -m liteserver.device.senstation
 
 ```python
 from liteserver import liteAccess as LA 
