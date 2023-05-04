@@ -12,10 +12,9 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '2.2.0 2023-04-30'# I2C refactored
+__version__ = '2.2.1 2023-05-03'# Added Calibration parameter
 
 #TODO: take care of microsecond ticks in callback
-#TODO: HMC5883 calibration
 
 print(f'senstation {__version__}')
 
@@ -157,7 +156,9 @@ class SensStation(Device):
             printv(f'I2C parameters added: {pars.keys()}')
 
         pars.update({
-          'boardTemp':    LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
+          'Calibration': LDO('RWE', 'Calibrate attached sensors.', ['Off'],
+            legalValues=['On','Off','Periodic','SelfTest'], setter=self.set_calib),
+          'boardTemp':  LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
           'cycle':      LDO('R', 'Cycle number', 0),
           'cyclePeriod':LDO('RWE', 'Cycle period', pargs.update, units='s'),
           'PWM0_Freq':  LDO('RWE', f'Frequency of PWM at GPIO {GPIO["PWM0"]}',
@@ -235,6 +236,15 @@ class SensStation(Device):
         printv(f'gpiov {gpio,v}')
         return gpio,v
         
+    def set_calib(self):
+        v = self.PV['Calibration'].value[0]
+        for i2cDev in self.i2cBusaddrDev.values():
+            try:
+                i2cDev.calibration(v)
+            except Exception as e:
+                printw(f'Exception in calib: {i2cDev.name}: {e}')
+                continue
+
     def set_PWM_frequency(self, pwm):
         parName = pwm + '_Freq'
         gpio, v = self.gpiov(parName)
