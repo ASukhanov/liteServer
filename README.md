@@ -1,4 +1,4 @@
-# liteserver
+# liteserver 3.0.0
 Very Lightweight Data Object Server. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
