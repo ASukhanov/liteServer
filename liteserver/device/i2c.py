@@ -2,7 +2,7 @@
 For installation: Installationhttps://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v0.2.1 2023-05-03'#
+__version__ = 'v3.0.0 2023-05-03'#
 
 import struct
 import numpy as np

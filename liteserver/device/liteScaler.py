@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '2.0.0 2023-02-27'#
+__version__ = '3.0.0 2023-02-27'#
 
 import sys, time, threading
 from timeit import default_timer as timer
