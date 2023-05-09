@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.0.0 2023-05-03'# Added Calibration parameter
+__version__ = '3.0.1 2023-05-09'# i2c: magnitude is float, not numpy.
 
 #TODO: take care of microsecond ticks in callback
 

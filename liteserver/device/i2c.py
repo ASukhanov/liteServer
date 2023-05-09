@@ -2,7 +2,7 @@
 For installation: Installationhttps://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.0.0 2023-05-03'#
+__version__ = 'v3.0.1 2023-05-09'#
 
 import struct
 import numpy as np
@@ -280,7 +280,7 @@ class I2C_HMC5883(I2CDev):
             v = xyz[i]
             xyz[i] = 10. if v == ovf else round(v*g*gc[i],6)
         x,y,z = xyz
-        m = 10. if max(x,y,z) == 10. else round(np.sqrt(x**2 + y**2 + z**2),6)
+        m = 10. if max(x,y,z) == 10. else round(float(np.sqrt(x**2 + y**2 + z**2)),6)
         printv(f'xyzm {self.name}: {[round(i,3) for i in (x,y,z,m)]}')
         da = self.name
         self.pPV[da+'_X'].set_valueAndTimestamp(x, timestamp)
@@ -388,7 +388,7 @@ class I2C_QMC5883(I2CDev):
         g = self.fsr/32768.
         xyz = struct.unpack('<3h', bytearray(r[:6]))
         pv['X'],pv['Y'],pv['Z'] = [round(g*i,6) for i in xyz]
-        pv['M'] = round(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2), 6)
+        pv['M'] = round(float(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2)), 6)
         #t = I2C.read_i2c_word(0x07)
         r = I2C.read_i2c_data(self.addr, 0x07, 2)
         printv(f'temp: {r}')
@@ -448,7 +448,7 @@ class I2C_MMC5983MA(I2CDev):
         #printv(f'r: {[hex(i) for i in r]}')
         pv['X'],pv['Y'],pv['Z'] = [round((i/0x8000-1.)*I2C_MMC5983MA.FSR,6)\
             for i in struct.unpack('>3H', bytearray(r[:6]))]
-        pv['M'] = round(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2), 6)
+        pv['M'] = round(float(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2)), 6)
         #printv(f">read {da}, CTRL0: {hex(v)}, xyzmt:{pv.values()}")
         for suffix,value in pv.items():
             self.pPV[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
