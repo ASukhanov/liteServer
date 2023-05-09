@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '3.0.0 2023-03-20'# MessagePack encoding
+__version__ = '3.0.5 2023-05-09'#
 
 #TODO: replace ubjson with mgspack
 

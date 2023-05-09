@@ -40,7 +40,7 @@ LA.Access.subscribe(LA.testCallback,(bpc,'y'))
 Received in last 10.0s: {'records': 1240, 'acks': 10, 'bytes': 80005600.0, 'retrans': 7}
 LA.Access.unsubscribe()
 """
-__version__ = '3.0.0 2023-03-20'# use MessagePack as object encoder
+__version__ = '3.0.5 2023-05-09'# Non-string ligal values are not allowed, it would be too mach discrepancies with pypeto
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -184,6 +184,10 @@ class LDO():
  
         # absorb optional properties
         self.opLimits = opLimits
+        if legalValues:
+            if not isinstance(legalValues[0], str):
+                printe(f'Legal values {legalValues} are not strings')
+                sys.exit(1)
         self.legalValues = legalValues
         self._setter = setter
         self._getter = getter

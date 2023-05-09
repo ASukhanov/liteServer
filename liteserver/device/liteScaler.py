@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '3.0.0 2023-02-27'#
+__version__ = '3.0.5 2023-05-09'#
 
 import sys, time, threading
 from timeit import default_timer as timer
@@ -40,17 +40,20 @@ class Scaler(Device):
         pars = {
           'counters':   LDO('R','%i of counters'%len(initials),initials),
           'increments': LDO('WE','Increments of the individual counters',incs),
-          'frequency':  LDO('RWE','Update frequency of all counters',1.3\
-                        ,units='Hz', opLimits=(0.001,1001.)),
-          'reset':      LDO('WE','Reset all counters',[None]\
-                        ,setter=self.reset),
+          'frequency':  LDO('RWE','Update frequency of all counters',1.3,
+                            units='Hz', opLimits=(0.001,1001.)),
+          'reset':      LDO('WE','Reset all counters',[None],
+                            setter=self.reset),
           'image':      LDO('R','Image',img),
           'shape':      LDO('','Image shape',(h,w,p)),
-          'coordinate': LDO('RW','Just 2-component numpy vector for testing'\
-                        ,np.array([0.,1.]).astype('float32')),#
+          'coordinate': LDO('RW','Just 2-component numpy vector for testing',
+                            np.array([0.,1.]).astype('float32')),#
           'time':       LDO('R','Current time',0., getter=self.get_time),
-          'number':     LDO('RWE','Test number',0., opLimits=(-1000000,1000000)\
-          ,setter=self.set_number),
+          'number':     LDO('RWE','Test number',0., opLimits=(-1000000,1000000),
+                            setter=self.set_number),
+          'discrete_text': LDO('RWE','Discrete text values', 'One',
+                            legalValues=['One', 'Two', 'Three']),
+          #not supported#'discrete_number': LDO('RWE','Discrete float numbers', 1.,legalValues=[1., 2., 3.]),
           'multicurve': LDO('R','Array of 8 of noise curves',
                         np.zeros(8*100).reshape(8,100).astype('uint16')),
           'text':       LDO('RWE','Test text', ['Test'], setter=self.set_text),
