@@ -2,8 +2,10 @@
 For installation: Installationhttps://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.0.1 2023-05-09'#
+__version__ = 'v3.1.0 2023-05-09'#
+#TODO: display errors and warnings in device status
 
+import time
 import struct
 import numpy as np
 import ctypes
@@ -15,9 +17,16 @@ from smbus2 import SMBus as I2CSMBus
 
 from liteserver.liteserver import LDO
 
-def printi(msg):    print(f'inf_i2c: {msg}')
-def printw(msg):    print(f'WARNING_i2c: {msg}')
-def printe(msg):    print(f'ERROR_i2c: {msg}')
+"""def _print(msg, mgr=None):
+    print(msg)
+    if mgr: mgr.set_status(msg)
+def printi(msg, mgr=None):    _print(f'inf_i2c: {msg}', mgr)
+def printw(msg, mgr=None):    _print(f'WARNING_i2c: {msg}', mgr)
+def printe(msg, mgr=None):    _print(f'ERROR_i2c: {msg}', mgr)
+"""
+def printi(msg): print(f'inf_i2c: {msg}')
+def printw(msg): print(f'WARNING_i2c: {msg}')
+def printe(msg): print(f'ERROR_i2c: {msg}')
 def printv(msg):
     if I2C.verbosity>0: print(f'i2cDbg{I2C.verbosity}: {msg}')
 def printvv(msg):
@@ -48,7 +57,7 @@ class I2C():
         if I2C.muxAddr is None:
             return
         try:
-            #printvv(f'write_i2cMux: {value}')
+            printvv(f'write_i2cMux: {value}')
             I2C.SMBus.write_byte_data(I2C.muxAddr, 0, value)
             if value == 0:
                 printi('Mux is Reset (set to 0).')
@@ -125,7 +134,7 @@ class I2C():
         I2C.busMask = mask
         I2C.muxAddr = muxAddr
         printi(f'i2c.version: {__version__}, verbosity: {I2C.verbosity}')
-        printi(f'I2CSMBus opened: using smbus package')
+        printi(f'I2CSMBus opened: using smbus package, busMask={I2C.busMask}')
         """Scan multiplexed I2C sub-busses"""
         if I2C.busMask:
             printi(f'muxAddr: {type(I2C.muxAddr), I2C.muxAddr}')
@@ -134,7 +143,8 @@ class I2C():
             I2C.DeviceMap = {}
             try:    I2C.write_i2cMux(0)# reset the mux
             except: pass
-        printi(f'I2C devices detected: {I2C.DeviceMap}')    
+        I2C.CurrentMuxCh = 0
+        printi(f'I2C devices detected: {I2C.DeviceMap}')
 
 class I2CDev():
     """Base class for I2C devices"""
@@ -143,11 +153,11 @@ class I2CDev():
         self.addr = addr
 
     def read(self, timestamp):
-        printi(f'I2CDev.read() not implemented for {self.name}')
+        print(f'I2CDev.read() not implemented for {self.name}')
         return
 
     def calibration(self, option:str):
-        printi(f'I2CDev.calibrate() is not implemented for {self.name}')
+        print(f'I2CDev.calibrate() is not implemented for {self.name}')
 
 #```````````````````HMC5883 compass````````````````````````````````````````````
 class HMC5883_bits_ConfigRegA(ctypes.LittleEndianStructure):
@@ -181,9 +191,9 @@ class I2C_HMC5883(I2CDev):
     def __init__(self, devAddr):
         super().__init__(devAddr)
         self.dataRange = (-2048,2047)#
-        if True:#try:
+        try:
             devId = I2C.read_i2c_data(self.addr, 0x0a, 3)
-        else:#except:
+        except:
             printe(f'There is no device with address {self.addr}')
             sys.exit()
         if devId != [0x48, 0x34, 0x33]:
@@ -208,7 +218,7 @@ class I2C_HMC5883(I2CDev):
         I2C.write_i2c_byte(self.addr, self.modeReg.addr, I2C_HMC5883.mode)
 
         gain = (1370, 1090, 820, 660, 440, 390, 330, 230) #Lsb/Gauss
-        lvFSR = [round(self.dataRange[1]/g,3) for g in gain]
+        lvFSR = [str(round(self.dataRange[1]/g,3)) for g in gain]
         # field strength of the excitation strap on X,Y,Z axes
         self.testField = (1.16, 1.16, 1.08)
         self.gainCorrection = [1., 1., 1.]
@@ -218,7 +228,7 @@ class I2C_HMC5883(I2CDev):
 
         self.pPV = {
             self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
-                lvFSR[self.configRegB.b.FSR], legalValues=lvFSR, units='G',
+                [lvFSR[self.configRegB.b.FSR]], legalValues=lvFSR, units='G',
                 setter=self.set_FSR),
             self.name+'_X': LDO('R','X-axis field', 0., units='G'),
             self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
@@ -238,8 +248,10 @@ class I2C_HMC5883(I2CDev):
     def set_FSR(self):
         #print(f'>set_FSR')
         pv = self.pPV[self.name+'_FSR']
-        self.fsr = pv.value[0]
-        idx = pv.legalValues.index(self.fsr)
+        fsrTxt = pv.value[0]
+        print(f'fsr: {fsrTxt, type(fsrTxt)}, lv: {pv.legalValues}')
+        self.fsr = float(fsrTxt)
+        idx = pv.legalValues.index(fsrTxt)
         self._set_FSR(idx)
 
     def read_xyz(self):
@@ -255,19 +267,18 @@ class I2C_HMC5883(I2CDev):
         except Exception as e:
             printw(f'reading {self.name}: {e}')
             return
-        printv(f'read {self.name}: {[hex(i) for i in r]}')
+        printvv(f'read {self.name}: {[hex(i) for i in r]}')
         xyz = struct.unpack('>3h', bytearray(r[3:9]))
         if r[0] & 1:# Internal field is excited, collect statistics
-            print(f'xyz.max: {max(xyz)}, {self.xyzSumCount}')
+            printv(f'xyz.max: {max(xyz)}, {self.xyzSumCount}')
             if max(xyz) < self.dataRange[1]*0.8 and self.xyzSumCount != None:
-                print(f'self.xyzSumCount {self.xyzSumCount}, {self.xyzSum}')
+                printv(f'self.xyzSumCount {self.xyzSumCount}, {self.xyzSum}')
                 self.xyzSumCount += 1
                 self.xyzSum += xyz
             else:
                 self.xyzSumCount = None
                 self.xyzSum = np.zeros(3)
                 printe(f'Correction processing failed for {self.name}')
-        printv(f'xyz: {xyz}')
         return xyz
         
     def read(self, timestamp):
@@ -281,7 +292,7 @@ class I2C_HMC5883(I2CDev):
             xyz[i] = 10. if v == ovf else round(v*g*gc[i],6)
         x,y,z = xyz
         m = 10. if max(x,y,z) == 10. else round(float(np.sqrt(x**2 + y**2 + z**2)),6)
-        printv(f'xyzm {self.name}: {[round(i,3) for i in (x,y,z,m)]}')
+        printv(f'xyzm {self.name}: {x,y,z,m}')
         da = self.name
         self.pPV[da+'_X'].set_valueAndTimestamp(x, timestamp)
         self.pPV[da+'_Y'].set_valueAndTimestamp(y, timestamp)
@@ -353,7 +364,7 @@ class I2C_QMC5883(I2CDev):
         self.configRegA.b.OSR = 0# OverSampling = 256. Less noise
         I2C.write_i2c_byte(self.addr, self.configRegA.addr, self.configRegA.B)
 
-        lvFSR = (2., 8.)
+        lvFSR = ('2.', '8.')
         self.pPV = {
         self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
             lvFSR[self.configRegA.b.FSR], legalValues=lvFSR, units='G',
@@ -369,7 +380,7 @@ class I2C_QMC5883(I2CDev):
     def set_FSR(self):
         pv = self.pPV[self.name+'_FSR']
         self.fsr = pv.value[0]
-        idx = pv.legalValues.index(self.fsr)
+        idx = pv.legalValues.index(str(self.fsr))
         self.configRegA.b.FSR = idx
         #print(f'fsr: {self.fsr,idx}')
         #print(f'configRegA: {self.configRegA.addr, self.configRegA.B}')
@@ -384,16 +395,14 @@ class I2C_QMC5883(I2CDev):
             printw(f'reading {self.name}: {e}')
             return
         #printv(f'conf,status: {hex(r[0x9]), hex(r[0x6])}')
-        printv(f'read {self.name}: {[hex(i) for i in r]}')
+        printvv(f'read {self.name}: {[hex(i) for i in r]}')
         g = self.fsr/32768.
         xyz = struct.unpack('<3h', bytearray(r[:6]))
         pv['X'],pv['Y'],pv['Z'] = [round(g*i,6) for i in xyz]
         pv['M'] = round(float(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2)), 6)
-        #t = I2C.read_i2c_word(0x07)
         r = I2C.read_i2c_data(self.addr, 0x07, 2)
-        printv(f'temp: {r}')
         pv['T'] = round(struct.unpack('<h', bytearray(r))[0]/100. + 30.,2)
-        #print(f"pvT: {pv['T']}")
+        printv(f"xyzm {self.name}: {pv['X'],pv['Y'],pv['Z'],pv['M'],pv['T']}")
         for suffix,value in pv.items():
             self.pPV[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
@@ -449,7 +458,7 @@ class I2C_MMC5983MA(I2CDev):
         pv['X'],pv['Y'],pv['Z'] = [round((i/0x8000-1.)*I2C_MMC5983MA.FSR,6)\
             for i in struct.unpack('>3H', bytearray(r[:6]))]
         pv['M'] = round(float(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2)), 6)
-        #printv(f">read {da}, CTRL0: {hex(v)}, xyzmt:{pv.values()}")
+        printv(f"xyzmt {self.name}: {pv['X'],pv['Y'],pv['Z'],pv['M'],pv['T']}")
         for suffix,value in pv.items():
             self.pPV[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
@@ -478,14 +487,14 @@ class I2C_ADS1115(I2CDev):
         self.config.W = I2C.read_i2c_word(self.addr, 1)
         self.config.b.MODE = ADS1115_SingleShot
         I2C.write_i2c_word(self.addr, 1, self.config.W )
-        lvFSR = (6.144,4.096,2.048,1.024,0.512,0.256)
-        lvDR = {'ADS1115': (8,     16,   32,   64,  128,  250,  475,  860),
-                'ADS1015': (128,  250,  490,  920, 1600, 2400, 3300, 3300)}
+        lvFSR = ('6.144', '4.096', '2.048', '1.024', '0.512' , '0.256')
+        lvDR = {'ADS1115': ('8',     '16',   '32',   '64',  '128',  '250',  '475',  '860'),
+                'ADS1015': ('128',  '250',  '490',  '920', '1600', '2400', '3300', '300')}
         self.pPV = {
         self.name+'_rlength': LDO('RWE', 'Record length, ', 1),
         self.name+'_tAxis': LDO('R', 'Time axis for samples', [0.], units='s'),
         self.name+'_nCh': LDO('RWE', 'Number of active ADC channels. Select 1 for faster performance.',
-            4, legalValues=[4,1]),
+            '4', legalValues=['4','1']),
         self.name+'_diff': LDO('RWE', 'Differential mode, Ch0=AIN0-AIN1, Ch1=AIN2-AIN3', 'Single-ended', legalValues=['Single-ended','Diff']),
         self.name+'_Ch0': LDO('R', 'ADC channel 0', [0.], units='V'),
         self.name+'_Ch1': LDO('R', 'ADC channel 1', [0.], units='V'),
