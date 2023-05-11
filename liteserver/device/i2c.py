@@ -2,7 +2,7 @@
 For installation: Installationhttps://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.1.0 2023-05-09'#
+__version__ = 'v3.1.0 2023-05-10'# PV naming changed, ADC not tested
 #TODO: display errors and warnings in device status
 
 import time
@@ -148,9 +148,15 @@ class I2C():
 
 class I2CDev():
     """Base class for I2C devices"""
-    def __init__(self, addr:tuple):
-        self.name = self.__class__.__name__+'_'+'.'.join([str(i) for i in addr])
+    def __init__(self, addr:tuple, sensorType:str, model):
+        # addr is (mux channel, address on mux channel) 
+        #self.name = self.__class__.__name__+'_'+'.'.join([str(i) for i in addr])
+        self.name = f'I2C{addr[0]}'       
         self.addr = addr
+        self.pPV = {
+            self.name+'_sensor': LDO('R','Sensor_type model',
+              f'{sensorType},{model}')
+        }
 
     def read(self, timestamp):
         print(f'I2CDev.read() not implemented for {self.name}')
@@ -189,7 +195,7 @@ class HMC5883_ModeReg(ctypes.Union):
 class I2C_HMC5883(I2CDev):
     mode = 0# Measurement mode 0:continuous, 1:Single.
     def __init__(self, devAddr):
-        super().__init__(devAddr)
+        super().__init__(devAddr, 'Magnetometer', 'HMC5883L')
         self.dataRange = (-2048,2047)#
         try:
             devId = I2C.read_i2c_data(self.addr, 0x0a, 3)
@@ -226,7 +232,7 @@ class I2C_HMC5883(I2CDev):
         self.xyzSumCount = 0
         self.xyzSum = np.zeros(3)
 
-        self.pPV = {
+        self.pPV.update({
             self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
                 [lvFSR[self.configRegB.b.FSR]], legalValues=lvFSR, units='G',
                 setter=self.set_FSR),
@@ -234,7 +240,7 @@ class I2C_HMC5883(I2CDev):
             self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
             self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
             self.name+'_M': LDO('R','Magnitude', 0., units='G'),
-        }
+        })
         printv(f'CRA: {hex(I2C.read_i2c_byte(self.addr, self.configRegA.addr))}')
         printi(f'Created {self.name}')
 
@@ -347,7 +353,7 @@ class QMC5883_ConfigRegA(ctypes.Union):
 class I2C_QMC5883(I2CDev):
     mode = 1# Measurement mode 1:continuous
     def __init__(self, devAddr):
-        super().__init__(devAddr)
+        super().__init__(devAddr, 'Magnetometer', 'QMC5883L')
         try:    devId = I2C.read_i2c_byte(self.addr, 0x0d)
         except:
             printe(f'There is no device with address {self.addr}')
@@ -365,7 +371,7 @@ class I2C_QMC5883(I2CDev):
         I2C.write_i2c_byte(self.addr, self.configRegA.addr, self.configRegA.B)
 
         lvFSR = ('2.', '8.')
-        self.pPV = {
+        self.pPV.update({
         self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
             lvFSR[self.configRegA.b.FSR], legalValues=lvFSR, units='G',
             setter=self.set_FSR),
@@ -374,7 +380,7 @@ class I2C_QMC5883(I2CDev):
         self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
         self.name+'_M': LDO('R','Magnitude', 0., units='G'),
         self.name+'_T': LDO('R','Relative temperature', 0., units='C'),
-        }
+        })
         printi(f'Created {self.name}')
 
     def set_FSR(self):
@@ -411,7 +417,7 @@ class I2C_MMC5983MA(I2CDev):
     cm_freq = 0x0# Continuous mode, frequency=1Hz
     FSR = 8# Full scale range in Gauss
     def __init__(self, devAddr):
-        super().__init__(devAddr)
+        super().__init__(devAddr, 'Magnetometer', 'MMC5983MA')
         devID = I2C.read_i2c_byte(self.addr, 0x2f)
         sensStatus = I2C.read_i2c_byte(self.addr, 0x8)
         printv(f'sensStatus: {sensStatus}')
@@ -426,13 +432,13 @@ class I2C_MMC5983MA(I2CDev):
         I2C.write_i2c_byte(self.addr, 0xb, I2C_MMC5983MA.cm_freq)
         I2C.write_i2c_byte(self.addr, 0xc, 0x0)
 
-        self.pPV = {
+        self.pPV.update({
         self.name+'_X': LDO('R','X-axis field', 0., units='G'),
         self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
         self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
         self.name+'_M': LDO('R','Magnitude', 0., units='G'),
         self.name+'_T': LDO('R','Sensor temperature', 0., units='C'),
-        }
+        })
         printi(f'Created {self.name}')
 
     def read(self, timestamp):
@@ -482,7 +488,7 @@ class ADS1115_ConfigReg(ctypes.Union):
 ADS1115_SingleShot = 1# 1: Single-shot, 0: Continuous conversion
 class I2C_ADS1115(I2CDev):
     def __init__(self, devAddr, model='ADS1115'):
-        super().__init__(devAddr)
+        super().__init__(devAddr, 'ADC', model)
         self.config = ADS1115_ConfigReg()
         self.config.W = I2C.read_i2c_word(self.addr, 1)
         self.config.b.MODE = ADS1115_SingleShot
@@ -490,7 +496,7 @@ class I2C_ADS1115(I2CDev):
         lvFSR = ('6.144', '4.096', '2.048', '1.024', '0.512' , '0.256')
         lvDR = {'ADS1115': ('8',     '16',   '32',   '64',  '128',  '250',  '475',  '860'),
                 'ADS1015': ('128',  '250',  '490',  '920', '1600', '2400', '3300', '300')}
-        self.pPV = {
+        self.pPV.update({
         self.name+'_rlength': LDO('RWE', 'Record length, ', 1),
         self.name+'_tAxis': LDO('R', 'Time axis for samples', [0.], units='s'),
         self.name+'_nCh': LDO('RWE', 'Number of active ADC channels. Select 1 for faster performance.',
@@ -506,7 +512,7 @@ class I2C_ADS1115(I2CDev):
         self.name+'_DR': LDO('RWE', 'Data rate',
             lvDR[model][self.config.b.DR], units='SPS',
             legalValues=lvDR[model], setter=partial(self.set_pv, 'DR')),
-        }
+        })
         '''The following parts are handled internally
         self.name+'_MODE': LDO('RWE', 'Device operating mode', self.config.b.MODE,
             opLimits=(0,1), setter=partial(self.set_pv, 'MODE')),
