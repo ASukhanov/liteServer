@@ -29,7 +29,7 @@ objects to client and the callback function on the client will be invoked.
  - Name service
    - file-based
    - network-based using a dedicated liteServer  (not commissioned yet)
- - Basic spreadsheet-based GUI: **pypet**
+ - Basic spreadsheet-based GUI: **pypeto**
  - Architectures. All programs are 100% python. Tested on Linux and Windows.
  - Supported applications:
    - [Image analysis](https://github.com/ASukhanov/Imagin)
