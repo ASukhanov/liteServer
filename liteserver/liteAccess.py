@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '3.0.5 2023-05-09'#
+__version__ = '3.1.0 2023-07-26'# encoder=CBOR2
 
 #TODO: replace ubjson with mgspack
 
@@ -17,9 +17,10 @@ receive_dictio_lock = threading.Lock()
 #import ubjson
 #encoderDump = ubjson.dumpb
 #encoderLoad = ubjson.loadb
-import msgpack
-encoderDump = msgpack.dumps
-encoderLoad = msgpack.loads
+#import msgpack as encoder
+import cbor2 as encoder
+encoderDump = encoder.dumps
+encoderLoad = encoder.loads
 
 #````````````````````````````Globals``````````````````````````````````````````
 UDP = True

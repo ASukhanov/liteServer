@@ -40,7 +40,7 @@ LA.Access.subscribe(LA.testCallback,(bpc,'y'))
 Received in last 10.0s: {'records': 1240, 'acks': 10, 'bytes': 80005600.0, 'retrans': 7}
 LA.Access.unsubscribe()
 """
-__version__ = '3.0.5 2023-05-09'# Non-string ligal values are not allowed, it would be too mach discrepancies with pypeto
+__version__ = '3.1.0 2023-07-26'# use CBOR encoder
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -53,12 +53,11 @@ import socket
 import array
 
 # object encoding, uncomment encoder of your choice: msgpack or ubjson:
-#import ubjson
-#encoderDump = ubjson.dumpb
-#encoderLoad = ubjson.loadb
-import msgpack# More popular than ubjson
-encoderDump = msgpack.dumps
-encoderLoad = msgpack.loads
+#import ubjson as encoder
+#import msgpack as encoder # More popular than ubjson
+import cbor2 as encoder # More standard than MsgPack
+encoderDump = encoder.dumps
+encoderLoad = encoder.loads
 
 import selectors
 Selector = selectors.DefaultSelector()
@@ -724,7 +723,7 @@ def handle_socketData(data:str, sockAddr=None):
     try:
         cmd = encoderLoad(data)
     except:
-        msg = f'ERR.LS: Wrong command format (not ubjson): {data}'
+        msg = f'ERR.LS: Wrong command format (not {encoder.__name__}): {data}'
         printw(msg)
         return
     #printi((f'Client {client_address} wrote:\n{cmd}'))
