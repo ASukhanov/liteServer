@@ -1,6 +1,6 @@
 """Module for accessing multiple Process Variables, served by a liteServer.
 """
-__version__ = '3.1.0 2023-07-26'# encoder=CBOR2
+__version__ = '3.1.0 2023-07-30'# encoder=CBOR2
 
 #TODO: replace ubjson with mgspack
 
@@ -327,7 +327,7 @@ def _receive_dictio(sock, hostPort:tuple):
     try:
         decoded = encoderLoad(data)
     except Exception as e:
-        _printw(f'exception in ubjson.load Data[{len(data)}]: {e}')
+        _printw(f'exception in encoder.load Data[{len(data)}]: {e}')
         #print(str(data)[:150])
         #raise ValueError('in _receive_dictio: '+msg)
         return {}

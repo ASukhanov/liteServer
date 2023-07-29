@@ -100,10 +100,10 @@ LAdev1   = Host+':dev1'
 LAdev2   = Host+':dev2'
 
 #``````````````````Programmatic way, using Access`````````````````````````````
-list(LA.Access.info((Host+':*','*')))# list of all devices on the Host
+LA.Access.info((Host+':*','*')))# map of all devices and parameters the Host
 LA.Access.info((LAserver,'*'))
 LA.Access.get((LAserver,'*'))
-LA.Access.set((LAdev1,'frequency',[2.0]))
+LA.Access.set((LAdev1,'frequency',2.0))
 LA.Access.subscribe(LA.testCallback,(LAdev1,'cycle'))
 LA.Access.unsubscribe()
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,	
@@ -117,7 +117,7 @@ pprint(allServerParameters.get())# get all parameters from device LAserver
 pprint(allServerParameters.read())
 
 allDev1Parameters = LA.PVs((LAdev1,'*'))
-print(allDev1Parameter.info())
+print(allDev1Parameters.info())
 
 server_performance = LA.PVs((LAserver,'perf'))
 pprint(server_performance.info())

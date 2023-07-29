@@ -3,7 +3,7 @@ It hosts the Lite Data Objects and responds to get/set/monitor/info commands.
 
 Transport protocol: UDP with handshaking and re-transmission. 
 
-Object bynary encoding protocol: MessagePack
+Object bynary encoding protocol: CBOR
 
 message format:
   {'cmd':[command,[[dev1,dev2,...],[arg1,arg2,...]]],
@@ -40,7 +40,7 @@ LA.Access.subscribe(LA.testCallback,(bpc,'y'))
 Received in last 10.0s: {'records': 1240, 'acks': 10, 'bytes': 80005600.0, 'retrans': 7}
 LA.Access.unsubscribe()
 """
-__version__ = '3.1.0 2023-07-26'# use CBOR encoder
+__version__ = '3.1.0 2023-07-30'# use CBOR encoder
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -162,13 +162,12 @@ class LDO():
         # name is not really needed, as it is keyed in the dictionary
         self.timestamp = time.time()# None
         import copy
-        #print(f'v:{value}, {desc}')
         try:
-            self.count = [len(value)]
             if isinstance(value,str):
                 self.count = [1]
                 self.value = value
             else:
+                self.count = [len(value)]
                 self.value = copy.copy(value)
         except: 
             self.count = [1]
@@ -555,13 +554,16 @@ def _replyData(cmdArgs):
         else:   
             propNames = '*' if cmd == 'info' else 'value'
             vals = None
+        printvv(f'cnsHost,devName,vals: {cnsHost,devName,vals}')
         if devName == '*':
+            returnedDict = {cnsHost:{}}
             for devName in Server.DevDict:
-                #cdn = NSDelimiter.join((cnsHost,devName))
-                devDict = _process_parameters(cmd, parNames, cnsDevName\
-                , propNames, vals)
-                #returnedDict[cdn] = devDict
-                returnedDict = devDict
+                printvv(f'devName: {devName}')
+                cdn = NSDelimiter.join((cnsHost,devName))
+                devDict = _process_parameters(cmd, parNames, cdn,
+                  propNames, vals)
+                returnedDict[cnsHost][devName] = list(devDict.keys())
+            printvv(f'host devices: {returnedDict}')
         else:
             additionalDevDict = _process_parameters(cmd, parNames,
               cnsDevName, propNames, vals)
@@ -603,7 +605,7 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
                 dtype = str(value.dtype)
                 shape, dtype = value.shape, dtype
                 return {'value':value.tobytes(), 'numpy':(shape,dtype)}
-            except Exception:
+            except:
                 #printv(f'not numpy {pv.name}')
                 return {'value':value}
 
@@ -652,13 +654,16 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
             devDict[parName] = {'value':pv.value}
 
         elif cmd == 'info':
-            #printv('info (%s.%s)'%(parName,str(propNames)))
+            printv(f'info {parName,propNames}')
             devDict[parName] = parDict
             #if len(propNames[0]) == 0:
             if propNames[0] == '*':
-                propNames = pv.info()
-            #printv('propNames of %s: %s'%(pv.name,str(propNames)))
-            for propName in propNames:
+                props = set(pv.info())
+                props.discard('value')
+            else:
+                props = set(propNames)
+            printvv(f'properties of {pv.name}: {props}')
+            for propName in props:
                 pv = dev.PV[parName]
                 propVal = getattr(pv,propName)
                 if propName == 'value':
