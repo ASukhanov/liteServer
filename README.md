@@ -1,8 +1,8 @@
 # liteserver 3.1.0
 Very Lightweight Data Object Server. 
-It hosts Lite Data Objects (**LDO**, analog of process variables in 
+It hosts Lite Data Objects (**LDO**, analog of Process Variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
-UDP protocol. Data encoding is implemented using MessagePack specification, 
+UDP protocol. Data encoding is implemented using **CBOR** specification, 
 which makes it very fast and efficient.
 
 ### Data logging and retrieving
@@ -10,9 +10,8 @@ Data objects can be logged and retrieved using an **apstrim** package (https://p
 
 ### Features
  - Simplicity. The network protocol is **UDP**, error correction of 
-late/missing/mangled data is implemented. The serialization protocol is 
-**MessagePack**: binary, easier than RPC, provides all JSON features.
-All this makes it possible to implement liteServer on a CPU-less FPGA.
+late/missing/mangled data is implemented. Binary serialization protocol **CBOR**. 
+Programming interface is very similar to JSON.
  - Low latency, connection-less.
  - Supported requests:
    - **info()**, returns dictionary with information on requested LDOs and 
@@ -30,7 +29,7 @@ objects to client and the callback function on the client will be invoked.
    - file-based
    - network-based using a dedicated liteServer  (not commissioned yet)
  - Basic spreadsheet-based GUI: **pypeto**
- - Architectures. All programs are 100% python. Tested on Linux and Windows.
+ - Architectures. All programs are 100% python. Tested on Linux and partially on Windows.
  - Supported applications:
    - [Image analysis](https://github.com/ASukhanov/Imagin)
    - [Data Logger](https://github.com/ASukhanov/apstrim)
@@ -62,11 +61,16 @@ NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
 - **device.liteLabjack**: LabJack U3 analog and digital IO module.
 - **device.liteUSBCam**: Server for USB cameras.
-- **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
+- **device.liteUvcCam**: Server for USB cameras using UVC library.
 - **device.liteVGM**: (Obsolete) Server for multiple gaussmeters from AlphaLab Inc.
 
 ## Installation
-Python3 should be 3.6 or higher.
+
+Dependencies:
+- Python3 3.6 or higher.
+- [CBOR2](https://pypi.org/project/cbor2/)
+
+Installation:
 
     python3 -m pip install liteserver
 
