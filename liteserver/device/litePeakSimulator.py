@@ -183,6 +183,6 @@ if __name__ == "__main__":
         port=pargs.port)
 
     print('`'*79)
-    print(f"To monitor, use: pvplot -a'L:{server.host};{pargs.port}:dev1' 'x,y'")
+    print(f"To monitor, use: pvplot -s.01 -a'L:{server.host};{pargs.port}:dev1' 'x,y'")
     print(','*79)
     server.loop()
