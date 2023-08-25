@@ -3,7 +3,7 @@
 The Device Communication Protocol is described in 
 https://www.alphalabinc.com/wp-content/uploads/2018/02/alphaapp_comm_protocol.pdf
 """
-__version__ = 'v1.0.5 2021-10-05'#
+__version__ = 'v3.1.0 2023-03-23'# from .. import liteserver
 #TODO, issue: the vgm_command lasts timeout time, it should finish after transfer
 
 import sys, time, threading
@@ -11,10 +11,7 @@ import sys, time, threading
 from serial import Serial
 from serial.tools.list_ports import comports
 
-try: # to import development version of the liteserver
-    from liteserv import liteserver
-except:
-    from liteserver import liteserver
+from .. import liteserver
 
 LDO = liteserver.LDO
 Server = liteserver.Server

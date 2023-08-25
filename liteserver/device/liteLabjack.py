@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """liteserver for Labjack U3, supports 5 ADCs, 2 DACs, 2 Counter/Timers, 
 1 Digital IOs"""
-__version__ = '2.0.0 2023-01-16'#
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 
 print(f'liteLabjack {__version__}')
 
@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 from functools import partial
 import numpy as np
 
-from liteserver import liteserver
+from .. import liteserver
 
 #````````````````````````````Globals``````````````````````````````````````````
 LDO = liteserver.LDO
@@ -167,22 +167,28 @@ class LLJ(Device):
         msg = f"Changing configFIO is not supported yet {self.PV['configFIO'].value}"
         print(msg)
         raise ValueError(msg)
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,S,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# parse arguments
-import argparse
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('-i','--interface', default = '', help=\
-'Network interface. Default is the interface, which connected to internet')
-n = 12000# to fit liteScaler volume into one chunk
-parser.add_argument('-p','--port', type=int, default=9700, help=\
-'Serving port, default: 9700') 
-parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
-pargs = parser.parse_args()
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('-i','--interface', default = '', help=\
+    'Network interface. Default is the interface, which connected to internet')
+    n = 12000# to fit liteScaler volume into one chunk
+    parser.add_argument('-p','--port', type=int, default=9700, help=\
+    'Serving port, default: 9700') 
+    parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
+    pargs = parser.parse_args()
 
-devices = [LLJ('dev1')]
+    devices = [LLJ('dev1')]
 
-print('Serving:'+str([dev.name for dev in devices]))
+    print('Serving:'+str([dev.name for dev in devices]))
 
-server = liteserver.Server(devices, interface=pargs.interface,
-    port=pargs.port)
-server.loop()
+    server = liteserver.Server(devices, interface=pargs.interface,
+        port=pargs.port)
+
+    print('`'*79)
+    print((f"To monitor, use: pvplot -a'L:{server.host};{pargs.port}:dev1' "\
+    "'tempU3 ADC_HV[0] ADC_HV[1] ADC_HV[2] ADC_HV[3] ADC_LV'"))
+    print(','*79)
+
+    server.loop()

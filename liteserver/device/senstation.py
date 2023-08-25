@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.1.0 2023-05-09'# i2c: magnitude is float, not numpy.
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 
 #TODO: take care of microsecond ticks in callback
 
@@ -23,7 +23,7 @@ from timeit import default_timer as timer
 from functools import partial
 import numpy as np
 
-from liteserver import liteserver
+from .. import liteserver
 
 #````````````````````````````Globals``````````````````````````````````````````
 MgrInstance = None

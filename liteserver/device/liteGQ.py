@@ -3,14 +3,11 @@
 The Device Communication Protocol is described in
 https://www.gqelectronicsllc.com/download/GQ-RFC1201.txt
 """
-__version__ = '2.0.0 2022-02-24'# compliant to liteServer 2.0.0
+__version__ = '3.1.0 2023-08-23'# from .. import litesrver
 
 import sys, serial, time, threading
-try: # to import development version of the liteserver
-    from liteserver import liteserver
-except:
-    print(f'WARNING: The github module liteserver is not available, trying to import local module liteserv')
-    from liteserv import liteserver
+
+from .. import liteserver
 
 LDO = liteserver.LDO
 Server = liteserver.Server
@@ -193,7 +190,9 @@ if __name__ == "__main__":
     MgrInstance = GeigerCounterGQ('dev1')
     server = Server([MgrInstance], interface=pargs.interface,
         port=pargs.port)#, serverPars = False)
-
+    print('`'*79)
+    print(f"To monitor, use: pvplot 'L:{server.host};{pargs.port}:dev1:mR_h'")
+    print(','*79)
     try:
         server.loop()
     except KeyboardInterrupt:

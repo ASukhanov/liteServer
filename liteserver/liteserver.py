@@ -44,11 +44,11 @@ __version__ = '3.1.0 2023-07-30'# use CBOR encoder
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
+timer = time.perf_counter
 import threading
 publish_Lock = threading.Lock()
 ackCount_Lock = threading.Lock()
 send_UDP_Lock = threading.Lock()
-from timeit import default_timer as timer
 import socket
 import array
 

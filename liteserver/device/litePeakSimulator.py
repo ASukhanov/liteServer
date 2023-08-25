@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.0.0 2021-11-19'# do not call aborted()
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 
 import sys, time, threading
-from timeit import default_timer as timer
+timer = time.perf_counter
 import numpy as np
 
-from liteserver import liteserver
+from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 
@@ -131,54 +131,58 @@ class Dev(Device):
             shippedBytes = self.publish()
 
         print('liteSimPeaks '+self.name+' exit')
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,S,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# parse arguments
-import argparse
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+if __name__ == "__main__":
+    import argparse
 
-#default coeffs for --background
-n = 1000
-linmin = 1.
-linmax = 30.
-quadmax = 20.
-def generate_pars(n):
-    a = -4*quadmax/n**2
-    b = -a*n + (linmax-linmin)/n
-    bckPars = [linmin, round(b,6), round(a,9)]
-    peakPars = [0.3*n,0.015*n,10, 0.5*n,0.020*n,40, 0.7*n,0.025*n,15]
-    return bckPars + peakPars
-def str_of_numbers(numbers:list):
-    return ','.join([f'{i}' for i in numbers])
-pp = generate_pars(n)
+    #default coeffs for --background
+    n = 1000
+    linmin = 1.
+    linmax = 30.
+    quadmax = 20.
+    def generate_pars(n):
+        a = -4*quadmax/n**2
+        b = -a*n + (linmax-linmin)/n
+        bckPars = [linmin, round(b,6), round(a,9)]
+        peakPars = [0.3*n,0.015*n,10, 0.5*n,0.020*n,40, 0.7*n,0.025*n,15]
+        return bckPars + peakPars
+    def str_of_numbers(numbers:list):
+        return ','.join([f'{i}' for i in numbers])
+    pp = generate_pars(n)
 
-parser = argparse.ArgumentParser(description=__doc__
-    ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    ,epilog=f'litePeakSimulator version {__version__}, liteserver {liteserver.__version__}')
-parser.add_argument('-b', '--background', default=str_of_numbers(pp[:3])
-, help=('Three coefficients (comma-separated) of the quadratic background'))
-parser.add_argument('-d','--doubles', action='store_true'
-, help='Encode floats as doubles, use it when you need precision higher than 7 digits')
-parser.add_argument('-F','--frequency', type=float, default=1., help=\
-    'Update frequency')
-parser.add_argument('-i','--interface', default = '', help=\
-'Network interface. Default is the interface, which is connected to internet')
-parser.add_argument('-n','--nPoints', type=int, default=n)
-parser.add_argument('-N','--noise', type=float, default=10.)
-parser.add_argument('-P','--peaks', default=str_of_numbers(pp[3:]), help=
-    ('Comma-separated peak parameters, 3 parameters per peak: '
-    f'position,sigma,amplitude'))
-parser.add_argument('-p','--port', type=int, default=9700, help=\
-    'Serving port, default: 9700')
-parser.add_argument('-s','--swing', type=float, default=1., help=\
-    'Relative amplitude in %% of the horizontal peak oscillations')
-parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
-pargs = parser.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__
+        ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        ,epilog=f'litePeakSimulator version {__version__}, liteserver {liteserver.__version__}')
+    parser.add_argument('-b', '--background', default=str_of_numbers(pp[:3])
+    , help=('Three coefficients (comma-separated) of the quadratic background'))
+    parser.add_argument('-d','--doubles', action='store_true'
+    , help='Encode floats as doubles, use it when you need precision higher than 7 digits')
+    parser.add_argument('-F','--frequency', type=float, default=1000., help=\
+        'Update frequency [Hz]')
+    parser.add_argument('-i','--interface', default = '', help=\
+    'Network interface. Default is the interface, which is connected to internet')
+    parser.add_argument('-n','--nPoints', type=int, default=n)
+    parser.add_argument('-N','--noise', type=float, default=10.)
+    parser.add_argument('-P','--peaks', default=str_of_numbers(pp[3:]), help=
+        ('Comma-separated peak parameters, 3 parameters per peak: '
+        f'position,sigma,amplitude'))
+    parser.add_argument('-p','--port', type=int, default=9700, help=\
+        'Serving port, default: 9700')
+    parser.add_argument('-s','--swing', type=float, default=1., help=\
+        'Relative amplitude in %% of the horizontal peak oscillations')
+    parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
+    pargs = parser.parse_args()
 
-pargs.background = [float(i) for i in pargs.background.split(',')]
-pargs.peaks = [float(i) for i in pargs.peaks.split(',')]
+    pargs.background = [float(i) for i in pargs.background.split(',')]
+    pargs.peaks = [float(i) for i in pargs.peaks.split(',')]
 
-liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
-devices = [Dev('dev1', no_float32=pargs.doubles)]
+    liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
+    devices = [Dev('dev1', no_float32=pargs.doubles)]
 
-server = liteserver.Server(devices, interface=pargs.interface,
-    port=pargs.port)
-server.loop()
+    server = liteserver.Server(devices, interface=pargs.interface,
+        port=pargs.port)
+
+    print('`'*79)
+    print(f"To monitor, use: pvplot -a'L:{server.host};{pargs.port}:dev1' 'x,y'")
+    print(','*79)
+    server.loop()

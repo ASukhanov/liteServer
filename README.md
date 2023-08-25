@@ -1,4 +1,4 @@
-# liteserver 3.0.0
+# liteserver 3.1.0
 Very Lightweight Data Object Server. 
 It hosts Lite Data Objects (**LDO**, analog of process variables in 
 EPICS) and provides info/set/get/read/subscribe remote access to them using 
@@ -65,12 +65,6 @@ NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteUvcCam**: Server for USB cameras using UVC library, allows for 
 - **device.liteVGM**: (Obsolete) Server for multiple gaussmeters from AlphaLab Inc.
 
-## I2C Support
-
-To detect available devices on the multiplexed I2C chain:
-
-    python -m utils.i2cmux
-
 ## Installation
 Python3 should be 3.6 or higher.
 
@@ -79,17 +73,51 @@ Python3 should be 3.6 or higher.
 Additional libraries may be required for specific devices.
 
 ## Examples
-Most convenient way to test base class functionality is by using **ipython3**, 
+Most convenient way to test a base class functionality is by using **ipython3**, 
 
-Start a server liteScaler on a local host:
+### Test server: liteScaler
+Start liteScaler on a local host:
 
-    python3 -m liteserver.device.liteScaler -ilo -s2
-    ipython3
+    python -m liteserver.device.liteScaler -ilo
 
-Start server of all available senstation devices:
+To monitor, use: 
+
+    pvplot L:localhost:dev1:counters
+
+### Peak simulator
+    python -m liteserver.device.litePeakSimulator -ilo
+
+To monitor, use: 
+
+    pvplot -s.01 -a'L:localhost:dev1' 'x,y'
+
+### Labjack U3-HV
+    python -m liteserver.device.liteLabjack -ilo
+
+To monitor, use:
+
+    pvplot -a'L:localhost:dev1' 'tempU3 ADC_HV[0] ADC_HV[1] ADC_HV[2] ADC_HV[3] ADC_LV'
+
+
+### Server for all supported peripherals: senstation:
+
+#### I2C Support
+
+To detect available devices on the multiplexed I2C chain:
+
+    python -m utils.i2cmux -M 112
+
+If multiplexer address on your board is not 112, you can find it using:
+
+    i2cdetect -y 1
+
+#### Start the senstation server
+
+Start the senstation server through default network interface:
 
     python -m liteserver.device.senstation
 
+#### Interfacing to senstation using python
 ```python
 from liteserver import liteAccess as LA 
 from pprint import pprint
@@ -100,7 +128,7 @@ LAdev1   = Host+':dev1'
 LAdev2   = Host+':dev2'
 
 #``````````````````Programmatic way, using Access`````````````````````````````
-LA.Access.info((Host+':*','*')))# map of all devices and parameters the Host
+LA.Access.info((Host+':*','*'))# map of all devices and parameters the Host
 LA.Access.info((LAserver,'*'))
 LA.Access.get((LAserver,'*'))
 LA.Access.set((LAdev1,'frequency',2.0))

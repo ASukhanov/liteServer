@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """LiteServer for USB cameras"""
-__version__ = '2.0.0 2023-03-23'# compatible with liteserver 2.x.x
-
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 #TODO: sometimes it does not start/stop nicely, Action required: disconnect camera, then run guvcview
 
 import sys, time, threading
-from timeit import default_timer as timer
+timer = time.perf_counter
 
 import numpy as np
 try:
@@ -15,7 +14,7 @@ except ImportError:
     "    pip3 install opencv-python-headless")
     exit(1)
 
-from liteserver import liteserver
+from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 EventExit = Device.EventExit

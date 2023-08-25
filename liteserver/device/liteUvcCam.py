@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """LiteServer for an USB camera using pyuvc"""
-__version__ = '1.0.6 2021-11-19'# created
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 print(f'liteUvcCam {__version__}')
 
 import sys, time, threading
-from timeit import default_timer as timer
+timer = time.perf_counter
 import numpy as np
 
 try:
@@ -13,7 +13,7 @@ except ImportError as e:
     print(f"ERROR pyuvc not installed: {e}")
     exit(1)
 
-from liteserver import liteserver
+from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 EventExit = Device.EventExit

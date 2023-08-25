@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '3.0.5 2023-05-09'#
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
 
 import sys, time, threading
-from timeit import default_timer as timer
+timer = time.perf_counter
 import numpy as np
 
-if True:#try:
-    from liteserver import liteserver
-else:#except Exception as e:
-    print(f'ERROR: Could not import liteserv.liteserver: {e}')
-    #from liteserver import liteserver
+from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 
@@ -189,36 +185,41 @@ class Scaler(Device):
                 pv_chunks.value = (shippedBytes-1)//liteserver.ChunkSize + 1
                 maxChanks = max(maxChanks, pv_chunks.value)
         print('Scaler '+self.name+' exit')
-#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,S,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-# parse arguments
-import argparse
-parser = argparse.ArgumentParser(description=__doc__
-    ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    ,epilog=f'liteScaler version {__version__}, liteserver {liteserver.__version__}')
-parser.add_argument('-b','--bigImage', action='store_true', help=\
-'Generate big image >64kB.')
-defaultIP = liteserver.ip_address('')
-parser.add_argument('-i','--interface', default = defaultIP, help=\
-'Network interface. Default is the interface, which connected to internet.')
-n = 1100# to fit liteScaler volume into one chunk
-parser.add_argument('-n','--nCounters', type=int, default=n,
-  help=f'Number of counters in each scaler, one transmission is 16K.')
-  #default liteAcces accepts 1100 doubles, 9990 int16s
-  #the UDP socket size is limited to 64k bytes
-parser.add_argument('-p','--port', type=int, default=9700, help=\
-'Serving port.') 
-parser.add_argument('-s','--scalers', type=int, default=1, help=\
-'Number of devices/scalers.')
-parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
-pargs = parser.parse_args()
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+if __name__ == "__main__":
+    # parse arguments
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__
+        ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        ,epilog=f'liteScaler version {__version__}, liteserver {liteserver.__version__}')
+    parser.add_argument('-b','--bigImage', action='store_true', help=\
+    'Generate big image >64kB.')
+    defaultIP = liteserver.ip_address('')
+    parser.add_argument('-i','--interface', default = defaultIP, help=\
+    'Network interface. Default is the interface, which connected to internet.')
+    n = 1100# to fit liteScaler volume into one chunk
+    parser.add_argument('-n','--nCounters', type=int, default=n,
+      help=f'Number of counters in each scaler, one transmission is 16K.')
+      #default liteAcces accepts 1100 doubles, 9990 int16s
+      #the UDP socket size is limited to 64k bytes
+    parser.add_argument('-p','--port', type=int, default=9700, help=\
+    'Serving port.') 
+    parser.add_argument('-s','--scalers', type=int, default=1, help=\
+    'Number of devices/scalers.')
+    parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
+    pargs = parser.parse_args()
 
-liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
-devices = [
-  Scaler('dev'+str(i+1), bigImage=pargs.bigImage)\
-  for i in range(pargs.scalers)]
+    liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
+    devices = [
+      Scaler('dev'+str(i+1), bigImage=pargs.bigImage)\
+      for i in range(pargs.scalers)]
 
-print('Serving:'+str([dev.name for dev in devices]))
+    server = liteserver.Server(devices, interface=pargs.interface,
+        port=pargs.port)
 
-server = liteserver.Server(devices, interface=pargs.interface,
-    port=pargs.port)
-server.loop()
+    print('`'*79)
+    print((f"To monitor, use: pvplot -a'L:{server.host};{pargs.port}:dev1' "\
+"'counters'"))
+    print(','*79)
+
+    server.loop()

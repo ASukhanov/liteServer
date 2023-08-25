@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """LiteServer for MCUFEC devices"""
-__version__ = '2.0.0 2023-03-20'#
+__version__ = '3.1.0 2023-08-23'# from .. import liteserver
  
 import sys, time, threading
-from timeit import default_timer as timer
+timer = time.perf_counter
 import numpy as np
 import serial
 import json
 from functools import partial
 
-ADO = False
-if ADO:
-    from liteserv import liteserver
-else:
-    from liteserver import liteserver
+from .. import liteserver
+
 #get_data_lock = threading.Lock()
 ExecLock = threading.Lock()
 LDO = liteserver.LDO
