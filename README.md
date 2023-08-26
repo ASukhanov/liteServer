@@ -40,10 +40,9 @@ objects to client and the callback function on the client will be invoked.
 - **liteCNS.py**: Name service module, it provides file-based 
 (**liteCNS_resolv.py**) or network-based name service (**liteCNSserver.py**).
 
-### Supportted devices
+### Supported devices
 Server implementations for various devices are located in .device sub-package. 
-A device server can be started using following command:
-
+A device server can be started using following command:<br>
     python3 -m liteserv.device.<deviceName> <Arguments>
 
 - **device.litePeakSimulator**: Waveform simulator with multiple peaks and
@@ -66,60 +65,44 @@ NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 
 ## Installation
 
-Dependencies:
+### Dependencies:
 - Python3 3.6 or higher.
 - [CBOR2](https://pypi.org/project/cbor2/)
 
-Installation:
-
-    python3 -m pip install liteserver
+### Installation:<br>
+```python3 -m pip install liteserver```
 
 Additional libraries may be required for specific devices.
 
 ## Examples
 Most convenient way to test a base class functionality is by using **ipython3**, 
 
-### Test server: liteScaler
-Start liteScaler on a local host:
+#### Test server: liteScaler
+Start liteScaler on a local host:<br>
+```python -m liteserver.device.liteScaler -ilo```<br>
+To monitor, use:<br>
+```python -m pvplot L:localhost:dev1:counters```
 
-    python -m liteserver.device.liteScaler -ilo
+#### Peak simulator
+```python -m liteserver.device.litePeakSimulator -ilo```<br>
+To monitor, use:<br>
+```python -m pvplot -s.01 -a'L:localhost:dev1' 'x,y'```
 
-To monitor, use: 
-
-    pvplot L:localhost:dev1:counters
-
-### Peak simulator
-    python -m liteserver.device.litePeakSimulator -ilo
-
-To monitor, use: 
-
-    pvplot -s.01 -a'L:localhost:dev1' 'x,y'
-
-### Labjack U3-HV
-    python -m liteserver.device.liteLabjack -ilo
-
-To monitor, use:
-
-    pvplot -a'L:localhost:dev1' 'tempU3 ADC_HV[0] ADC_HV[1] ADC_HV[2] ADC_HV[3] ADC_LV'
-
+#### Labjack U3-HV
+```python -m liteserver.device.liteLabjack -ilo```<br>
+To monitor, use:<br>
+```python -m pvplot -a'L:localhost:dev1' 'tempU3 ADC_HV[0] ADC_HV[1] ADC_HV[2] ADC_HV[3] ADC_LV'```
 
 ### Server for all supported peripherals: senstation:
-
 #### I2C Support
-
-To detect available devices on the multiplexed I2C chain:
-
-    python -m utils.i2cmux -M 112
-
-If multiplexer address on your board is not 112, you can find it using:
-
-    i2cdetect -y 1
+To detect available devices on the multiplexed I2C chain:<br>
+```python -m utils.i2cmux -M 112```<br>
+If multiplexer address on your board is not 112, you can find it using:<br>
+```i2cdetect -y 1```
 
 #### Start the senstation server
-
-Start the senstation server through default network interface:
-
-    python -m liteserver.device.senstation
+Start the senstation server through default network interface:<br>
+```python -m liteserver.device.senstation```
 
 #### Interfacing to senstation using python
 ```python
