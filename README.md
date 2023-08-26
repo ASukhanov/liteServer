@@ -30,26 +30,20 @@ objects to client and the callback function on the client will be invoked.
    - network-based using a dedicated liteServer  (not commissioned yet)
  - Basic spreadsheet-based GUI: **pypeto**
  - Architectures. All programs are 100% python. Tested on Linux and partially on Windows.
- - Supported applications:
-   - [Image analysis](https://github.com/ASukhanov/Imagin)
-   - [Data Logger](https://github.com/ASukhanov/apstrim)
-
-### Key Components
-- **liteServer**: Module for building liteServer applications.
-- **liteAccess**: Module for for accessing the Process Variables from a liteServer.
-- **liteCNS.py**: Name service module, it provides file-based 
-(**liteCNS_resolv.py**) or network-based name service (**liteCNSserver.py**).
+ - Companion applications:
+   - [liteAccess: Access to liteServer's](https://pypi.org/project/liteaccess)
+   - [pvplot: Dynamic plotting tool](https://pypi.org/project/pvplot)
+   - [apstrim: Data Logger](https://pypi.org/project/apstrim)
+   - [Imagin: Image analysis](https://github.com/ASukhanov/Imagin) 
 
 ### Supported devices
 Server implementations for various devices are located in .device sub-package. 
 A device server can be started using following command:<br>
     python3 -m liteserv.device.<deviceName> <Arguments>
 
-- **device.litePeakSimulator**: Waveform simulator with multiple peaks and
-- **device.liteScaler**: test implementation of the liteServer
-, supporting 1000 of up/down counters as well as multi-dimensional arrays.
-a background noise.
-pan, zoom and tilt control.
+- **device.litePeakSimulator**: Waveform simulator with multiple peaks and a background noise.
+- **device.liteScaler**: Test implementation of the liteServer, 
+supporting 1000 of up/down counters as well as multi-dimensional arrays.
 - **device.senstation**: Server for various devices, connected to Raspberry Pi
 GPIOs: 1-wire temperature sensor, Pulse Counter, Fire alarm and Spark detector,
 Buzzer, RGB LED indicator, OmegaBus serial sensors. 
@@ -57,7 +51,7 @@ Various I2C devices: ADC: ADS1x15, Magnetometers: MMC5983MA, HMC5883, QMC5983.
 I2C multiplexing using TCA9548 or PCA9546.
 NUCLEO-STM33 mixed signal MCU boards, connected to Raspberry Pi over USB.
 - **device.liteGQ**: Geiger Counter and a gyro sensor GMC-500 from GQ Electronics.
-- **device.liteWLM**: Server for Wavelength Meter WS6-600 from HighFinesse.
+- **device.liteWLM**: Wavelength Meter WS6-600 from HighFinesse.
 - **device.liteLabjack**: LabJack U3 analog and digital IO module.
 - **device.liteUSBCam**: Server for USB cameras.
 - **device.liteUvcCam**: Server for USB cameras using UVC library.
