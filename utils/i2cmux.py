@@ -1,6 +1,6 @@
 """Detect I2C devices on multiplexed I2C bus.
 """
-__version__ = '0.0.1 2023-04-28'#
+__version__ = '3.2.0 2023-09-04'#
 
 DeviceName = {# map of known address:deviceName
 0x0d:'QMC5883',
@@ -8,6 +8,7 @@ DeviceName = {# map of known address:deviceName
 0x1e:'HMC5883',
 0x48:'ADS1115',
 0x49:'ADS1015',
+0x5e:'TLV493D',
 }
 
 I2CBus = 1 # Rpi I2C bus is 1

@@ -12,19 +12,18 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
+__version__ = '3.2.0 2023-09-04'# 
 
 #TODO: take care of microsecond ticks in callback
 
 print(f'senstation {__version__}')
 
 import sys, time, threading, glob, struct
-from timeit import default_timer as timer
+timer = time.perf_counter
 from functools import partial
 import numpy as np
 
 from .. import liteserver
-
 #````````````````````````````Globals``````````````````````````````````````````
 MgrInstance = None
 LDO = liteserver.LDO
@@ -60,7 +59,11 @@ def printvv(msg): helpers.printv(msg, pargs.verbose, level=1)
 #````````````````````````````Initialization
 def init_gpio():
     global PiGPIO, pigpio, measure_temperature
-    import pigpio
+    try:
+        import pigpio
+    except:
+        print('ERROR. This server should run on Raspberry Pi and have the pipgpio module installed.')
+        sys.exit(1)
     PiGPIO = pigpio.pi()
 
     # Configure 1Wire pin
@@ -141,19 +144,14 @@ class SensStation(Device):
     be prefixed with _"""
     def __init__(self,name):
         pars = {}
-        self.i2cBusaddrDev = {}
-        if pargs.mask:
+
+        # Add I2C devices
+        if pargs.muxAddr:
             from liteserver.device import i2c
-            i2c.I2C.verbosity = pargs.verbose
-            ibus = i2c.I2C(pargs.mask, pargs.muxAddr)
-            printi(f'I2C devices to process: {ibus.DeviceMap}')
-            for busAddr,devName in ibus.DeviceMap.items():
-                printv(f'Registering {busAddr,devName}')
-                if devName == 'Unknown':
-                    continue
-                self.i2cBusaddrDev[busAddr] = i2c.DevClassMap[devName](busAddr)
-                pars.update(self.i2cBusaddrDev[busAddr].pPV)
-            printv(f'I2C parameters added: {pars.keys()}')
+            self.I2C = i2c.I2C
+            self.I2C.verbosity = pargs.verbose
+            i2c.init(pargs.muxAddr, pargs.muxMask)
+            pars.update(self.I2C.PVMap)
 
         pars.update({
           'Calibration': LDO('RWE', 'Calibrate attached sensors.', ['Off'],
@@ -189,7 +187,7 @@ class SensStation(Device):
             pars['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,
                 units='C'),
         if 'OmegaBus' in pargs.serial:
-            pars['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
+            pars['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')            
         
         super().__init__(name,pars)
 
@@ -238,7 +236,7 @@ class SensStation(Device):
         
     def set_calib(self):
         v = self.PV['Calibration'].value[0]
-        for i2cDev in self.i2cBusaddrDev.values():
+        for i2cDev in self.I2C.DeviceMap.values():
             try:
                 i2cDev.calibration(v)
             except Exception as e:
@@ -292,7 +290,7 @@ class SensStation(Device):
             waitTime = self.PV['cyclePeriod'].value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
-            for i2cDev in self.i2cBusaddrDev.values():
+            for i2cDev in self.I2C.DeviceMap.values():
                 if True:#try:
                     i2cDev.read(timestamp)
                 else:#except Exception as e:
@@ -377,7 +375,7 @@ if __name__ == "__main__":
     #parser.add_argument('-I','--I2C', help=\
     #('Comma separated list of I2C device_address, e.g. MMC5983MA_48,'
     #'ADS1115_72, ADS1015_72, HMC5883_30, QMC5883_13')),
-    parser.add_argument('-m','--mask', default='11111111', help=\
+    parser.add_argument('-m','--muxMask', default='11111111', help=\
     ('Mask of enabled channels of I2C multiplexer (if it is present).'
     'If 0 then all channels will be enabled but not processed'))
     parser.add_argument('-M','--muxAddr', type=int, default=0x77, help=\
@@ -394,7 +392,7 @@ if __name__ == "__main__":
         'Show more log messages, (-vv: show even more).')
     pargs = parser.parse_args()
     pargs.verbose = 0 if pargs.verbose is None else len(pargs.verbose)+1
-    pargs.mask = int(pargs.mask,2)
+    pargs.muxMask = int(pargs.muxMask,2)
 
     liteserver.Server.Dbg = pargs.verbose
     init_gpio()
