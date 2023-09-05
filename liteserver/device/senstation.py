@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.2.0 2023-09-04'# 
+__version__ = '3.2.1 2023-09-04'# An LDO added: 'period'.
 
 #TODO: take care of microsecond ticks in callback
 
@@ -143,7 +143,7 @@ class SensStation(Device):
     Note: All class members, which are not process variables should 
     be prefixed with _"""
     def __init__(self,name):
-        pars = {}
+        ldos = {}
 
         # Add I2C devices
         if pargs.muxAddr:
@@ -151,14 +151,15 @@ class SensStation(Device):
             self.I2C = i2c.I2C
             self.I2C.verbosity = pargs.verbose
             i2c.init(pargs.muxAddr, pargs.muxMask)
-            pars.update(self.I2C.PVMap)
+            ldos.update(self.I2C.LDOMap)
 
-        pars.update({
+        ldos.update({
           'Calibration': LDO('RWE', 'Calibrate attached sensors.', ['Off'],
             legalValues=['On','Off','Periodic','SelfTest'], setter=self.set_calib),
           'boardTemp':  LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
           'cycle':      LDO('R', 'Cycle number', 0),
           'cyclePeriod':LDO('RWE', 'Cycle period', pargs.update, units='s'),
+          'period':     LDO('R', 'Measured period', pargs.update, units='s'),
           'PWM0_Freq':  LDO('RWE', f'Frequency of PWM at GPIO {GPIO["PWM0"]}',
             10, units='Hz', setter=partial(self.set_PWM_frequency, 'PWM0'),
             opLimits=[0,125000000]),
@@ -184,12 +185,12 @@ class SensStation(Device):
           'BuzzDuration': LDO('RWE', f'Buzz duration', 5., units='s'),
         })
         if pargs.oneWire:
-            pars['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,
+            ldos['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,
                 units='C'),
         if 'OmegaBus' in pargs.serial:
-            pars['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')            
+            ldos['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
         
-        super().__init__(name,pars)
+        super().__init__(name,ldos)
 
         # connect callback function to a GPIO pulse edge 
         for eventParName in EventGPIO:
@@ -282,12 +283,17 @@ class SensStation(Device):
     def _threadRun(self):
         printi('threadRun started')
         timestamp = time.time()
+        prevcurtime = timestamp
         periodic_update = timestamp
         self.prevCPUTempTime = 0.
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
                 break
-            waitTime = self.PV['cyclePeriod'].value[0] - (time.time() - timestamp)
+            curtime = time.time()
+            period = round(curtime - prevcurtime,6)
+            prevcurtime = curtime
+            dt = curtime - timestamp
+            waitTime = self.PV['cyclePeriod'].value[0] - dt
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
             for i2cDev in self.I2C.DeviceMap.values():
@@ -298,6 +304,7 @@ class SensStation(Device):
                     continue
             self.PV['cycle'].value[0] += 1
             self.PV['cycle'].timestamp = timestamp
+            self.PV['period'].set_valueAndTimestamp([period])
             if self.PV['RGBControl'].value[0] == 'RGBCycle':
                 self.PV['RGB'].set_valueAndTimestamp(\
                     [self.PV['cycle'].value[0] & 0x7], timestamp)

@@ -40,14 +40,14 @@ class I2C():
     DeviceClassMap = {}# Map of device classes: {addr: DeviceClass,,,,}
     # filled by add_deviceClasses()
     DeviceMap = {}# Map of existing devices: {(muxCh,addr): DeviceClass,...}
-    # filled by scan()
+    LDOMap = {}# Map of Process Variables of I2C devices, filled by init()
+    # filled by init()
     muxAddr = 0x77# address of the multiplexer on I2C bus
     busMask = 0xFF# bit-mask of enabled sub-busses
     I2CBus = 1 # Rpi I2C bus is 1
     CurrentMuxCh = None
     # Note: pigpio wrappers for accessing I2C have overhead ~0.5ms/transaction
     SMBus = I2CSMBus(I2CBus)
-    PVMap = {}# Map of Process Variables of I2C devices, filled by init()
 
     def write_i2cMux(value):
         if I2C.muxAddr is None:
@@ -101,7 +101,7 @@ class I2CDev():
         self.addr = addr
         self.model = model
         self.lastSlowUpdate = 0.
-        self.devPVs = {
+        self.devLDOs = {
             self.name+'_sensor': LDO('R','Sensor model and type',
               f'{model} {sensorType}'),
             self.name+'_readout': LDO('R','Readout time', 0., units='s'),
@@ -180,7 +180,7 @@ class I2C_HMC5883(I2CDev):
         self.xyzSumCount = 0
         self.xyzSum = np.zeros(3)
 
-        self.devPVs.update({
+        self.devLDOs.update({
             self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
                 [lvFSR[self.configRegB.b.FSR]], legalValues=lvFSR, units='G',
                 setter=self.set_FSR),
@@ -201,7 +201,7 @@ class I2C_HMC5883(I2CDev):
 
     def set_FSR(self):
         #print(f'>set_FSR')
-        pv = self.devPVs[self.name+'_FSR']
+        pv = self.devLDOs[self.name+'_FSR']
         fsrTxt = pv.value[0]
         printv(f'fsr: {fsrTxt, type(fsrTxt)}, lv: {pv.legalValues}')
         self.fsr = float(fsrTxt)
@@ -242,7 +242,7 @@ class I2C_HMC5883(I2CDev):
             #printw(f'Exception in read_xyz: {e}')
             return
         rtime = round(timer()-ts,6)
-        self.devPVs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
+        self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
         ovf = -4096# Hardware indication of the overflow
         g = self.fsr/self.dataRange[1]
         gc = self.gainCorrection if self.correct else (1.,1.,1.)
@@ -253,10 +253,10 @@ class I2C_HMC5883(I2CDev):
         m = 10. if max(x,y,z) == 10. else round(float(np.sqrt(x**2 + y**2 + z**2)),6)
         printv(f'xyzm {self.name}: {x,y,z,m}')
         da = self.name
-        self.devPVs[da+'_X'].set_valueAndTimestamp(x, timestamp)
-        self.devPVs[da+'_Y'].set_valueAndTimestamp(y, timestamp)
-        self.devPVs[da+'_Z'].set_valueAndTimestamp(z, timestamp)
-        self.devPVs[da+'_M'].set_valueAndTimestamp(m, timestamp)
+        self.devLDOs[da+'_X'].set_valueAndTimestamp(x, timestamp)
+        self.devLDOs[da+'_Y'].set_valueAndTimestamp(y, timestamp)
+        self.devLDOs[da+'_Z'].set_valueAndTimestamp(z, timestamp)
+        self.devLDOs[da+'_M'].set_valueAndTimestamp(m, timestamp)
 
     def calibration(self, calibMode:str):
         if calibMode == 'Off':
@@ -323,7 +323,7 @@ class I2C_QMC5883(I2CDev):
         I2C.write_i2c_byte(self.addr, self.configRegA.addr, self.configRegA.B)
 
         lvFSR = ('2.', '8.')
-        self.devPVs.update({
+        self.devLDOs.update({
         self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
             lvFSR[self.configRegA.b.FSR], legalValues=lvFSR, units='G',
             setter=self.set_FSR),
@@ -336,7 +336,7 @@ class I2C_QMC5883(I2CDev):
         printv(f'Sensor QMC5883 created: {self.name, self.addr}')
 
     def set_FSR(self):
-        pv = self.devPVs[self.name+'_FSR']
+        pv = self.devLDOs[self.name+'_FSR']
         self.fsr = pv.value[0]
         idx = pv.legalValues.index(str(self.fsr))
         self.configRegA.b.FSR = idx
@@ -354,7 +354,7 @@ class I2C_QMC5883(I2CDev):
             printw(f'reading {self.name,self.addr}: {e}')
             return
         rtime = round(timer()-ts,6)
-        self.devPVs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
+        self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
         #printv(f'conf,status: {hex(r[0x9]), hex(r[0x6])}')
         printvv(f'read {self.name}: {[hex(i) for i in r]}')
         g = self.fsr/32768.
@@ -365,7 +365,7 @@ class I2C_QMC5883(I2CDev):
         pv['T'] = round(struct.unpack('<h', bytearray(r))[0]/100. + 30.,2)
         printv(f"xyzm {self.name}: {pv['X'],pv['Y'],pv['Z'],pv['M'],pv['T']}")
         for suffix,value in pv.items():
-            self.devPVs[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
+            self.devLDOs[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
 #```````````````````MMC5983MA compass```````````````````````````````````````````
 MMC5983_bandwidth = {100:0, 200:1, 400:2, 800:3}# Bandwidth of the decimation filter in Hz, it controls the duration of each measurement
@@ -388,7 +388,7 @@ class I2C_MMC5983MA(I2CDev):
         I2C.write_i2c_byte(self.addr, 0xb, I2C_MMC5983MA.cm_freq)
         I2C.write_i2c_byte(self.addr, 0xc, 0x0)
 
-        self.devPVs.update({
+        self.devLDOs.update({
         self.name+'_X': LDO('R','X-axis field', 0., units='G'),
         self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
         self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
@@ -418,7 +418,7 @@ class I2C_MMC5983MA(I2CDev):
             printw(f'reading {self.name}: {e}')
             return
         rtime = round(timer()-ts,6)        
-        self.devPVs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
+        self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
         printv(f'regs: {[hex(i) for i in r]}')
         # decode 18-bit values xyz18
         xyz17_2 = [i for i in struct.unpack('>3H', bytearray(r[:6]))]
@@ -432,7 +432,7 @@ class I2C_MMC5983MA(I2CDev):
         pv['M'] = round(float(np.sqrt(pv['X']**2 + pv['Y']**2 +pv['Z']**2)), 6)
         printv(f"xyzm {self.name}: {pv['X'],pv['Y'],pv['Z'],pv['M']}")
         for suffix,value in pv.items():
-            self.devPVs[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
+            self.devLDOs[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
         # force the temperature update once per 10s
         tm = time.time()
@@ -449,7 +449,7 @@ class I2C_MMC5983MA(I2CDev):
             temp = I2C.read_i2c_byte(self.addr, 0x7)
             printv(f'TStatus = {hex(status)}, temp: {temp}')
             temp = round(-75. + temp*0.8,2)
-            self.devPVs[self.name+'_T'].set_valueAndTimestamp(temp, timestamp)
+            self.devLDOs[self.name+'_T'].set_valueAndTimestamp(temp, timestamp)
 
 #```````````````````TLV493D magnetometer```````````````````````````````````````
 class I2C_TLV493D(I2CDev):
@@ -461,7 +461,7 @@ class I2C_TLV493D(I2CDev):
     def __init__(self, devAddr):
         printv(f'I2C_TLV493D {devAddr}')
         super().__init__(devAddr, 'Magnetometer', 'TLV493D')
-        self.devPVs.update({# Add PVs
+        self.devLDOs.update({# Add LDOs
             self.name+'_X': LDO('R','X-axis field', 0., units='G'),
             self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
             self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
@@ -488,7 +488,7 @@ class I2C_TLV493D(I2CDev):
         #        break
         #printv(f'r5: {hex(r[5]), round(timer()-ts,6)}')
         rtime = round(timer()-ts,6)
-        self.devPVs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
+        self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
         printv(f'read: {[hex(i) for i in r]}, {rtime}')
         x = tosigned12((r[0]<<4) + ((r[4]>>4)&0xF))
         y = tosigned12((r[1]<<4) + (r[4]&0xF))
@@ -499,7 +499,7 @@ class I2C_TLV493D(I2CDev):
         # update parameters
         for suffix,v in zip('XYZM', (x,y,z,m)):
             v*= self.LSB
-            self.devPVs[self.name+'_'+suffix].set_valueAndTimestamp(v, timestamp)
+            self.devLDOs[self.name+'_'+suffix].set_valueAndTimestamp(v, timestamp)
         # force the temperature update once per 10s
         tm = time.time()
         if tm - self.lastSlowUpdate > 10.:
@@ -509,7 +509,7 @@ class I2C_TLV493D(I2CDev):
             tbits = ((t11_8&0xF0)<<4) + t7_0
             t = (tbits - 340.)*self.LSBT + 25.
             printv(f'(tempTLV: {hex(t7_0), hex(t11_8), hex(tbits), t}')
-            self.devPVs[self.name+'_T'].set_valueAndTimestamp(t, timestamp)
+            self.devLDOs[self.name+'_T'].set_valueAndTimestamp(t, timestamp)
 
 #```````````````````ADS1115, ADS1015```````````````````````````````````````````
 # 4-channel 16/12 bit ADC.
@@ -539,7 +539,7 @@ class I2C_ADS1115(I2CDev):
         lvFSR = ('6.144', '4.096', '2.048', '1.024', '0.512' , '0.256')
         lvDR = {'ADS1115': ('8',     '16',   '32',   '64',  '128',  '250',  '475',  '860'),
                 'ADS1015': ('128',  '250',  '490',  '920', '1600', '2400', '3300', '300')}
-        self.devPVs.update({
+        self.devLDOs.update({
         self.name+'_rlength': LDO('RWE', 'Record length, ', 1),
         self.name+'_tAxis': LDO('R', 'Time axis for samples', [0.], units='s'),
         self.name+'_nCh': LDO('RWE', 'Number of active ADC channels. Select 1 for faster performance.',
@@ -591,19 +591,19 @@ class I2C_ADS1115(I2CDev):
                         raise TimeoutError('Timeout in I2C_ADS1115')
             else:
                 # in continuous mode the OS is always 1, wait approximately one conversion period. 
-                sleepTime = max(0, 1./(self.devPVs[self.name+'_DR'].value[0])\
+                sleepTime = max(0, 1./(self.devLDOs[self.name+'_DR'].value[0])\
                  - 0.0013)# 1.3ms is correction for transaction time
                 time.sleep(sleepTime)
             v = I2C.read_i2c_word(self.addr, 0)
             v = int(((v&0xff)<<8) + ((v>>8)&0xff))# swap bytes
             if v & 0x8000:  v = v - 0x10000
-            v = v/0x10000*float(self.devPVs[da+'_FSR'].value[0])*2.
+            v = v/0x10000*float(self.devLDOs[da+'_FSR'].value[0])*2.
             return v
 
         self.config.W = I2C.read_i2c_word(self.addr, 1)
         da = self.name
-        nCh = int(self.devPVs[da+'_nCh'].value[0])
-        if self.devPVs[da+'_diff'].value[0].startswith('Diff'):
+        nCh = int(self.devLDOs[da+'_nCh'].value[0])
+        if self.devLDOs[da+'_diff'].value[0].startswith('Diff'):
             listCmd = [(0,'_Ch0'), (3,'_Ch1')]
         else:
             listCmd = [(4,'_Ch0'), (5,'_Ch1'), (6,'_Ch2'), (7,'_Ch3')]
@@ -613,10 +613,10 @@ class I2C_ADS1115(I2CDev):
         I2C.write_i2c_word(self.addr, 1, self.config.W )
 
         # init the sample data
-        nSamples = self.devPVs[self.name+'_rlength'].value[0]
-        self.devPVs[da+'_tAxis'].value = [0.]*nSamples
+        nSamples = self.devLDOs[self.name+'_rlength'].value[0]
+        self.devLDOs[da+'_tAxis'].value = [0.]*nSamples
         for mux,ch in listCmd[:nCh]:
-            self.devPVs[da+ch].value = [0.]*nSamples
+            self.devLDOs[da+ch].value = [0.]*nSamples
         t0 = timer()
 
         # collect samples
@@ -627,20 +627,20 @@ class I2C_ADS1115(I2CDev):
                     I2C.write_i2c_word(self.addr, 1, self.config.W)
                 #tt.append(round(timer()-ts,6))
                 v = wait_conversion()
-                self.devPVs[da+ch].value[sample] = v
-            self.devPVs[da+'_tAxis'].value[sample] = round(timer() - t0,6)
+                self.devLDOs[da+ch].value[sample] = v
+            self.devLDOs[da+'_tAxis'].value[sample] = round(timer() - t0,6)
         rtime = round(timer()-t0,6)
-        self.devPVs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
+        self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
 
-        # invalidate timestamps to schedule PVs for publishing
+        # invalidate timestamps to schedule LDOs for publishing
         for mux,ch in listCmd[:nCh]:
-            self.devPVs[da+ch].timestamp = timestamp
-        self.devPVs[da+'_tAxis'].timestamp = timestamp
+            self.devLDOs[da+ch].timestamp = timestamp
+        self.devLDOs[da+'_tAxis'].timestamp = timestamp
         #tt.append(round(timer()-ts,6))
         #print(f'read time: {tt}')
 
     def set_pv(self, field):
-        pv = self.devPVs[self.name+'_'+field]        
+        pv = self.devLDOs[self.name+'_'+field]        
         printv(f'>ADS1115.set_config {pv.name} = {pv.value[0]}')
         self.config.W = I2C.read_i2c_word(self.addr, 1)
         printv(f'current: {hex(self.config.W)}')
@@ -719,7 +719,7 @@ def init(muxAddr:int, mask:int):
     I2C.DeviceMap = devMap
     I2C.CurrentMuxCh = None
 
-    # Fill I2C.PVMap
+    # Fill I2C.LDOMap
     for devInstance in I2C.DeviceMap.values():
-        I2C.PVMap.update(devInstance.devPVs)
-    printv(f'I2C parameters added: {I2C.PVMap.keys()}')
+        I2C.LDOMap.update(devInstance.devLDOs)
+    printv(f'I2C parameters added: {I2C.LDOMap.keys()}')
