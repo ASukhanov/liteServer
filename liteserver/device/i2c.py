@@ -2,7 +2,7 @@
 For installation: https://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.2.0 2023-09-04'# Major refactoring. User-defined device classes could be added.
+__version__ = 'v3.2.1 2023-09-15'# bandwidth added for MMC5983, YZ swapped for HMC5583 sensor
 print(f'i2c: {__version__}')
 #TODO: display errors and warnings in device status
 #TODO: the DevClassMap should be incorporated into I2C class
@@ -177,8 +177,8 @@ class I2C_HMC5883(I2CDev):
         self.testField = (1.16, 1.16, 1.08)
         self.gainCorrection = [1., 1., 1.]
         self.correct = False
-        self.xyzSumCount = 0
-        self.xyzSum = np.zeros(3)
+        self.xzySumCount = 0
+        self.xzySum = np.zeros(3)
 
         self.devLDOs.update({
             self.name+'_FSR': LDO('WE','Full scale range is [-FSR:+FSR]',
@@ -222,24 +222,24 @@ class I2C_HMC5883(I2CDev):
             printw(f'reading_xyz {self.name,self.addr}: {e}')
             return
         printvv(f'read {self.name}: {[hex(i) for i in r]}')
-        xyz = struct.unpack('>3h', bytearray(r[3:9]))
+        xzy = struct.unpack('>3h', bytearray(r[3:9]))
         if r[0] & 1:# Internal field is excited, collect statistics
-            printv(f'xyz.max: {max(xyz)}, {self.xyzSumCount}')
-            if max(xyz) < self.dataRange[1]*0.8 and self.xyzSumCount != None:
-                printv(f'self.xyzSumCount {self.xyzSumCount}, {self.xyzSum}')
-                self.xyzSumCount += 1
-                self.xyzSum += xyz
+            printv(f'xzy.max: {max(xzy)}, {self.xzySumCount}')
+            if max(xzy) < self.dataRange[1]*0.8 and self.xzySumCount != None:
+                printv(f'self.xzySumCount {self.xzySumCount}, {self.xzySum}')
+                self.xzySumCount += 1
+                self.xzySum += xzy
             else:
-                self.xyzSumCount = None
-                self.xyzSum = np.zeros(3)
+                self.xzySumCount = None
+                self.xzySum = np.zeros(3)
                 printe(f'Correction processing failed for {self.name}')
-        return xyz
+        return xzy[0],xzy[2],xzy[1]
         
     def read(self, timestamp):
         ts = timer()
         try:    xyz = list(self.read_xyz(timestamp))
         except Exception:# as e:
-            #printw(f'Exception in read_xyz: {e}')
+            printw(f'Exception in read_xyz: {e}')
             return
         rtime = round(timer()-ts,6)
         self.devLDOs[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
@@ -251,7 +251,7 @@ class I2C_HMC5883(I2CDev):
             xyz[i] = 10. if v == ovf else round(v*g*gc[i],6)
         x,y,z = xyz
         m = 10. if max(x,y,z) == 10. else round(float(np.sqrt(x**2 + y**2 + z**2)),6)
-        printv(f'xyzm {self.name}: {x,y,z,m}')
+        #print(f'xyzm {self.name}: {x,y,z,m}')
         da = self.name
         self.devLDOs[da+'_X'].set_valueAndTimestamp(x, timestamp)
         self.devLDOs[da+'_Y'].set_valueAndTimestamp(y, timestamp)
@@ -368,11 +368,10 @@ class I2C_QMC5883(I2CDev):
             self.devLDOs[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
 
 #```````````````````MMC5983MA compass```````````````````````````````````````````
-MMC5983_bandwidth = {100:0, 200:1, 400:2, 800:3}# Bandwidth of the decimation filter in Hz, it controls the duration of each measurement
+MMC5983_bandwidth = {'100':0, '200':1, '400':2, '800':3}# Bandwidth of the decimation filter in Hz, it controls the duration of each measurement
 class I2C_MMC5983MA(I2CDev):
     cm_freq = 0x0# Continuous mode off
     FSR = 8.# Full scale range in Gauss
-    Bandwidth = 100# Hz
     def __init__(self, devAddr):
         super().__init__(devAddr, 'Magnetometer', 'MMC5983MA')
         devID = I2C.read_i2c_byte(self.addr, 0x2f)
@@ -383,31 +382,34 @@ class I2C_MMC5983MA(I2CDev):
         if devID != 0x30:
             raise RuntimeError(f'MMC5983 has wrong address: {devID}')
         printv(f'MMC5983MA ID: {devID}')
+
+        n = self.name
+        self.devLDOs.update({
+        n+'_bandwidth': LDO('RWE','bandwidth', ['100'], units='Hz',
+        legalValues=('100','200','400','800'), setter=self.set_bandwidth),
+        n+'_X': LDO('R','X-axis field', 0., units='G'),
+        n+'_Y': LDO('R','Y-axis field', 0., units='G'),
+        n+'_Z': LDO('R','Z-axis field', 0., units='G'),
+        n+'_M': LDO('R','Magnitude', 0., units='G'),
+        n+'_T': LDO('R','Sensor temperature', 0., units='C'),
+        })
         I2C.write_i2c_byte(self.addr, 0x9, 0x0)
-        I2C.write_i2c_byte(self.addr, 0xa, MMC5983_bandwidth[self.Bandwidth])
         I2C.write_i2c_byte(self.addr, 0xb, I2C_MMC5983MA.cm_freq)
         I2C.write_i2c_byte(self.addr, 0xc, 0x0)
+        self.set_bandwidth()
 
-        self.devLDOs.update({
-        self.name+'_X': LDO('R','X-axis field', 0., units='G'),
-        self.name+'_Y': LDO('R','Y-axis field', 0., units='G'),
-        self.name+'_Z': LDO('R','Z-axis field', 0., units='G'),
-        self.name+'_M': LDO('R','Magnitude', 0., units='G'),
-        self.name+'_T': LDO('R','Sensor temperature', 0., units='C'),
-        })
-        printv(f'Sensor MMC5983MA created: {self.name, self.addr}')
+        printv(f'Sensor MMC5983MA created: {n, self.addr}')
 
     def read(self, timestamp):
         pv = {'X':0., 'Y':0., 'Z':0., 'M':0.}
         da = self.name
         ts = timer()
-        integrationTime = 1./self.Bandwidth
         if I2C_MMC5983MA.cm_freq == 0:
             # ask to measure field
             I2C.write_i2c_byte(self.addr, 0x09,0x1)
         # wait for measurement to complete
         for ntry in range(3):
-            time.sleep(integrationTime)
+            time.sleep(self.integrationTime)
             status = I2C.read_i2c_byte(self.addr, 0x8)
             if status&0x1:
                 break
@@ -450,6 +452,12 @@ class I2C_MMC5983MA(I2CDev):
             printv(f'TStatus = {hex(status)}, temp: {temp}')
             temp = round(-75. + temp*0.8,2)
             self.devLDOs[self.name+'_T'].set_valueAndTimestamp(temp, timestamp)
+
+    def set_bandwidth(self):
+        v = self.devLDOs[self.name+'_bandwidth'].value[0]
+        I2C.write_i2c_byte(self.addr, 0xa, MMC5983_bandwidth[v])
+        self.integrationTime = 1./float(v)
+        print(f'>set_bandwidth {v}, integration time:{self.integrationTime}')
 
 #```````````````````TLV493D magnetometer```````````````````````````````````````
 class I2C_TLV493D(I2CDev):
