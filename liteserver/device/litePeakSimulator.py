@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
+__version__ = '3.2.1 2023-09-21'# update timestamps for pv['x'] 
 
 import sys, time, threading
 timer = time.perf_counter
@@ -36,8 +36,8 @@ def peaks(x, *par, noiseLevel=0.):
     noise = noise * noiseLevel
     noise += noiseLevel*noiseLevel
     #print(f'peaks.par: {par}')
-    peaks = func_sum_of_peaks(x, *par)
-    return peaks + noise
+    v = func_sum_of_peaks(x, *par)
+    return v + noise
 #````````````````````````````Lite Data Objects````````````````````````````````
 class Dev(Device):
     """ Derived from liteserver.Device.
@@ -125,7 +125,8 @@ class Dev(Device):
             self.PV['yMax'].value = float(self.PV['y'].value.max())
             # invalidate timestamps for changing variables, otherwise the
             # publish() will ignore them
-            for i in [self.PV['cycle'], self.PV['y'], self.PV['yMin'], self.PV['yMax']]:
+            for i in [self.PV['cycle'], self.PV['x'], self.PV['y'],
+              self.PV['yMin'], self.PV['yMax']]:
                 i.timestamp = timestamp
 
             shippedBytes = self.publish()
