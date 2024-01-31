@@ -2,7 +2,7 @@
 For installation: https://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.2.1 2023-09-15'# bandwidth added for MMC5983, YZ swapped for HMC5583 sensor
+__version__ = 'v3.2.2 2024-01-30'# Fix a bug when there is multiplexer.
 print(f'i2c: {__version__}')
 #TODO: display errors and warnings in device status
 #TODO: the DevClassMap should be incorporated into I2C class
@@ -723,6 +723,8 @@ def init(muxAddr:int, mask:int):
         if mask&chmask == 0:
             continue
         devMap.update(scan(ch+1))
+        if I2C.muxAddr == None:
+            break# There is no multiplexer on I2C bus. Work with one subbus
     printi(f'I2C devices detected: {[(dclass.name, addr, type(dclass).__name__)  for addr,dclass in devMap.items()]}')
     I2C.DeviceMap = devMap
     I2C.CurrentMuxCh = None
