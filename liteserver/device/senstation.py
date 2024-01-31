@@ -7,12 +7,13 @@ Supported:
   - Pulse Counter (GPIO 26).
   - Spark detector (GPIO 26).
   - Buzzer (GPIO 13).
-  - RGB LED indicator (GPIO 16,6,5).
+  - RGB LED indicator (GPIO 22,27,17).
   - I2C devices: ADS1x15, MMC5983MA, HMC5883, QMC5983.
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
+  - DHT11,DHT22 temperature and humidity sensors
 """
-__version__ = '3.2.1 2023-09-04'# An LDO added: 'period'.
+__version__ = '3.2.2 2024-01-30'# Pinout changed to match standard connector, DHT sensors supported
 
 #TODO: take care of microsecond ticks in callback
 
@@ -35,10 +36,10 @@ GPIO = {
     'DI0':  19,
     'DI1':  20,
     'Counter0': 26,
-    'RGB':  [16,6,5],
+    'RGB':  [22,27,17],
     'DO3':  25,
     'DO4':  24,
-    'DHT':  21,
+    'DHT':  23,
 }
 EventGPIO = {'Counter0':0.} # event-generated GPIOs, store the time when it was last published
 #CallbackMinimalPublishPeiod = 0.01
@@ -142,6 +143,9 @@ class SensStation(Device):
     """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
+
+    dht = None# DHT sensor 
+
     def __init__(self,name):
         ldos = {}
 
@@ -186,9 +190,26 @@ class SensStation(Device):
         })
         if pargs.oneWire:
             ldos['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,
-                units='C'),
+                units='C')
         if 'OmegaBus' in pargs.serial:
             ldos['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
+        if pargs.dht is not None:
+            from pigpio_dht import DHT11, DHT22
+            try:
+                dhtModel,dhtPin = pargs.dht.split('.')
+                pin = int(dhtPin)
+            except:
+                printw('Wrong option value for --dht')
+            try:
+                SensStation.dht = DHT11(pin) if dhtModel == '11' else\
+                DHT22(pin)
+            except Exception as e:
+                printw(f'Could not initialize a DHT sensor: {e}')
+            if SensStation.dht is not None:
+                ldos['Temperature'] = LDO('R',
+                'Temperature, provided by the DHT sensor', 0., units='C')
+                ldos['Humidity'] = LDO('R',
+                'Humidity, provided by the DHT sensor', 0.)
         
         super().__init__(name,ldos)
 
@@ -322,15 +343,11 @@ class SensStation(Device):
 
     def seldomThread(self):
         #print(f'>seldomThread: {timestamp}')
-        #ts = timer()
-        ctime = time.time()
         try:
-            if ctime - self.prevCPUTempTime > 60.:
-                self.prevCPUTempTime = ctime
-                with open(r"/sys/class/thermal/thermal_zone0/temp") as f:
-                    r = f.readline()
-                    temperature = float(r.rstrip()) / 1000.
-                    self.PV['boardTemp'].set_valueAndTimestamp([temperature])
+            with open(r"/sys/class/thermal/thermal_zone0/temp") as f:
+                r = f.readline()
+                temperature = float(r.rstrip()) / 1000.
+                self.PV['boardTemp'].set_valueAndTimestamp([temperature])
         except Exception as e:
             printw(f'Could not read CPU temperature `{r}`: {e}')
         temp = measure_temperature()# 0.9s spent here
@@ -344,6 +361,17 @@ class SensStation(Device):
             if len(r) != 0:
                 self.PV['OmegaBus'].set_valueAndTimestamp([float(r.decode()[2:])/1000.])
         #print(f'<seldomThread time: {round(timer()-ts,6)}')
+        if SensStation.dht is not None:
+            try:
+                result = SensStation.dht.read()
+                #print(f'dht: {result}')
+                if result['valid']:
+                    self.PV['Temperature'].set_valueAndTimestamp([result['temp_c']])
+                    self.PV['Humidity'].set_valueAndTimestamp([result['humidity']])
+                else:
+                    printw('DHT invalid')
+            except Exception as e:
+                printw(f'in dht.read: {e}')
 
     def set_status(self, msg):
         self.PV['status'].set_valueAndTimestamp(msg)
@@ -376,6 +404,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'senstation: {__version__}')
+    parser.add_argument('-H','--dht', default='11.23', nargs = '?', help=\
+    ('Type and pin of the connected DHT sensor (humidity and temperature sensor), '
+    ' for example: "-H11.23", if just "-H" then no DHT will be supported.'))
     parser.add_argument('-i','--interface', default = '', help=\
     'Network interface. Default is the interface, which connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
