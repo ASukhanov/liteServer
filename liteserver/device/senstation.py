@@ -11,9 +11,8 @@ Supported:
   - I2C devices: ADS1x15, MMC5983MA, HMC5883, QMC5983.
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
-  - DHT11,DHT22 temperature and humidity sensors
 """
-__version__ = '3.2.2 2024-01-30'# Pinout changed to match standard connector, DHT sensors supported
+__version__ = '3.2.4 2024-02-01'# PV Calibration removed, it is not belong here
 
 #TODO: take care of microsecond ticks in callback
 
@@ -44,6 +43,7 @@ GPIO = {
 EventGPIO = {'Counter0':0.} # event-generated GPIOs, store the time when it was last published
 #CallbackMinimalPublishPeiod = 0.01
 MaxPWMRange = 1000000 # for hardware PWM0 and PWM1
+Seldom_update_period = 60.# update period for slow-changing parameters like temperature and humidity
 
 #`````````````````````````````Helper methods```````````````````````````````````
 from . import helpers
@@ -94,7 +94,6 @@ def init_gpio():
     else:
         device_file = OneWire_folder + '/w1_slave'
         print(f'Thermometer driver is: {device_file}')
-         
         def read_temperature():
             f = open(device_file, 'r')
             lines = f.readlines()
@@ -144,7 +143,7 @@ class SensStation(Device):
     Note: All class members, which are not process variables should 
     be prefixed with _"""
 
-    dht = None# DHT sensor 
+    dht = None# DHT sensor
 
     def __init__(self,name):
         ldos = {}
@@ -158,8 +157,6 @@ class SensStation(Device):
             ldos.update(self.I2C.LDOMap)
 
         ldos.update({
-          'Calibration': LDO('RWE', 'Calibrate attached sensors.', ['Off'],
-            legalValues=['On','Off','Periodic','SelfTest'], setter=self.set_calib),
           'boardTemp':  LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
           'cycle':      LDO('R', 'Cycle number', 0),
           'cyclePeriod':LDO('RWE', 'Cycle period', pargs.update, units='s'),
@@ -193,6 +190,7 @@ class SensStation(Device):
                 units='C')
         if 'OmegaBus' in pargs.serial:
             ldos['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
+
         if pargs.dht is not None:
             from pigpio_dht import DHT11, DHT22
             try:
@@ -210,10 +208,10 @@ class SensStation(Device):
                 'Temperature, provided by the DHT sensor', 0., units='C')
                 ldos['Humidity'] = LDO('R',
                 'Humidity, provided by the DHT sensor', 0.)
-        
+
         super().__init__(name,ldos)
 
-        # connect callback function to a GPIO pulse edge 
+        # connect callback function to a GPIO pulse edge
         for eventParName in EventGPIO:
             PiGPIO.callback(GPIO[eventParName], pigpio.RISING_EDGE, callback)
         self.start()
@@ -255,15 +253,6 @@ class SensStation(Device):
         gpio = GPIO[key]
         printv(f'gpiov {gpio,v}')
         return gpio,v
-        
-    def set_calib(self):
-        v = self.PV['Calibration'].value[0]
-        for i2cDev in self.I2C.DeviceMap.values():
-            try:
-                i2cDev.calibration(v)
-            except Exception as e:
-                printw(f'Exception in calib: {i2cDev.name}: {e}')
-                continue
 
     def set_PWM_frequency(self, pwm):
         parName = pwm + '_Freq'
@@ -305,7 +294,7 @@ class SensStation(Device):
         printi('threadRun started')
         timestamp = time.time()
         prevcurtime = timestamp
-        periodic_update = timestamp
+        last_seldom_update = timestamp
         self.prevCPUTempTime = 0.
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
@@ -333,9 +322,9 @@ class SensStation(Device):
             self.publish()# publish all fresh parameters
 
             # do a less frequent tasks in a thread
-            dt = timestamp - periodic_update
-            if dt > 10.:
-                periodic_update = timestamp
+            dt = timestamp - last_seldom_update
+            if dt > Seldom_update_period:
+                last_seldom_update = timestamp
                 thread = threading.Thread(target=self.seldomThread)
                 thread.start()
         printi('threadRun stopped')
@@ -417,7 +406,7 @@ if __name__ == "__main__":
     ('Mask of enabled channels of I2C multiplexer (if it is present).'
     'If 0 then all channels will be enabled but not processed'))
     parser.add_argument('-M','--muxAddr', type=int, default=0x77, help=\
-    'I2C address of the multiplexer') 
+    'I2C address of the multiplexer')
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port, default: 9700')
     parser.add_argument('-s','--serial', default = '', help=\
