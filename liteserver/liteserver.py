@@ -1,9 +1,9 @@
-"""Very lightweight base class of the Lite Data Object Server.
-It hosts the Lite Data Objects and responds to get/set/monitor/info commands.
+"""Base class of the Lite Data Object Server.
+It hosts the Lite Data Objects and responds to info/get/set/subscribe commands.
 
 Transport protocol: UDP with handshaking and re-transmission. 
 
-Object bynary encoding protocol: CBOR
+Binary object encoding protocol: CBOR
 
 message format:
   {'cmd':[command,[[dev1,dev2,...],[arg1,arg2,...]]],
@@ -13,34 +13,12 @@ Supported commands:
 - info:     reply with information of LDOs
 - get:      reply with values of LDOs
 - read:     reply only with values of readable LDOs, with changed timestamp, 
-            readable LDO have 'R' in their feature, 
 - set:      set values of LDOs
 - ACK:      internal, response from a client on server reply
 - subscribe: server will reply when any of requsted readable parameters have changed
-- unsubscribe
-
-Example usage:
-
-- start liteServer for litePeakSimulator on a remote host 192.168.1.108:
-python3 -m liteserver.device.litePeakSimulator
-
-- use python to communicate with devices:
-python3
-from liteserver import liteAccess as LA
-# view parameters, served by dev1 on host bpc
-bpc = '192.168.1.108':dev1'
-LA.Access.info((bpc,'cycle'))
-LA.Access.info((bpc,'*')).keys()
-dict_keys(['run', 'status', 'frequency', 'nPoints', 'background', 'noise', 'peakPars', 'swing', 'x', 'y', 'yMin', 'yMax', 'rps', 'cycle'])
-# get parameters yMin,yMax:
-LA.Access.get((bpc,('yMin','yMax')))
-{('192.168.1.132:dev1', 'yMin'): {'value': 101.017, 'timestamp': 1679343794.4135463}, ('192.168.1.132:dev1', 'yMax'): {'value': 219.963, 'timestamp': 1679343794.4135463}}
-# subscribe to parameter y:
-LA.Access.subscribe(LA.testCallback,(bpc,'y'))
-Received in last 10.0s: {'records': 1240, 'acks': 10, 'bytes': 80005600.0, 'retrans': 7}
-LA.Access.unsubscribe()
+- unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.1.0 2023-07-30'# use CBOR encoder
+__version__ = '3.3.0 2024-02-13'# fixed: NameError, get parameter properties, set returns dict
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -547,13 +525,15 @@ def _replyData(cmdArgs):
             raise TypeError(msg) from e
 
         cnsHost,devName = cnsDevName.rsplit(NSDelimiter,1)
+        #printv(f'sParPropVals: {sParPropVals}')
         parNames = sParPropVals[0]
+        vals = None
         if len(sParPropVals) > 1:
             propNames = sParPropVals[1]
-            vals = sParPropVals[2]
+            try:    vals = sParPropVals[2]
+            except: pass
         else:   
             propNames = '*' if cmd == 'info' else 'value'
-            vals = None
         printvv(f'cnsHost,devName,vals: {cnsHost,devName,vals}')
         if devName == '*':
             returnedDict = {cnsHost:{}}
@@ -590,8 +570,8 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
         if not isinstance(pv,LDO):
             msg = f'No such name: {cnsDevName,parName}'
             #printe(msg)
-            #raise NameError(msg)
-            printv('WARNING '+msg)
+            raise NameError(msg)
+            #printv('WARNING '+msg)
             continue
         features = getattr(pv,'features')
 
@@ -600,14 +580,14 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
             continue
         parDict = {}
 
-        def valueDict(value):
+        def valueDict(propName, value):
             try: # if value is numpy array:
                 dtype = str(value.dtype)
                 shape, dtype = value.shape, dtype
-                return {'value':value.tobytes(), 'numpy':(shape,dtype)}
+                return {propName:value.tobytes(), 'numpy':(shape,dtype)}
             except:
                 #printv(f'not numpy {pv.name}')
-                return {'value':value}
+                return {propName:value}
 
         if cmd in ('get', 'read'):
             ts = timer()
@@ -632,7 +612,7 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
             #print(f'devDict: {devDict}')
             value = getattr(pv,propNames)
             #printv('value of %s %s=%s, timing=%.6f'%(type(value), parName,str(value)[:100],timer()-ts))
-            vd = valueDict(value)
+            vd = valueDict(propNames, value)
             #printv(croppedText(f'vd:{vd}'))
             parDict.update(vd)
             parDict['timestamp'] = getattr(pv,'timestamp')
