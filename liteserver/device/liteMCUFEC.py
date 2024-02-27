@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """LiteServer for MCUFEC devices"""
-__version__ = '3.2.0 2024-02-26'#
+__version__ = '3.2.4 2024-02-27'# --stop option, handle payload=OK during set()
  
 import sys, time, threading
 timer = time.perf_counter
@@ -150,7 +150,8 @@ class MCUFEC(Device):
             sys.exit(1)
 
         if pargs.stop:
-            reply = self.execute_command('set fec stop')
+            printi(f'Disable ADC trigger')
+            write_serdev('set adc_trig disable')
             time.sleep(.5)
 
         #TODO check if it stopped, exit if not
@@ -282,6 +283,10 @@ class MCUFEC(Device):
             self._pars['reply'].set_valueAndTimestamp([payload.decode()],
               timestamp)
             if not payload.startswith(b'{'):
+                if payload == b'OK':
+                    # normal reply to set()
+                    SerObjectEvent.set()
+                    return
                 printi(f'msg: {payload}')
                 if payload.startswith(b'ERR'):
                     self._pv_reply = payload.decode()
@@ -514,12 +519,12 @@ class MCUFEC(Device):
     def set_pv(self, pvname):
         pv = self.PV[pvname]
         cmd = f'set {pvname} {pv.value[0]}'
-        printi(f'>set {cmd}')
+        printv(f'>set {cmd}')
         self.execute_command(cmd)
 
     def get_pv(self, pvname):
         cmd = f'get {pvname}'
-        printi(f'>get {cmd}')#, prev: {pv.value}')
+        printv(f'>get {cmd}')#, prev: {pv.value}')
         self.execute_command(cmd)
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #``````````````````Main function``````````````````````````````````````````````
@@ -542,7 +547,7 @@ if __name__ == "__main__":
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving IP port.')
     parser.add_argument('-s','--stop', action='store_true', help=\
-    'Stop device')
+    'Disable ADC_trigger')
     parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
     parser.add_argument('tty', nargs='?', default='/dev/ttyACM0', help=\
       'Device for serial communication')
