@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """LiteServer for MCUFEC devices"""
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
+__version__ = '3.2.0 2024-02-26'#
  
 import sys, time, threading
 timer = time.perf_counter
@@ -10,6 +10,8 @@ import json
 from functools import partial
 
 from .. import liteserver
+
+PV_ADCS = False# Do not host multi-dimensional parameter 'adcs'
 
 #get_data_lock = threading.Lock()
 ExecLock = threading.Lock()
@@ -147,9 +149,9 @@ class MCUFEC(Device):
             printe('Listener did not start')
             sys.exit(1)
 
-        #if pargs.stop:
-        reply = self.execute_command('set fec stop')
-        time.sleep(.5)
+        if pargs.stop:
+            reply = self.execute_command('set fec stop')
+            time.sleep(.5)
 
         #TODO check if it stopped, exit if not
         # parameters, retrieved from device
@@ -160,28 +162,40 @@ class MCUFEC(Device):
         self._pars.update(pars)
 
         # derived parameters
-        self._pars.update({'adcs':   LDO('R','Multi-dimensional array of all ADC channels',
-          [], ptype='numpy.ndarray')})
-        print(f"nadcs: {self._pars['nADC'].value[0]}")
+        if PV_ADCS:
+            self._pars.update({'adcs':   LDO('R','Multi-dimensional array of all ADC channels',
+            [], ptype='numpy.ndarray')})
+        nADCs = self._pars['nADC'].value[0]
+        print(f"nadcs: {nADCs}")
+        adcmask = '1'*nADCs if pargs.adcmask=='*' else pargs.adcmask[:nADCs]
         for i in range(self._pars['nADC'].value[0]):
+            try:
+                if adcmask[i] == '0':
+                    continue
+            except:
+                continue
             print(f'creating ADC{i+1}')
             self._pars.update({f'adc{i+1}':LDO('R','ADC channel',
-              [], ptype='numpy.ndarray')})
+              #[], ptype='numpy.ndarray')})
+              [0.], ptype='numpy.ndarray')})
 
-        self._pars.update({'xscale': LDO('R','Scale, converting samples to time',
-            1., units='ms', ptype='numpy.ndarray')})
-        nADCs = self._pars['nADC'].value[0]
+        #self._pars.update({'xscale': LDO('R','Scale, converting samples to time',
+        #    1., units='ms', ptype='numpy.ndarray')})
+        self._pars.update({'xaxis': LDO('R','X axis of ADC arrays',
+            [0.], units='ms')})
         self._pars.update({'peak2peak': LDO('R','Peak-to-Peak amplitudes of ADC channels',
           [0.]*nADCs, units='V')}),
         self._pars.update({'mean': LDO('R','Average of all samples of ADC channels',
           [0.]*nADCs, units='V')}),
         self._pars.update({'gain': LDO('R','Conversion of ADC counts to Volts, if 0 then it will be returned in ADC counts',
-          [1., 1., 2./2450, 2./2450, 2./690, 2./700], units='V')})
+          #[1., 1., 2./2450, 2./2450, 2./690, 2./700],units='V')})
+          [3.3/4096]*nADCs, units='V')})
         self._pars.update({'offset': LDO('R','ADC offset',
-          [0, 0, 168, 168, 1792, 1785])})
+          #[0, 0, 168, 168, 1792, 1785])})
+          [0.]*nADCs)})
         super().__init__(name, self._pars)
 
-        self.update_xscale()
+        self.update_xaxis()
         self.initialized = True
         printi('Initialization finished')
         time.sleep(.1)
@@ -237,25 +251,29 @@ class MCUFEC(Device):
                 printv('ADC data ignored since parameters are not created yet')
                 return
             printv(f'ADC array[{arr.shape}] accepted')
-            pv_ADCs = self.PV['adcs']
-            # update multidimensional parameter adcs
-            pv_ADCs.set_valueAndTimestamp(arr, timestamp)
+            if PV_ADCS:
+                # update multidimensional parameter adcs
+                pv_ADCs = self.PV['adcs']
+                pv_ADCs.set_valueAndTimestamp(arr, timestamp)
 
             # update waveforms, peak2peaks and means of individual ADC channels
             peak2peak = []
             mean = []
-            for i,a in enumerate(arr):
-                printvv(f'setting adc{i+1} to {a}')
+            for i, rawArray in enumerate(arr):
+                self.adcLen = len(rawArray)
+                #printvv(f'setting adc{i+1} to {rawArray}')
+                gain = self.PV['gain'].value[i]
+                offset = self.PV['offset'].value[i]                
+                scaledArray = np.array(rawArray)*gain + offset
                 try:
-                    self._pars['adc'+str(i+1)].set_valueAndTimestamp(a, timestamp)
+                    self._pars['adc'+str(i+1)].set_valueAndTimestamp(scaledArray, timestamp)
                 except KeyError:
                     #printw(f'ADC {i+1} not required')
                     continue
-                gain = self.PV['gain'].value[i]
-                offset = self.PV['offset'].value[i]
-                b = np.convolve(a, SmoothingKernel, 'valid')
-                peak2peak.append(round((b.max() - b.min())*gain,5))
-                mean.append(round((a.mean()-offset)*gain,5))
+                smoothedArray = np.convolve(scaledArray, SmoothingKernel, 'valid')
+                peak2peak.append(round((smoothedArray.max() - smoothedArray.min())*gain,5))
+                #mean.append(round((a.mean()-offset)*gain,5))
+                mean.append(round(scaledArray.mean(),5))
             self._pars['peak2peak'].set_valueAndTimestamp(peak2peak, timestamp)
             self._pars['mean'].set_valueAndTimestamp(mean, timestamp)
 
@@ -467,10 +485,16 @@ class MCUFEC(Device):
               getter=partial(self.get_pv, pv))})
         return pars
 
-    def update_xscale(self):
-        self.PV['xscale'].set_valueAndTimestamp(\
-          [1000./self.PV['adc_srate'].value[0]], time.time())
-        #printi(f'xcale: {pv_xscale.value[0]}')
+    def update_xaxis(self):
+        try:
+            adcLen = self.adcLen
+        except:
+            printw('Could not set xaxis: ADCs not yet aquired')
+            return
+        step = 1000./self.PV['adc_srate'].value[0]
+        self.PV['xaxis'].set_valueAndTimestamp(\
+          np.arange(adcLen)*step, time.time())
+        #printi(f'xcale: {pv_xaxis.value[0]}')
 
     def interpret_reply(self, reply):
         if reply is None:
@@ -485,7 +509,7 @@ class MCUFEC(Device):
             except Exception as e:
                 printe(f'Unexpected reply: {e}')
             if pvname == 'adc_srate':
-                self.update_xscale()
+                self.update_xaxis()
 
     def set_pv(self, pvname):
         pv = self.PV[pvname]
@@ -505,6 +529,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__
         ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
         ,epilog=f'LiteMCUFEC version {__version__}, liteserver {liteserver.__version__}')
+    parser.add_argument('-a', '--adcmask', default='*',
+      help='Mask of enabled ADCs, e.g. 01010101 enables ADC 2,4,6,8')
     parser.add_argument('-b', '--baudrate', type=int, default=7372800,# 10000000,
       help='Baud rate for serial communications')
     parser.add_argument('-d', '--debug',  action='store_true',
