@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.2.1 2023-09-21'# update timestamps for pv['x'] 
+__version__ = '3.2.1 2024-02-27'# xStatic added
 
 import sys, time, threading
 timer = time.perf_counter
@@ -9,6 +9,7 @@ import numpy as np
 from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
+xScale = 0.1
 
 #````````````````````````````Helper functions`````````````````````````````````
 def gaussian(x, sigma):
@@ -43,7 +44,9 @@ class Dev(Device):
     """ Derived from liteserver.Device.
     Note: All class members, which are not process variables should 
     be prefixed with _"""
+    xVals = None
     def __init__(self, name, no_float32=False):
+        Dev.xVals = np.arange(pargs.nPoints)
         pars = {
           'frequency':  LDO('RWE','Update frequency of all counters',
             pargs.frequency, units='Hz', opLimits=(0.001,1001.)),
@@ -57,7 +60,8 @@ class Dev(Device):
           ,pargs.peaks, setter=self.set_peaks),
           'swing':      LDO('RWE','Horizontal peak oscillations',
                       				pargs.swing, units='%'),
-          'x':          LDO('R','X-values',np.arange(pargs.nPoints)),
+          'xStatic':    LDO('R','Static X-values',Dev.xVals*xScale),
+          'x':          LDO('R','Dynamic X-values',Dev.xVals*xScale),
           'y':          LDO('R','Y-Values',np.zeros(pargs.nPoints)),
           'yMin':       LDO('R','',0.),
           'yMax':       LDO('R','',0.),
@@ -74,16 +78,17 @@ class Dev(Device):
 
     def update_peaks(self):
         pars = self.PV['background'].value + self.PV['peakPars'].value
-        return peaks(self.PV['x'].value, *pars, noiseLevel=self.PV['noise'].value[0])
+        return peaks(Dev.xVals, *pars, noiseLevel=self.PV['noise'].value[0])
 
     def set_peaks(self):
         n = self.PV['nPoints'].value[0]
+        Dev.xVals = np.arange(n)
         pp = generate_pars(n)
         self.PV['background'].value = pp[:3]
         self.PV['peakPars'].value = pp[3:]
         pars={i.name:(type(i.value[0]),i.value) for i in (self.PV['nPoints']
         ,self.PV['background'], self.PV['peakPars'], self.PV['noise'])}
-        self.PV['x'].value = np.arange(n)
+        self.PV['x'].value = Dev.xVals*xScale
         self.PV['y'].value = self.update_peaks()
         #print(f'y:{self.PV['y'].value}')
 
@@ -120,6 +125,7 @@ class Dev(Device):
 
             if self.PV['swing'].value[0] != 0.:
                 self.swing_peaks()
+            self.PV['x'].value += 0.001*(self.PV['cycle'].value)
             self.PV['y'].value = self.update_peaks().round(3)
             self.PV['yMin'].value = float(self.PV['y'].value.min())
             self.PV['yMax'].value = float(self.PV['y'].value.max())
@@ -184,6 +190,6 @@ if __name__ == "__main__":
         port=pargs.port)
 
     print('`'*79)
-    print(f"To monitor, use: pvplot -s.01 -a'L:{server.host};{pargs.port}:dev1' 'x,y'")
+    print(f"To monitor, use: python -m pvplot -s.01 -a'L:{server.host};{pargs.port}:dev1:' 'x,y'")
     print(','*79)
     server.loop()
