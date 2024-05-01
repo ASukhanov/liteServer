@@ -2,7 +2,7 @@
 For installation: https://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.2.3 2024-02-01'# Control commands for MMC5983MA
+__version__ = 'v3.2.4 2024-05-01'# bug fixed line 253
 print(f'i2c: {__version__}')
 #TODO: display errors and warnings in device status
 #TODO: the DevClassMap should be incorporated into I2C class
@@ -249,7 +249,7 @@ class I2C_HMC5883(I2CDev):
         samples = self.ldoValue('_samples')
         for sample in range(samples):
             try:    xyz = list(self.read_xyz(timestamp))
-            except Exception:# as e:
+            except Exception as e:
                 printw(f'Exception in read_xyz: {e}')
                 return
             pv['t'].append(round(time.time() - ts,6))
