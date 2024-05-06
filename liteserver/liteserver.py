@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.2.3 2024-02-13'# fixed: NameError, get parameter properties, set returns dict
+__version__ = '3.2.5 2024-05-06'# minor
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -959,7 +959,7 @@ class Server():
                 printvv(f'data[{len(data)}], from: {address}')
                 handle_socketData(data, (sock, address))
             except socket.timeout:
-                printvv(f'Timeout in recvfrom')
+                printvv(f'No requests')
             except KeyboardInterrupt:
                 printe('KeyboardInterrupt in server loop')
                 Device.EventExit.set()
