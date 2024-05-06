@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.2.4 2024-02-01'# PV Calibration removed, it is not belong here
+__version__ = '3.2.4 2024-05-02'# 
 
 #TODO: take care of microsecond ticks in callback
 
@@ -143,8 +143,6 @@ class SensStation(Device):
     Note: All class members, which are not process variables should 
     be prefixed with _"""
 
-    dht = None# DHT sensor
-
     def __init__(self,name):
         ldos = {}
 
@@ -199,11 +197,11 @@ class SensStation(Device):
             except:
                 printw('Wrong option value for --dht')
             try:
-                SensStation.dht = DHT11(pin) if dhtModel == '11' else\
+                pargs.dht = DHT11(pin) if dhtModel == '11' else\
                 DHT22(pin)
             except Exception as e:
                 printw(f'Could not initialize a DHT sensor: {e}')
-            if SensStation.dht is not None:
+            if pargs.dht is not None:
                 ldos['Temperature'] = LDO('R',
                 'Temperature, provided by the DHT sensor', 0., units='C')
                 ldos['Humidity'] = LDO('R',
@@ -350,9 +348,9 @@ class SensStation(Device):
             if len(r) != 0:
                 self.PV['OmegaBus'].set_valueAndTimestamp([float(r.decode()[2:])/1000.])
         #print(f'<seldomThread time: {round(timer()-ts,6)}')
-        if SensStation.dht is not None:
+        if pargs.dht is not None:
             try:
-                result = SensStation.dht.read()
+                result = pargs.dht.read()
                 #print(f'dht: {result}')
                 if result['valid']:
                     self.PV['Temperature'].set_valueAndTimestamp([result['temp_c']])
@@ -393,7 +391,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'senstation: {__version__}')
-    parser.add_argument('-H','--dht', default='11.23', nargs = '?', help=\
+    parser.add_argument('-H','--dht', nargs = '?', help=\
     ('Type and pin of the connected DHT sensor (humidity and temperature sensor), '
     ' for example: "-H11.23", if just "-H" then no DHT will be supported.'))
     parser.add_argument('-i','--interface', default = '', help=\
@@ -415,12 +413,10 @@ if __name__ == "__main__":
     'Support OneWire device, DS18B20')
     parser.add_argument('-u','--update', type=float, default=1.0, help=\
     'Updating period')
-    parser.add_argument('-v','--verbose', nargs='*', help=\
-        'Show more log messages, (-vv: show even more).')
+    parser.add_argument('-v', '--verbose', action='count', default=0, help=\
+      'Show more log messages (-vv: show even more).')
     pargs = parser.parse_args()
-    pargs.verbose = 0 if pargs.verbose is None else len(pargs.verbose)+1
     pargs.muxMask = int(pargs.muxMask,2)
-
     liteserver.Server.Dbg = pargs.verbose
     init_gpio()
 
