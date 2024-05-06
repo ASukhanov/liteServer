@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.2.4 2024-05-02'# 
+__version__ = '3.2.5 2024-05-02'# DHT disabled by default
 
 #TODO: take care of microsecond ticks in callback
 
