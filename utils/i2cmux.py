@@ -1,10 +1,10 @@
 """Detect I2C devices on multiplexed I2C bus.
 """
-__version__ = '3.2.0 2023-09-04'#
+__version__ = '3.2.5 2024-05-06'# MMC5603 served
 
 DeviceName = {# map of known address:deviceName
 0x0d:'QMC5883',
-0x30:'MMC5983MA',
+0x30:'MMC5983MA',#or MMC5603
 0x1e:'HMC5883',
 0x48:'ADS1115',
 0x49:'ADS1015',
@@ -51,6 +51,11 @@ def i2cDeviceMap(mask=0xff):
                 if devAddr < 0x70:# if it is not a multiplexer
                     devName = DeviceName.get(devAddr, 'Unknown')
                     r[(subbus,devAddr)] = devName
+                    if devAddr == 0x30:
+                        productID = read_i2c_byte(devAddr, 0x39)
+                        #print(f'productID={productID}')
+                        if productID == 16:
+                            devName = 'MMC5603'
                     print(f'detected: {devAddr,devName}')
             except Exception as e:
                 pass#print(f'exc: {devAddr,e}')
