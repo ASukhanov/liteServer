@@ -2,7 +2,7 @@
 For installation: https://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.2.5 2024-05-05'# MMC5603 served, 
+__version__ = 'v3.2.6 2024-05-09'# MMC5983 more efficient sampling, PSD added, continuous mode
 print(f'i2c: {__version__}')
 #TODO: display errors and warnings in device status
 #TODO: the DevClassMap should be incorporated into I2C class
@@ -13,6 +13,7 @@ timer = time.perf_counter
 import struct
 from functools import partial
 import numpy as np
+from scipy import signal
 import ctypes
 c_uint16 = ctypes.c_uint16
 c_uint8 = ctypes.c_uint8
@@ -35,6 +36,7 @@ def tosigned12(n:int):
     return (n ^ 0x800) - 0x800
 
 X,Y,Z,M = 0,1,2,3
+seldomUpdate = 60.# period for slow-changing parameters. e.g. temperature
 
 class I2C():
     """Static class with I2C access methods."""
@@ -102,7 +104,7 @@ class I2CDev():
         self.name = f'I2C{addr[0]}'
         self.addr = addr
         self.model = model
-        self.lastSlowUpdate = 0.
+        self.lastSeldomUpdate = 0.
         self.devLDO = {
             self.name+'_sensor': LDO('R','Sensor model and type',
               f'{model} {sensorType}'),
@@ -386,13 +388,14 @@ class I2C_QMC5883(I2CDev):
 #```````````````````MMC5983MA compass```````````````````````````````````````````
 class I2C_MMC5983MA(I2CDev):
     #TODO: simplify as 5603
-    cm_freq = 0x0# Continuous mode off
     FSR = 8.# Full scale range in Gauss
     bandwidth = {'100':0, '200':1, '400':2, '800':3}# Bandwidth of the decimation filter in Hz, it controls the duration of each measurement
     ICR = [0x09,0x0a,0x0b,0x0c]# Internal control registers
-    control = {'AutoReset':None, 'Off':None, 'Set':(ICR[0],0x08),
-    'Reset':(ICR[0],0x10),'SoftReset':(ICR[1],0x80),
-    'St_enp':(ICR[3],0x02), 'St_enm':(ICR[3],0x04)}
+    control = {'Degauss':None, 'AutoReset':None, 'Off':None, 'Set':(ICR[0],0x08),
+      'Reset':(ICR[0],0x10),'SoftReset':(ICR[1],0x80),
+      'St_enp':(ICR[3],0x02), 'St_enm':(ICR[3],0x04)}
+    continuous_frequency = {'0':0, '1':1, '10':2, '20':3, '50':4, '100':5,
+      '200':6}
 
     def __init__(self, devAddr):
         super().__init__(devAddr, 'Magnetometer', 'MMC5983MA')
@@ -406,20 +409,28 @@ class I2C_MMC5983MA(I2CDev):
         I2C.write_i2c_byte(self.addr, *I2C_MMC5983MA.control['SoftReset'])
         time.sleep(0.01)
         printv(f'MMC5983:MMC5983MA ID: {devID}')
-
+        self.ICR2 = 0
+        self.continuous_interval = 0.
         n = self.name
         self.devLDO.update({
-        n+'_control': LDO('RWE','AutoReset is for normal operations, Set/Reset: pulse the sensor coils, SoftReset clear all registers',
+        n+'_control': LDO('RWE','Degauss: auto compensation, AutoReset: seldom Set/Reset, Set/Reset: pulse the sensor coils, SoftReset clear all registers',
             ['AutoReset'], legalValues=list(I2C_MMC5983MA.control.keys()),
             setter=self.set_control),
+        n+'_continuous': LDO('RWE','Continuous mode frequency', ['0'], 
+            legalValues=list(I2C_MMC5983MA.continuous_frequency), units='Hz',
+            setter=self.set_continuous),
         n+'_bandwidth': LDO('RWE','Bandwidth', ['100'], units='Hz',
             legalValues=list(I2C_MMC5983MA.bandwidth.keys()), setter=self.set_bandwidth),
+        n+'_ICR2': LDO('RWE','Internal control register 2, defines continuous mode',
+            [self.ICR2], setter=self.set_ICR2),
         n+'_samples': LDO('RWE','Number of samples per one poll', [1]),
         n+'_X': LDO('R','X-axis field', [0.], units='G'),
         n+'_Y': LDO('R','Y-axis field', [0.], units='G'),
         n+'_Z': LDO('R','Z-axis field', [0.], units='G'),
         n+'_M': LDO('R','Magnitude', [0.], units='G'),
         n+'_T': LDO('R','Sensor temperature', 0., units='C'),
+        n+'_PSD': LDO('R','Power spectral density', [0.]),
+        n+'_frequency': LDO('R','Frequency scale for PSD', [0.]),
         })
         self.init()
         printv(f'MMC5983:Sensor MMC5983MA created: {n, self.addr}')
@@ -427,68 +438,109 @@ class I2C_MMC5983MA(I2CDev):
     def init(self):
         # init sensor
         I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0], 0x0)
-        I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[2], I2C_MMC5983MA.cm_freq)
+        I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[2], self.ICR2)
         I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[3], 0x0)
         self.set_bandwidth()
 
-    def read(self, timestamp):
-        pv = {'X':[], 'Y':[], 'Z':[], 'M':[]}
+    def _measure(self, comment=''):
+        if self.ICR2 & 0x7 == 0:# Continuous mode is Off
+            # ask to measure field
+            I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0],0x1)
+        # wait for measurement to complete
+        for ntry in range(20):
+            #waittime = max(self.integrationTime, self.continuous_interval.continuous_interval)
+            waittime = 0.0005
+            time.sleep(waittime)
+            status = I2C.read_i2c_byte(self.addr, 0x8)
+            if status&0x1:
+                break
+        #if ntry > 0:    print(f'MMC5983:ntry,status: {ntry,hex(status)}')
+        try:
+            r = I2C.read_i2c_data(self.addr, 0x00, 7)
+        except Exception as e:
+            printw(f'reading {self.name}: {e}')
+            return
+        #printv(f'MMC5983:regs: {[hex(i) for i in r]}')
+        # decode 18-bit values xyz18
+        xyz17_2 = [i for i in struct.unpack('>3H', bytearray(r[:6]))]
+        xyzOut2 = ((r[6]>>6)&3, (r[6]>>4)&3,(r[6]>>2)&3)
+        xyz18 = [((xyz17_2[i])<<2) + xyzOut2[i] for i in range(3)]
+        #printv(f'MMC5983:xyz18: {[hex(i) for i in xyz18]}')
+        xyz = (np.array(xyz18)/0x20000-1.)*I2C_MMC5983MA.FSR
+        #printv(f'MMC5603:xyz in Gauss after {comment}: {xyz}')
+        return xyz
 
+    def _measureCorrected(self, samples=1, degauss=False):
+        """Sample magnetic field
+        degauss: eliminate thermal variations, and residual magnetization
+        """
+        sample_xyzSet = np.zeros(3*samples).reshape((samples,3))
+        sample_xyzReset = np.zeros(3*samples).reshape((samples,3))
+        if degauss:
+            I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0], 0x8)# Do Set, for offset compensation
+            for sample in range(samples):
+                sample_xyzSet[sample] = self._measure('Set')
+            I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0], 0x10)# Do Reset
+            for sample in range(samples):
+                sample_xyzReset[sample] = self._measure('Reset')
+            xyz = (sample_xyzSet.T - sample_xyzReset.T)/2.
+        else:
+            for sample in range(samples):
+                sample_xyzSet[sample] = self._measure('Direct')
+            xyz = sample_xyzSet.T
+        return xyz
+
+    def read(self, timestamp):
+        nsamples = self.ldoValue('_samples')[0]
         ts = time.time()
-        samples = self.ldoValue('_samples')[0]
-        for sample in range(samples):
-            #print(f'sample {sample}')
-            if I2C_MMC5983MA.cm_freq == 0:
-                # ask to measure field
-                I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0],0x1)
-            # wait for measurement to complete
-            for ntry in range(3):
-                time.sleep(self.integrationTime)
-                status = I2C.read_i2c_byte(self.addr, 0x8)
-                if status&0x1:
-                    break
-            printv(f'MMC5983:MStatus = {hex(status)}')
-            try:
-                r = I2C.read_i2c_data(self.addr, 0x00, 7)
-            except Exception as e:
-                printw(f'reading {self.name}: {e}')
-                return
-            printv(f'MMC5983:regs: {[hex(i) for i in r]}')
-            # decode 18-bit values xyz18
-            xyz17_2 = [i for i in struct.unpack('>3H', bytearray(r[:6]))]
-            xyzOut2 = ((r[6]>>6)&3, (r[6]>>4)&3,(r[6]>>2)&3)
-            xyz18 = [((xyz17_2[i])<<2) + xyzOut2[i] for i in range(3)]
-            printv(f'MMC5983:xyz18: {[hex(i) for i in xyz18]}')
-            m2 = 0.
-            for axis,value in zip('XYZ',xyz18):
-                v = (value/0x20000-1.)*I2C_MMC5983MA.FSR
-                pv[axis].append(round(v,6))
-                m2 += v**2
-            # calculate magnitude
-            pv['M'].append(round(float(np.sqrt(m2)),6))
-            printv(f"xyzm {self.name}: {pv['X'],pv['Y'],pv['Z'],pv['M']}")
+        degauss = self.ldoValue('_control')[0] == 'Degauss'
+        try:
+            xyz_samples = self._measureCorrected(nsamples, degauss)
+        except Exception as e:
+            printw(f'MMC5983:Exception in read(): {e}')
+            return
+        rtime = round(time.time()-ts,6)
+        printv(f'MMC5983:xyz_samples:{xyz_samples}')
+
+        xyzMean = xyz_samples.mean(1)
+        xyzSTD = xyz_samples.std(1)
+        magnitude = round(np.sqrt(np.sum(xyzMean**2)),6)
 
         # update PVs
-        rtime = round(time.time()-ts,6)
         self.devLDO[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
-        for suffix,value in pv.items():
-            self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(value, timestamp)
+        if magnitude > 0.:
+            self.devLDO[self.name+'_M'].set_valueAndTimestamp(magnitude, timestamp)
+            for i,suffix in enumerate('XYZ'):
+                self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(\
+                    round(xyzMean[i],6), timestamp)
 
-        # force the temperature update once per 10s
-        tm = time.time()
-        if tm - self.lastSlowUpdate > 10.:
-            self.lastSlowUpdate = tm
+        # calculate PSD
+        if nsamples >= 10:
+            magnitudes = np.sqrt(np.sum(xyz_samples**2,0))
+            #print(f'magn: {magnitudes}')
+            if self.continuous_interval == 0.:
+                sampling_frequency = nsamples/rtime
+            else:
+                sampling_frequency = 1./self.continuous_interval
+            freq, psd = signal.periodogram(magnitudes, sampling_frequency)
+            #print(f'psd: {psd}')
+            #print(f'freq: {freq}')
+            self.devLDO[self.name+'_frequency'].set_valueAndTimestamp(freq[1:], timestamp)
+            self.devLDO[self.name+'_PSD'].set_valueAndTimestamp(psd[1:], timestamp)
+
+        # temperature update
+        if ts - self.lastSeldomUpdate > seldomUpdate:
+            self.lastSeldomUpdate = ts
             # ask to measure temperature
             I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[0],0x2)
             # wait for measurement to complete
             for ntry in range(3):
-                
                 status = I2C.read_i2c_byte(self.addr, 0x8)
                 if status&0x2:
                     break
             temp = I2C.read_i2c_byte(self.addr, 0x7)
             printv(f'MMC5983:TStatus = {hex(status)}, temp: {temp}')
-            temp = round(-75. + temp*0.8,2)
+            temp = round(-75. + temp*0.8, 2)
             self.devLDO[self.name+'_T'].set_valueAndTimestamp(temp, timestamp)
             if self.ldoValue('_control')[0] == 'AutoReset':
                 self.set_reset_coil()
@@ -501,7 +553,7 @@ class I2C_MMC5983MA(I2CDev):
 
     def set_control(self):
         action = self.ldoValue('_control')[0]
-        #printi(f'Control set to {action}')
+        printi(f'Control set to {action}')
         rv = I2C_MMC5983MA.control.get(action)
         if rv is None:
             return
@@ -511,10 +563,31 @@ class I2C_MMC5983MA(I2CDev):
             self.init()
 
     def set_reset_coil(self):
-        printv('MMC5983:>set_reset_coil')
+        printi('MMC5983:>set_reset_coil')
         I2C.write_i2c_byte(self.addr, *I2C_MMC5983MA.control['Set'])
         I2C.write_i2c_byte(self.addr, *I2C_MMC5983MA.control['Reset'])
 
+    def update_ICR2(self):
+        t = time.time()
+        I2C.write_i2c_byte(self.addr, I2C_MMC5983MA.ICR[2], self.ICR2)
+        self.devLDO[self.name+'_ICR2'].set_valueAndTimestamp([self.ICR2], t)
+
+    def set_continuous(self):
+        lv = self.ldoValue('_continuous')[0]
+        self.continuous_interval = 0. if lv == '0' else 1./float(lv)
+        v = I2C_MMC5983MA.continuous_frequency[lv]
+        printi(f'MMC5983:>set_continuous {v}')
+        cmm_en = 0 if v == 0 else 8
+        self.ICR2 = self.ICR2&0xF0
+        self.ICR2 = self.ICR2|(0xF&(cmm_en+v))
+        self.update_ICR2()
+
+    def set_ICR2(self):
+        print(f'ICR2={self.ldoValue("_ICR2")}')
+        self.ICR2 = self.ldoValue('_ICR2')[0]
+        printi(f'MMC5983:>set_ICR2={self.ICR2}')
+        self.update_ICR2()
+        
 #```````````````````MMC5983MA compass```````````````````````````````````````````
 class I2C_MMC5603(I2CDev):
     cm_freq = 0x0# Continuous mode off
@@ -570,6 +643,7 @@ class I2C_MMC5603(I2CDev):
         I2C.write_i2c_byte(self.addr, 0x1D, v[2])
 
     def _measure(self, comment=''):
+        """Measure magnetic field"""
         # ask to measure field
         I2C.write_i2c_byte(self.addr, 0x1B,0x1)
         # wait for measurement to complete
@@ -601,43 +675,55 @@ class I2C_MMC5603(I2CDev):
         printv(f'MMC5603:xyz in Gauss after {comment}: {xyz}')
         return xyz
 
+    def _measureCorrected(self, samples=1, degauss=False):
+        """Sample magnetic field
+        degauss: eliminate thermal variations, and residual magnetization
+        """
+        sample_xyzSet = np.zeros(3*samples).reshape((samples,3))
+        sample_xyzReset = np.zeros(3*samples).reshape((samples,3))
+        if degauss:
+            I2C.write_i2c_byte(self.addr, 0x1B, 0x8)# Do Set, for offset compensation
+            for sample in range(samples):
+                sample_xyzSet[sample] = self._measure('Set')
+            I2C.write_i2c_byte(self.addr, 0x1B, 0x10)# Do Reset
+            for sample in range(samples):
+                sample_xyzReset[sample] = self._measure('Reset')
+            xyz = (sample_xyzSet.T - sample_xyzReset.T)/2.
+        else:
+            for sample in range(samples):
+                sample_xyzSet[sample] = self._measure('Direct')
+            xyz = sample_xyzSet.T
+        return xyz
+
     def read(self, timestamp):
-        ts = time.time()
         status = self.readStatus()
         self.devLDO[self.name+'_status'].set_valueAndTimestamp(status, timestamp)
 
-        samples = self.ldoValue('_samples')[0]
-        sample_xyz = np.zeros(3*samples).reshape((samples,3))
+        nsamples = self.ldoValue('_samples')[0]
+        ts = time.time()
         try:
-            for sample in range(samples):
-                #print(f'sample {sample}')
-                #For Offset compensation
-                I2C.write_i2c_byte(self.addr, 0x1B, 0x8)# Do Set
-                xyz_afterSet = self._measure('Set')
-                I2C.write_i2c_byte(self.addr, 0x1B, 0x10)# Do Reset
-                xyz_afterReset = self._measure('Reset')
-                sample_xyz[sample]  = (xyz_afterSet - xyz_afterReset)/2
+            xyz_samples = self._measureCorrected(nsamples, degauss = True)
         except Exception as e:
             printw(f'MMC5603:Exception in read(): {e}')
             return
-        printv(f'MMC5603:sample_xyz:{sample_xyz}')
-
         rtime = round(time.time()-ts,6)        
-        xyz_sample = sample_xyz.T
-        xyzMean = xyz_sample.mean(1)
-        xyzSTD = xyz_sample.std(1)
+        printv(f'MMC5603:xyz_samples:{xyz_samples}')
+
+        xyzMean = xyz_samples.mean(1)
+        xyzSTD = xyz_samples.std(1)
         magnitude = round(np.sqrt(np.sum(xyzMean**2)),6)
 
         # update PVs
         self.devLDO[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
-        self.devLDO[self.name+'_M'].set_valueAndTimestamp(magnitude, timestamp)
-        for i,suffix in enumerate('XYZ'):
-            self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(\
-                round(xyzMean[i],6), timestamp)
+        if magnitude >0:
+            self.devLDO[self.name+'_M'].set_valueAndTimestamp(magnitude, timestamp)
+            for i,suffix in enumerate('XYZ'):
+                self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(\
+                    round(xyzMean[i],6), timestamp)
 
-        # force the temperature update once per 10s
-        if ts - self.lastSlowUpdate > 10.:
-            self.lastSlowUpdate = ts
+        # force the temperature update
+        if ts - self.lastSeldomUpdate > seldomUpdate:
+            self.lastSeldomUpdate = ts
             # ask to measure temperature
             I2C.write_i2c_byte(self.addr, 0x1B, 0x2)
             # wait for measurement to complete
@@ -669,46 +755,47 @@ class I2C_TLV493D(I2CDev):
             self.name+'_T': LDO('R','Temperature', 0., units='C'),
         })
         regs = I2C.read_i2c_data(self.addr, 0x0, 7)
-        printv(f'regs: {[hex(i) for i in regs]}')
+        printv(f'TLV493:regs: {[hex(i) for i in regs]}')
 
         # Set device to Low-power mode, all other modes can hangup ADC and cause I2C bus locks.
         I2C.write_i2c_byte(self.addr, 1, 0x1)# Low-power mode
         #ISSUE#I2C.write_i2c_byte(self.addr, 1, 0x7)# Master Controlled Mode
-        printv(f'Sensor TLV493D created: {self.name, self.addr}')
+        printv(f'TLV493:Sensor created: {self.name, self.addr}')
 
     def read(self, timestamp):
         # For low power mode we might need to turn Low Power On, wait for DP bit, readout, then set Low Power Off
         m1 = self.UDataMax
         m2 = m1*2
-        ts = timer()
+        ts = time.time()
         # The waiting for conversion does not improve anything
         #while timer()-ts < 0.09:
         r = I2C.read_i2c_data(self.addr, 0x0, 7)
         #    if (r[5])&0x10:# Conversion completed
         #        break
-        #printv(f'r5: {hex(r[5]), round(timer()-ts,6)}')
-        rtime = round(timer()-ts,6)
+        #printv(f'TLV493:r5: {hex(r[5]), round(timer()-ts,6)}')
+        rtime = round(time.time()-ts,6)
         self.devLDO[self.name+'_readout'].set_valueAndTimestamp(rtime, timestamp)
-        printv(f'read: {[hex(i) for i in r]}, {rtime}')
+        printv(f'TLV493:read: {[hex(i) for i in r]}, {rtime}')
         x = tosigned12((r[0]<<4) + ((r[4]>>4)&0xF))
         y = tosigned12((r[1]<<4) + (r[4]&0xF))
         z = tosigned12((r[2]<<4) + (r[5]&0xF))
-        printv(f'xyz: {x,y,z}')
-        m = round(float(np.sqrt(x**2 + y**2 + z**2)), 6)
+        printv(f'TLV493:xyz: {x,y,z}')
+        magnitude = round(float(np.sqrt(x**2 + y**2 + z**2)), 6)
 
         # update parameters
-        for suffix,v in zip('XYZM', (x,y,z,m)):
-            v*= self.LSB
-            self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(v, timestamp)
-        # force the temperature update once per 10s
-        tm = time.time()
-        if tm - self.lastSlowUpdate > 10.:
-            self.lastSlowUpdate = tm
+        if magnitude > 0:
+            for suffix,v in zip('XYZM', (x,y,z,magnitude)):
+                v*= self.LSB
+                self.devLDO[self.name+'_'+suffix].set_valueAndTimestamp(v, timestamp)
+
+        # temperature update
+        if ts - self.lastSeldomUpdate > seldomUpdate:
+            self.lastSeldomUpdate = ts
             t7_0 = r[6]#I2C.read_i2c_byte(self.addr, 6)
             t11_8 = r[3]#I2C.read_i2c_byte(self.addr, 3)
             tbits = ((t11_8&0xF0)<<4) + t7_0
             t = (tbits - 340.)*self.LSBT + 25.
-            printv(f'(tempTLV: {hex(t7_0), hex(t11_8), hex(tbits), t}')
+            printv(f'TLV493:(tempTLV: {hex(t7_0), hex(t11_8), hex(tbits), t}')
             self.devLDO[self.name+'_T'].set_valueAndTimestamp(t, timestamp)
 
 #```````````````````ADS1115, ADS1015```````````````````````````````````````````
