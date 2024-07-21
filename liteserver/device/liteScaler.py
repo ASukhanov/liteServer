@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
+__version__ = '3.1.2 2024-06-06'#
 
 import sys, time, threading
 timer = time.perf_counter
@@ -61,10 +61,10 @@ class Scaler(Device):
           'udpSpeed':   LDO('R', 'Instanteneous socket.send speed', 0., units='MB/s'),
         }
         super().__init__(name, pars)
-        self.start()
+        self.set_run(pargs.run)
+
     #``````````````Overridables```````````````````````````````````````````````        
     def start(self):
-        printi('liteScaler started')
         thread = threading.Thread(target=self._state_machine)
         thread.daemon = False
         thread.start()
@@ -90,6 +90,7 @@ class Scaler(Device):
 
     def set_number(self):
         print('Setting number to '+str(self.PV['number'].value))
+        return True
 
     def set_text(self):
         msg = 'Setting text to '+str(self.PV['text'].value)
@@ -100,6 +101,7 @@ class Scaler(Device):
         self.PV['time'].value = time.time()
 
     def _state_machine(self):
+        printi('LiteScaler started')
         time.sleep(.2)# give time for server to startup
         pv_status = self.PV['status']
         pv_cycle = self.PV['cycle']
@@ -153,7 +155,7 @@ class Scaler(Device):
             #pv_image.value[0] = (pv_image.value[0] + 1).astype('uint8')
 
             # change only one pixel            
-            pv_image.value[0,0,0] = np.uint8(pv_cycle.value)
+            pv_image.value[0,0,0] = np.uint8(pv_cycle.value&0xFF)
      
             pv_cycle.value += 1
 
@@ -184,7 +186,7 @@ class Scaler(Device):
                 pv_dataSize.value = round(shippedBytes/1000.,1)
                 pv_chunks.value = (shippedBytes-1)//liteserver.ChunkSize + 1
                 maxChanks = max(maxChanks, pv_chunks.value)
-        print('Scaler '+self.name+' exit')
+        printi('LiteScaler '+self.name+' stopped')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 if __name__ == "__main__":
     # parse arguments
@@ -204,6 +206,8 @@ if __name__ == "__main__":
       #the UDP socket size is limited to 64k bytes
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port.') 
+    parser.add_argument('-r','--run',  default='Start', choices=['Start','Stop'],
+    help='Start the run')
     parser.add_argument('-s','--scalers', type=int, default=1, help=\
     'Number of devices/scalers.')
     parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')

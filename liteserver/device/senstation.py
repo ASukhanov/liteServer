@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.2.5 2024-05-02'# DHT disabled by default
+__version__ = '3.2.6 2024-07-21'# _muxAddr=0 disables I2C
 
 #TODO: take care of microsecond ticks in callback
 
@@ -147,7 +147,7 @@ class SensStation(Device):
         ldos = {}
 
         # Add I2C devices
-        if pargs.muxAddr:
+        if pargs.muxAddr is not None:
             from liteserver.device import i2c
             self.I2C = i2c.I2C
             self.I2C.verbosity = pargs.verbose
@@ -304,12 +304,13 @@ class SensStation(Device):
             waitTime = self.PV['cyclePeriod'].value[0] - dt
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
-            for i2cDev in self.I2C.DeviceMap.values():
-                if True:#try:
-                    i2cDev.read(timestamp)
-                else:#except Exception as e:
-                    printw(f'Exception in threadRun: {e}')
-                    continue
+            if pargs.muxAddr:
+                for i2cDev in self.I2C.DeviceMap.values():
+                    if True:#try:
+                        i2cDev.read(timestamp)
+                    else:#except Exception as e:
+                        printw(f'Exception in threadRun: {e}')
+                        continue
             self.PV['cycle'].value[0] += 1
             self.PV['cycle'].timestamp = timestamp
             self.PV['period'].set_valueAndTimestamp([period])
@@ -403,8 +404,8 @@ if __name__ == "__main__":
     parser.add_argument('-m','--muxMask', default='11111111', help=\
     ('Mask of enabled channels of I2C multiplexer (if it is present).'
     'If 0 then all channels will be enabled but not processed'))
-    parser.add_argument('-M','--muxAddr', type=int, default=0x77, help=\
-    'I2C address of the multiplexer')
+    parser.add_argument('-M','--muxAddr', type=int, help=\
+    'I2C address of the multiplexer. If None then I2C will be disabled. If it did not find mux, then it will scan I2C bus for recognizable devices')
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port, default: 9700')
     parser.add_argument('-s','--serial', default = '', help=\

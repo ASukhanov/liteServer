@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """LiteServer for USB cameras"""
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
-#TODO: sometimes it does not start/stop nicely, Action required: disconnect camera, then run guvcview
+__version__ = '3.2.6 2024-07-18'# start/stop
 
 import sys, time, threading
 timer = time.perf_counter
@@ -47,7 +46,9 @@ class Camera(Device):
             = ['On','Off']),
         }
         super().__init__(name,pars)
-
+        self.start()
+        
+    def start(self):
         #````````````````````camera initialization
         # capture from the LAST camera in the system
         # presumably, if the system has a built-in webcam it will be the first
@@ -58,21 +59,23 @@ class Camera(Device):
                 # break
         i = 0
         cv2_cap = cv2.VideoCapture(i)
-        print(f'Camera is opened {i}') 
         if not cv2_cap.isOpened():
-            print("Camera not found!")
+            printe("Camera not found!")
             exit(1)
 
         self._cv2_cap = cv2_cap
         #cv2.namedWindow("lepton", cv2.WINDOW_NORMAL)
-
-        thread = threading.Thread(target=self._state_machine)
-        thread.daemon = False
+        thread = threading.Thread(target=self._state_machine, daemon = False)
+        self.stopped = False
         thread.start()
-        #print(f'thread started: {threading.enumerate()}')
-        
+
+    def stop(self):
+        self.stopped = True
+
     def _state_machine(self):
         while not self.EventExit.is_set():
+            if self.stopped:
+                break
             EventExit.wait(self.PV['sleep'].value[0])
             ret, img = self._cv2_cap.read()
             if not ret:

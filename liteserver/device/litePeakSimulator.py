@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.2.1 2024-02-27'# xStatic added
+__version__ = '3.2.2 2024-05-18'# verbose, 
 
 import sys, time, threading
 timer = time.perf_counter
 import numpy as np
 
 from .. import liteserver
+from . import helpers
+
 LDO = liteserver.LDO
 Device = liteserver.Device
 xScale = 0.1
 
 #````````````````````````````Helper functions`````````````````````````````````
+
+printi = helpers.printi
+
+def printv(msg, level=0):
+    return helpers.printv(liteserver.Server.Dbg, level)
+
+
 def gaussian(x, sigma):
     """Function, representing gaussian peak shape"""
     try: r = np.exp(-0.5*(x/sigma)**2) 
@@ -71,10 +80,15 @@ class Dev(Device):
         super().__init__(name, pars)
 
         self.set_peaks()
+        self.start()
 
-        thread = threading.Thread(target=self._state_machine)
-        thread.daemon = False
+    def start(self):
+        thread = threading.Thread(target=self.procThread, daemon = False)
+        self.stopped = False
         thread.start()
+
+    def stop(self):
+        self.stopped = True
 
     def update_peaks(self):
         pars = self.PV['background'].value + self.PV['peakPars'].value
@@ -90,7 +104,6 @@ class Dev(Device):
         ,self.PV['background'], self.PV['peakPars'], self.PV['noise'])}
         self.PV['x'].value = Dev.xVals*xScale
         self.PV['y'].value = self.update_peaks()
-        #print(f'y:{self.PV['y'].value}')
 
     def swing_peaks(self):
         n = self.PV['nPoints'].value[0]
@@ -98,7 +111,8 @@ class Dev(Device):
         for i in range(0,len(self.PV['peakPars'].value),3):
             self.PV['peakPars'].value[i] += deviation
 
-    def _state_machine(self):
+    def procThread(self):
+        printi('procThread of '+self.name+' started')
         time.sleep(.2)# give time for server to startup
 
         self.PV['cycle'].value = 0
@@ -106,14 +120,15 @@ class Dev(Device):
         timestamp = time.time()
         periodic_update = timestamp
         while not self.EventExit.is_set():
+            if self.stopped:
+                break
             waitTime = 1./self.PV['frequency'].value[0] - (time.time() - timestamp)
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
             dt = timestamp - periodic_update
             if dt > 10.:
                 periodic_update = timestamp
-                if server.Dbg > 0:
-                    print(f"cycle of {self.name}:{self.PV['cycle'].value}, wt:{round(waitTime,4)}")
+                printv(f"cycle of {self.name}:{self.PV['cycle'].value}, wt:{round(waitTime,4)}")
                 #print(f'periodic update: {dt}')
                 msg = f'periodic update {self.name} @{round(timestamp,3)}'
                 self.PV['status'].value = msg
@@ -136,8 +151,7 @@ class Dev(Device):
                 i.timestamp = timestamp
 
             shippedBytes = self.publish()
-
-        print('liteSimPeaks '+self.name+' exit')
+        printi('procThread of '+self.name+' exit')
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 if __name__ == "__main__":
     import argparse
@@ -177,13 +191,14 @@ if __name__ == "__main__":
         'Serving port, default: 9700')
     parser.add_argument('-s','--swing', type=float, default=1., help=\
         'Relative amplitude in %% of the horizontal peak oscillations')
-    parser.add_argument('-v','--verbose', nargs='*', help='Show more log messages.')
+    parser.add_argument('-v', '--verbose', action='count', default=0, help=\
+      'Show more log messages (-vv: show even more).')
     pargs = parser.parse_args()
 
     pargs.background = [float(i) for i in pargs.background.split(',')]
     pargs.peaks = [float(i) for i in pargs.peaks.split(',')]
 
-    liteserver.Server.Dbg = 0 if pargs.verbose is None else len(pargs.verbose)+1
+    liteserver.Server.Dbg = pargs.verbose
     devices = [Dev('dev1', no_float32=pargs.doubles)]
 
     server = liteserver.Server(devices, interface=pargs.interface,

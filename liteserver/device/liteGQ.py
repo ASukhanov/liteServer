@@ -22,10 +22,10 @@ from . import helpers
 def printi(msg):  helpers.printi(msg)
 def printe(msg):
     helpers.printe(msg)
-    if MgrInstance is not None: MgrInstance.set_status('ERROR: '+msg)
+    if MgrInstance is not None: MgrInstance.set_status('ERR: '+msg)
 def printw(msg):
     helpers.printw(msg)
-    if MgrInstance is not None: MgrInstance.set_status('WARNING: '+msg)
+    if MgrInstance is not None: MgrInstance.set_status('WAR: '+msg)
 def printv(msg):  helpers.printv(msg, pargs.verbose)
 def printvv(msg): helpers.printv(msg, pargs.verbose, level=1)
 
@@ -58,9 +58,10 @@ class GeigerCounterGQ(Device):
         self.start()
 
     def start(self):
-        print(f'>start')
+        printi(f'>start')
         try:    GeigerCounterGQ.SerialDev.close()
         except: pass
+        self.stopped = False
         dev,r = find_serialDevice('<GETVER>>,GMC-500', 115200,
             timeout=pargs.timeout, verbose=pargs.verbose)
         if dev is None:
@@ -73,16 +74,19 @@ class GeigerCounterGQ(Device):
         self.set_status('Device started')
 
     def stop(self):
-        print(f'>stop')
+        printi(f'>stop')
+        self.stopped = True
 
     def poll(self):
         """Called periodically from server."""
+        if self.stopped:
+            return
         printv(f'>poll')
         prevRunStatus = self.PV['run'].value[0]
         if Device.server.PV['run'].value[0][:4] =='Stop':
             self.PV['run'].value[0] = 'Stopped'
         else:
-            self.PV['run'].value[0] = 'Running'
+            self.PV['run'].value[0] = 'Started'
 
         #TODO the following does not update the parameter
         if self.PV['run'].value[0] != prevRunStatus:
@@ -99,8 +103,8 @@ class GeigerCounterGQ(Device):
         try:
             r = query(b'<GETCPM>>')
         except Exception as e:
-            print(f'ERROR getting data: {e}')
-            self.exit()
+            printw(f'getting data: {e}')
+            #self.exit()
             return
         if len(r) != 4:
             self.set_status(f'ERROR: GETCPM={r}')
@@ -146,7 +150,7 @@ class GeigerCounterGQ(Device):
             msg = 'OK'
         self.set_status(msg)
         time.sleep(.1)
-        self.PV['run'].value[0] = 'Running'
+        self.PV['run'].value[0] = 'Started'
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     #``````````````Device-specific methods````````````````````````````````````
     def set_status(self, msg):
@@ -160,9 +164,9 @@ class GeigerCounterGQ(Device):
                     spar.timestamp = tt
                     parts[0] += f'{spar.value}: '
                 msg = parts[0]+parts[1]
-            printw(msg)
         except Exception as e:
-            printw(f'exception in set_status "{msg}": {e}')
+            #printw(f'exception in set_status "{msg}": {e}')
+            pass
         self.PV['status'].value = msg
         self.PV['status'].timestamp = tt
         self.publish()
@@ -180,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('-i','--interface', default = defaultIP, help=\
     'Network interface.')
     parser.add_argument('-t','--timeout',type=float,default=0.2\
-    ,help='serial port timeout')# 0.1 is too fast for reading from VGM 
+    ,help='serial port timeout')
     parser.add_argument('-v','--verbose', nargs='*', help=\
         'Show more log messages, (-vv: show even more).')
     pargs = parser.parse_args()

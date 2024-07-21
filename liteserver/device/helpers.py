@@ -16,9 +16,7 @@ def printe(msg, limit=200):
     msg = croppedText(msg, limit)
     print(f'ERR_@{printTime()}: {msg}')
 
-def printv(msg, verbose, level=0):
-    if verbose is None:
-        return
+def printv(msg, verbose=1, level=0):
     if verbose > level:
         print(f'DBG{level}: {msg}')
 

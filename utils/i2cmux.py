@@ -1,6 +1,6 @@
 """Detect I2C devices on multiplexed I2C bus.
 """
-__version__ = '3.2.5 2024-05-06'# MMC5603 served
+__version__ = '3.2.5 2024-05-31'# 
 
 DeviceName = {# map of known address:deviceName
 0x0d:'QMC5883',
@@ -14,7 +14,7 @@ DeviceName = {# map of known address:deviceName
 I2CBus = 1 # Rpi I2C bus is 1
 from smbus2 import SMBus as I2CSMBus
 SMBus = I2CSMBus(I2CBus)
-print(f'I2CSMBus opened: using smbus package')
+#print(f'I2CSMBus opened: using smbus package')
 
 def read_i2c_byte(addr:int, reg:int):
     return SMBus.read_byte_data(addr, reg)
@@ -26,7 +26,7 @@ def write_i2cMux(value):
     if pargs.muxAddr is None:
         return
     try:
-        print(f'write_i2cMux: {value}')
+        #print(f'write_i2cMux: {value}')
         write_i2c_byte(pargs.muxAddr, 0, value)
     except:
         print((f'There is no I2C mux at {pargs.muxAddr},'
@@ -50,13 +50,13 @@ def i2cDeviceMap(mask=0xff):
                 h = read_i2c_byte(devAddr, 0)
                 if devAddr < 0x70:# if it is not a multiplexer
                     devName = DeviceName.get(devAddr, 'Unknown')
-                    r[(subbus,devAddr)] = devName
                     if devAddr == 0x30:
                         productID = read_i2c_byte(devAddr, 0x39)
                         #print(f'productID={productID}')
                         if productID == 16:
                             devName = 'MMC5603'
-                    print(f'detected: {devAddr,devName}')
+                    r[(subbus,devAddr)] = devName
+                    #print(f'detected: {devAddr,devName}')
             except Exception as e:
                 pass#print(f'exc: {devAddr,e}')
         return r
@@ -68,7 +68,7 @@ def i2cDeviceMap(mask=0xff):
         chmask = 1<<ch
         if mask&chmask == 0:
             continue
-        print(f'scanning sub-bus {ch}')
+        #print(f'scanning sub-bus {ch}')
         write_i2cMux(chmask)
         if pargs.muxAddr is None:
             return scan(0)
@@ -87,8 +87,11 @@ parser.add_argument('mask', default='11111111', nargs='?', help=\
 ' If 0 then no channels selected, power-up/reset default state.'))
 pargs = parser.parse_args()
 pargs.mask = int(pargs.mask,2)
-print(f'mask: {hex(pargs.mask)}')
+print(f'Mux.ID: {pargs.muxAddr}, mask: {hex(pargs.mask)}')
 
-print(f'muxAddr: {type(pargs.muxAddr), pargs.muxAddr}')
+#print(f'muxAddr: {type(pargs.muxAddr), pargs.muxAddr}')
 I2CDeviceMap = i2cDeviceMap(pargs.mask)
-print(f'I2C devices detected: {I2CDeviceMap}')
+print('I2C devices detected:\n(Bus,ID),Device')
+for key,value in I2CDeviceMap.items():
+    print(f' {key},{value}')
+

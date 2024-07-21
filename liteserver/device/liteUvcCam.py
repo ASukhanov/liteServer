@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """LiteServer for an USB camera using pyuvc"""
-__version__ = '3.1.0 2023-08-23'# from .. import liteserver
+__version__ = '3.2.0 2024-07-20'# to work with liteserver 3.2
 print(f'liteUvcCam {__version__}')
 
 import sys, time, threading
@@ -17,7 +17,6 @@ from .. import liteserver
 LDO = liteserver.LDO
 Device = liteserver.Device
 EventExit = Device.EventExit
-printd = liteserver.printd
 
 #````````````````````````````Helper functions`````````````````````````````````
 def printw(msg): print('WARNING: '+msg)
@@ -42,7 +41,7 @@ class Camera(Device):
           'shape':  LDO('R','Frame shape Y,X,Planes', [0,0,0]),
           'fps':    LDO('R','Frames/s', [0]),
           'imgps':  LDO('R','Images/s', [0], units='img/s'),
-          'subscribe': LDO('RWE','Subscribe to image', ['On'],legalValues\
+          'subscribe': LDO('RWE','Enablw subscribtion to image', ['On'],legalValues\
             = ['On','Off']),
         }
         super().__init__(name,pars)
@@ -66,39 +65,36 @@ class Camera(Device):
         
     def _state_machine(self):
         time.sleep(0.1)# give time for Device to initialize
-        v = Device.server.version.value[0]
-        Device.server.version.value[0] = 'UVC'+v
-        Device.server.version.timestamp = time.time()
 
         periodic_update = time.time()
         periodic_count = 0
         while not EventExit.is_set():
-            EventExit.wait(self.sleep.value[0])
+            EventExit.wait(self.PV['sleep'].value[0])
             try:
                 frame = self._cap.get_frame_robust()
             except Exception as e:
                 printe(f'in get_frame: {e}')
                 continue
             timestamp = time.time()
-            self.count.value[0] += 1
-            self.count.timestamp = timestamp
+            self.PV['count'].value[0] += 1
+            self.PV['count'].timestamp = timestamp
             dt = timestamp - periodic_update
             if dt > 1.:
                 periodic_update = timestamp
                 #print(f'periodic update: {dt}')
-                di = self.count.value[0] - periodic_count
-                periodic_count = self.count.value[0]
-                self.imgps.value[0] = round(di/dt,4)
-                self.imgps.timestamp = timestamp
+                di = self.PV['count'].value[0] - periodic_count
+                periodic_count = self.PV['count'].value[0]
+                self.PV['imgps'].value[0] = round(di/dt,4)
+                self.PV['imgps'].timestamp = timestamp
                 #print(f'periodic update: {di/dt}')
             img = frame.img
             #print(f'img.shape {img.shape}, data: {str(img)[:200]}...\n')
-            if self.shape.value[0] == 0:
-                self.shape.value = img.shape
-                self.shape.timestamp = timestamp
-            self.image.value = img
-            if self.subscribe.value[0] == 'On':
-                self.image.timestamp = timestamp
+            if self.PV['shape'].value[0] == 0:
+                self.PV['shape'].value = img.shape
+                self.PV['shape'].timestamp = timestamp
+            self.PV['image'].value = img
+            if self.PV['subscribe'].value[0] == 'On':
+                self.PV['image'].timestamp = timestamp
             #msg=f'Ready to publish@{timestamp}'
             #self.status.value[0] = msg
             #self.status.timestamp = timestamp

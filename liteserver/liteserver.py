@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.2.7 2024-07-20'# error handling in ip_address(), run start/Stop
+__version__ = '3.3.0 2024-07-20'# error handling in ip_address(), run start/Stop
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
