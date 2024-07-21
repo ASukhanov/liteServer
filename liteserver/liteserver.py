@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.2.5 2024-05-06'# minor
+__version__ = '3.2.7 2024-07-20'# error handling in ip_address(), run start/Stop
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -84,9 +84,12 @@ def printvv(msg):
 def ip_address(interface = ''):
     """Platform-independent way to get local host IP address"""
     def ip_fromGoogle():
-        ipaddr = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
-          for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
-        printi(f'IP address {ipaddr} is obtained using Google')
+        try:
+            ipaddr = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
+              for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+            printi(f'IP address {ipaddr} is obtained using Google')
+        except:
+            ipaddr = 'localhost'
         return ipaddr
     if len(interface) > 0:
         #assume it is linux
@@ -229,7 +232,7 @@ class LDO():
 
         prev = self.value
         if valueType != type(None):
-            printv(f'set {self.name}={vals}')
+            printv(f'set value {self.name}={vals}')
             self.value = vals
         self.timestamp = time.time()
 
@@ -261,11 +264,12 @@ class Device():
         self.name = name
         self.lastPublishTime = 0.
         self.subscribers = {}
+        self.alreadyRunning = False
 
         requiredParameters = {
-          'run':    LDO('RWE','Stop/Run/Exit', ['Running'],legalValues\
-            = ['Run','Stop', 'Exit'] if self.name == 'server' else ['Run','Stop']\
-            , setter=self._set_run),
+          'run':    LDO('RWE','Start/Stop/Exit', ['Started'],legalValues\
+            = ['Start','Stop', 'Exit'] if self.name == 'server' else ['Start','Stop']\
+            , setter=self.set_run),
           'status': LDO('RWE','Device status', ['']),
         }
         self.PV = requiredParameters
@@ -413,24 +417,29 @@ class Device():
         #print('<pub')
         return bytesShipped
 
-    def _set_run(self):
-        """special treatment of the setting of the 'run' parameter"""
-        val = self.PV['run'].value[0]
-        printv(f'_set_run {val}')
-        if val == 'Stop':
-            val = 'Stopped'
+    def set_run(self, state=None):
+        """Special treatment of the setting of the 'run' parameter"""
+        if state == None:
+            state = self.PV['run'].value[0]
+        printi(f'>setter for run = {state}')
+        if state == 'Stop':
+            state = 'Stopped'
+            self.alreadyRunning = False
             self.stop()
-        elif val == 'Run':
-            val = 'Running'
+        elif state == 'Start':
+            if self.alreadyRunning:
+                raise ValueError('LS: already running')
+            state = 'Started'
+            self.alreadyRunning = True
             self.start()
-        elif val == 'Exit':
+        elif state == 'Exit':
             printi('Exiting server')
             Device.EventExit.set()
             time.sleep(1)
             sys.exit()
         else:
-            raise ValueError(f'LS:not accepted setting for "run": {val}') 
-        self.PV['run'].value[0] = val
+            raise ValueError(f'LS:not accepted setting for "run": {state}') 
+        self.PV['run'].value[0] = state
 
     def poll(self):
         """Override this method if device need to react on periodic polling 
@@ -444,10 +453,12 @@ class Device():
 
     def stop(self):
         """Overriddable. Called when run is stopped."""
+        printw('Device.stop() is not provided!')
         pass
 
     def start(self):
         """Overriddable. Called when run is started."""
+        printw('Device.start() is not provided!')
         pass
 
     def exit(self):
@@ -534,7 +545,7 @@ def _replyData(cmdArgs):
             except: pass
         else:   
             propNames = '*' if cmd == 'info' else 'value'
-        printvv(f'cnsHost,devName,vals: {cnsHost,devName,vals}')
+        printvv(f'cnsHost,dev,par,vals: {cnsHost,devName,parNames,vals}')
         if devName == '*':
             returnedDict = {cnsHost:{}}
             for devName in Server.DevDict:
@@ -549,6 +560,7 @@ def _replyData(cmdArgs):
               cnsDevName, propNames, vals)
             #printv(croppedText(f'additional devDict: {additionalDevDict}'))
             returnedDict.update(additionalDevDict)
+    printvv(f'<_replyData: {returnedDict}')
     return returnedDict
 
 def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
@@ -625,7 +637,6 @@ def _process_parameters(cmd, parNames, cnsDevName, propNames, vals):
             if not isinstance(val,(list,array.array)):
                 val = [val]
             if True:#try:
-                printv(f'set: {dev.name}:{parName}={val}')
                 pv.set(val)
             else:#except Exception as e:
                 msg = f'in set {parName}: {e}'
@@ -743,8 +754,7 @@ def handle_socketData(data:str, sockAddr=None):
         printv(f'Retransmit {cmdArgs} from {sockAddr}, ackCount:{_myUDPServer.ackCounts.keys()}')
         if not sockAddr in _myUDPServer.ackCounts:
                 printw(f'sockaddr wrong\n{sockAddr}')
-                #for key in _myUDPServer.ackCounts:
-                #    print(key)
+                return
                 
         #printw(croppedText(f'Retransmitting: {cmd}'))#: {_myUDPServer.ackCounts[sockAddr][0],_myUDPServer.ackCounts[sockAddr][1].keys()}'))
         offsetSize = tuple(cmdArgs[1])
