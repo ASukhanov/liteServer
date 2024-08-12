@@ -36,6 +36,9 @@ python3 liteServer/utils/i2cmux.py -M112
 I2C devices detected: {(1, 30): 'HMC5883', (2, 48): 'MMC5983MA', (3, 72): 'ADS1115', (4, 94): 'TLV493D'}
 ```
 # UVC Camera
+For camera installation refer:<br>
+https://docs.arducam.com/UVC-Camera/Quick-Start-Guide%28USB2%29/Linux/
+
 If camera fails to open with error message:<br>
 uvc_bindings.OpenError: Could not open device. Error: Access denied<br>
 Then you need to setup udev rules and add the target user to the plugdev group to avoid the privileged access requirement:
@@ -45,5 +48,6 @@ sudo udevadm trigger
 sudo usermod -a -G plugdev $USER
 # logout and back in
 ```
+To change camera setting use following program: ```qv4l2```.
 
 
