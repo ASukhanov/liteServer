@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """LiteServer for an USB camera using pyuvc"""
-__version__ = '3.2.0 2024-07-20'# to work with liteserver 3.2
+__version__ = '3.2.0 2024-08-10'# Camera selection.
 print(f'liteUvcCam {__version__}')
 
 import sys, time, threading
@@ -48,8 +48,15 @@ class Camera(Device):
 
         dev_list = uvc.device_list()
         print(dev_list)
-        self._cap = uvc.Capture(dev_list[0]["uid"])
-        print(f'available modes: {self._cap.avaible_modes}')
+        idx = int(name[-1]) - 1
+        usbDev = dev_list[idx]["uid"]
+        print(f'Opening USB capture device: {usbDev}')
+        if True:#try:
+            self._cap = uvc.Capture(usbDev)
+        else:#except:
+            printe(f'Could not open camera {name}, try another one')
+            sys.exit(1)
+        print(f'available modes: {self._cap.available_modes}')
         frame_mode = (640, 480, 30)
         try:
             self._cap.frame_mode = (640, 480, 30)
@@ -113,10 +120,12 @@ parser.add_argument('-d','--dbg', action='store_true', help='debugging')
 defaultIP = liteserver.ip_address('')
 parser.add_argument('-i','--interface', default = defaultIP, help=\
 'network interface')
+parser.add_argument('camera', default = 'cam1', help=\
+'Selected camera, eg cam1/cam2/...')
 pargs = parser.parse_args()
 
 devices = [
-  Camera('cam1'),
+  Camera(pargs.camera),
 ]
 
 print('Serving:'+str([dev.name for dev in devices]))
