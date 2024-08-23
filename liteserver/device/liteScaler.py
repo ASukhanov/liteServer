@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '3.1.2 2024-06-06'#
+__version__ = '3.1.3 2024-08-21'# publishingSpeed was not showing 0.
 
 import sys, time, threading
 timer = time.perf_counter
@@ -178,8 +178,7 @@ class Scaler(Device):
 
             ts = timer()
             shippedBytes = self.publish()
-
-            if shippedBytes:
+            if True:#shippedBytes:
                 ss = round(shippedBytes / (timer() - ts) / 1.e6, 3)
                 #print(f'sb: {shippedBytes}')            
                 pv_publishingSpeed.value = ss
