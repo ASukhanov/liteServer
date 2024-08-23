@@ -178,7 +178,7 @@ if __name__ == "__main__":
     , help=('Three coefficients (comma-separated) of the quadratic background'))
     parser.add_argument('-d','--doubles', action='store_true'
     , help='Encode floats as doubles, use it when you need precision higher than 7 digits')
-    parser.add_argument('-F','--frequency', type=float, default=1000., help=\
+    parser.add_argument('-F','--frequency', type=float, default=10., help=\
         'Update frequency [Hz]')
     parser.add_argument('-i','--interface', default = '', help=\
     'Network interface. Default is the interface, which is connected to internet')
