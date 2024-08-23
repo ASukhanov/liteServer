@@ -12,7 +12,7 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors
 """
-__version__ = '3.2.6 2024-07-21'# _muxAddr=0 disables I2C
+__version__ = '3.3.0 2024-07-23'# muxAddr is tested for None
 
 #TODO: take care of microsecond ticks in callback
 
@@ -292,11 +292,19 @@ class SensStation(Device):
         printi('threadRun started')
         timestamp = time.time()
         prevcurtime = timestamp
-        last_seldom_update = timestamp
+        last_seldom_update = 0
         self.prevCPUTempTime = 0.
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
                 break
+            # do a less frequent tasks in a thread
+            dt = timestamp - last_seldom_update
+            if dt > Seldom_update_period:
+                last_seldom_update = timestamp
+                thread = threading.Thread(target=self.seldomThread)
+                thread.start()
+
+            # wait for next time interval
             curtime = time.time()
             period = round(curtime - prevcurtime,6)
             prevcurtime = curtime
@@ -304,7 +312,9 @@ class SensStation(Device):
             waitTime = self.PV['cyclePeriod'].value[0] - dt
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
-            if pargs.muxAddr:
+
+            # collect data
+            if pargs.muxAddr is not None:
                 for i2cDev in self.I2C.DeviceMap.values():
                     if True:#try:
                         i2cDev.read(timestamp)
@@ -320,12 +330,6 @@ class SensStation(Device):
                 self.set_RGB()
             self.publish()# publish all fresh parameters
 
-            # do a less frequent tasks in a thread
-            dt = timestamp - last_seldom_update
-            if dt > Seldom_update_period:
-                last_seldom_update = timestamp
-                thread = threading.Thread(target=self.seldomThread)
-                thread.start()
         printi('threadRun stopped')
         self.stop()
 
