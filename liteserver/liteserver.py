@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.0 2024-07-20'# error handling in ip_address(), run start/Stop
+__version__ = '3.3.1 2024-08-22'# error handling in ip_address(), run start/Stop
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -240,7 +240,8 @@ class LDO():
         #print('self._setter of %s is %s'%(self.name,self._setter))
         if self._setter is not None:
             try:
-                self._setter() # (self) is important!
+                with publish_Lock:
+                    self._setter() # (self) is important!
             except:
                 self.value = prev
                 raise
@@ -355,11 +356,10 @@ class Device():
         """
         if len(self.subscribers) == 0:
             return 0
-        printvv('>publish')
         bytesShipped = 0
         blocked = not publish_Lock.acquire(blocking=False)
         if blocked:
-            #printv(f'publishing for {self.name} is blocked, waiting for lock release')
+            printi(f'publishing for {self.name} is blocked, waiting for lock release')
             ts = time.time()
             publish_Lock.acquire(blocking=True)
             printi(f'publishing for {self.name} is unblocked after {round(time.time()-ts,6)}s')
@@ -388,7 +388,10 @@ class Device():
                     Server.Perf['ItemsLost'] = itemsLost
                     self.subscribers[hostPort][2] = itemsLost
                     with ackCount_Lock:
-                        _myUDPServer.ackCounts[sockAddr][0] = MaxAckCount
+                        try:
+                            _myUDPServer.ackCounts[sockAddr][0] = MaxAckCount
+                        except KeyError:
+                            printw('Logic error in line 394')
                 if itemsLost >= ItemLostLimit:
                     printw((f'Subscription to {hostPort} cancelled, it was '\
                     f'not acknowledging for {itemsLost} delivery of:\n'\
@@ -400,7 +403,10 @@ class Device():
                     Device.server.PV['clientsInfo'].timestamp = currentTime
                     continue
               else:
-                self.subscribers[hostPort][2] = 0# reset itemsLost counter
+                try:
+                    self.subscribers[hostPort][2] = 0# reset itemsLost counter
+                except KeyError:
+                    printw('Logic error at line 409')
 
             # do publish
             self.subscribers[hostPort][3] = currentTime# update lastDelivered time
