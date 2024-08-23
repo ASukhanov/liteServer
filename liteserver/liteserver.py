@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.1 2024-08-22'# error handling in ip_address(), run start/Stop
+__version__ = '3.3.1 2024-08-22'# setters are blocking, they could interfere with publishing
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -359,7 +359,7 @@ class Device():
         bytesShipped = 0
         blocked = not publish_Lock.acquire(blocking=False)
         if blocked:
-            printi(f'publishing for {self.name} is blocked, waiting for lock release')
+            #printv(f'publishing for {self.name} is blocked, waiting for lock release')
             ts = time.time()
             publish_Lock.acquire(blocking=True)
             printi(f'publishing for {self.name} is unblocked after {round(time.time()-ts,6)}s')
