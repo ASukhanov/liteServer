@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.2.2 2024-05-18'# verbose, 
+__version__ = '3.2.3 2024-09-02'# noise is gaussian, x is sinusoidal
 
 import sys, time, threading
 timer = time.perf_counter
@@ -38,16 +38,15 @@ def func_sum_of_peaks(xx, *par):
         s += par[i+2]*gaussian(xx-par[i],par[i+1])
     return s
 
+def noisyArray(size):
+    return np.random.normal(scale=0.5,size=size)
+
 def peaks(x, *par, noiseLevel=0.):
     """Generate multiple peaks and noise"""
     x = np.array(x)
     n = len(x)
-    noise = np.random.rand(n)
-    noise = noise * noiseLevel
-    noise += noiseLevel*noiseLevel
-    #print(f'peaks.par: {par}')
     v = func_sum_of_peaks(x, *par)
-    return v + noise
+    return v + noisyArray(n)*noiseLevel
 #````````````````````````````Lite Data Objects````````````````````````````````
 class Dev(Device):
     """ Derived from liteserver.Device.
@@ -140,7 +139,8 @@ class Dev(Device):
 
             if self.PV['swing'].value[0] != 0.:
                 self.swing_peaks()
-            self.PV['x'].value += 0.001*(self.PV['cycle'].value)
+            ds = np.sin(self.PV['cycle'].value*np.pi*1e-2)*0.4
+            self.PV['x'].value += ds
             self.PV['y'].value = self.update_peaks().round(3)
             self.PV['yMin'].value = float(self.PV['y'].value.min())
             self.PV['yMax'].value = float(self.PV['y'].value.max())
