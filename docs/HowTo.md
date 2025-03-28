@@ -50,4 +50,15 @@ sudo usermod -a -G plugdev $USER
 ```
 To change camera setting use following program: ```qv4l2```.
 
-
+# LabJack U3
+```
+pip install LabJackPython# probably need sudo
+```
+Disconnect and reconnect the LabJack
+```
+python
+>>> import u3
+>>> d = u3.U3()
+>>> d.configU3()
+{'FirmwareVersion': '1.46', 'BootloaderVersion': '0.27', 'HardwareVersion': '1.30', 'SerialNumber': 320097467, 'ProductID': 3, 'LocalID': 1, 'TimerCounterMask': 64, 'FIOAnalog': 15, 'FIODirection': 0, 'FIOState': 0, 'EIOAnalog': 0, 'EIODirection': 0, 'EIOState': 0, 'CIODirection': 0, 'CIOState': 0, 'DAC1Enable': 1, 'DAC0': 0, 'DAC1': 0, 'TimerClockConfig': 2, 'TimerClockDivisor': 256, 'CompatibilityOptions': 0, 'VersionInfo': 18, 'DeviceName': 'U3-HV'}
+```
