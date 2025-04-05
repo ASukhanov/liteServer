@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """liteserver for Raspberry Pi.
 Supported:
-  - Two hardware PWMs 1Hz-300 MHz, GPIO 12,13.
-  - Temperature sensors DS18B20 (0.5'C resolution), GPIO 4.
+  - Two hardware PWMs 1Hz-300 MHz, (GPIO 12,13).
+  - Temperature sensors DS18B20 (0.5'C resolution), (GPIO 4).
+  - Temperature and Humidity sensors DHT11 and DHT22 (GPIO 23).
   - Digital IOs (GPIO 19,20).
   - Pulse Counter (GPIO 26).
-  - Spark detector (GPIO 26).
+  - Spark/fire detector (GPIO 26).
   - Buzzer (GPIO 13).
   - RGB LED indicator (GPIO 22,27,17).
   - I2C devices: ADS1x15, MMC5983MA, HMC5883, QMC5983.
   - I2C mutiplexers TCA9548, PCA9546.
-  - OmegaBus serial sensors
+  - OmegaBus serial sensors.
 """
-__version__ = '3.3.0 2024-07-23'# muxAddr is tested for None
+__version__ = '3.3.3 2025-04-05'# Support for DHT using adafruit_dht, the pigpio_dht is not reliable
 
 #TODO: take care of microsecond ticks in callback
 
@@ -43,7 +44,7 @@ GPIO = {
 EventGPIO = {'Counter0':0.} # event-generated GPIOs, store the time when it was last published
 #CallbackMinimalPublishPeiod = 0.01
 MaxPWMRange = 1000000 # for hardware PWM0 and PWM1
-Seldom_update_period = 60.# update period for slow-changing parameters like temperature and humidity
+Seldom_update_period = 10.# update period for slow-changing parameters like temperature and humidity
 
 #`````````````````````````````Helper methods```````````````````````````````````
 from . import helpers
@@ -190,22 +191,20 @@ class SensStation(Device):
             ldos['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
 
         if pargs.dht is not None:
-            from pigpio_dht import DHT11, DHT22
-            try:
-                dhtModel,dhtPin = pargs.dht.split('.')
-                pin = int(dhtPin)
-            except:
-                printw('Wrong option value for --dht')
-            try:
-                pargs.dht = DHT11(pin) if dhtModel == '11' else\
-                DHT22(pin)
-            except Exception as e:
-                printw(f'Could not initialize a DHT sensor: {e}')
+            import adafruit_dht
+            import board
+            if pargs.dht == '11':
+                pargs.dht = adafruit_dht.DHT11(board.D23)
+            elif pargs.dht == '22':
+                pargs.dht = adafruit_dht.DHT22(board.D23)
+            else:
+                printw('Wrong option value for --dht, should be DHT11/22')
+                pargs.dht = None
             if pargs.dht is not None:
                 ldos['Temperature'] = LDO('R',
-                'Temperature, provided by the DHT sensor', 0., units='C')
+                'Temperature, provided by the DHT sensor, connected to IO23', 0., units='C')
                 ldos['Humidity'] = LDO('R',
-                'Humidity, provided by the DHT sensor', 0.)
+                'Humidity, provided by the DHT sensor, connected to IO23', 0.)
 
         super().__init__(name,ldos)
 
@@ -297,6 +296,7 @@ class SensStation(Device):
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
                 break
+            #printv(f"cycle {self.PV['cycle'].value[0]}")
             # do a less frequent tasks in a thread
             dt = timestamp - last_seldom_update
             if dt > Seldom_update_period:
@@ -355,15 +355,11 @@ class SensStation(Device):
         #print(f'<seldomThread time: {round(timer()-ts,6)}')
         if pargs.dht is not None:
             try:
-                result = pargs.dht.read()
-                #print(f'dht: {result}')
-                if result['valid']:
-                    self.PV['Temperature'].set_valueAndTimestamp([result['temp_c']])
-                    self.PV['Humidity'].set_valueAndTimestamp([result['humidity']])
-                else:
-                    printw('DHT invalid')
+                self.PV['Temperature'].set_valueAndTimestamp(pargs.dht.temperature)
+                self.PV['Humidity'].set_valueAndTimestamp(pargs.dht.humidity)
+                printv(f'T: {pargs.dht.temperature}, H: {pargs.dht.humidity}')
             except Exception as e:
-                printw(f'in dht.read: {e}')
+                printw(f'in reading DHT: {e}')
 
     def set_status(self, msg):
         self.PV['status'].set_valueAndTimestamp(msg)
@@ -396,9 +392,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__
     ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
     ,epilog=f'senstation: {__version__}')
-    parser.add_argument('-H','--dht', nargs = '?', help=\
-    ('Type and pin of the connected DHT sensor (humidity and temperature sensor), '
-    ' for example: "-H11.23", if just "-H" then no DHT will be supported.'))
+    parser.add_argument('-H','--dht', choices=['11','22'], help=\
+    'Type of connected DHT sensor (humidity and temperature sensor)')
     parser.add_argument('-i','--interface', default = '', help=\
     'Network interface. Default is the interface, which connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
