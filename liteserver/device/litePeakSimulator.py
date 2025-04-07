@@ -62,7 +62,7 @@ class Dev(Device):
           ,pargs.nPoints, setter=self.set_peaks),
           'background': LDO('RWE','3 Coefficients for quadratic background'
           , pargs.background, setter=self.set_peaks),
-          'noise':      LDO('RWE','Nose level'
+          'noise':      LDO('RWE','Noise level'
           ,pargs.noise, setter=self.set_peaks),
           'peakPars':   LDO('RWE','Peak parameters'
           ,pargs.peaks, setter=self.set_peaks),
