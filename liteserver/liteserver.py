@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.1 2024-08-22'# setters are blocking, they could interfere with publishing
+__version__ = '3.3.4 2025-05-08'# added 'clear' parameter to every device
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -268,10 +268,13 @@ class Device():
         self.alreadyRunning = False
 
         requiredParameters = {
-          'run':    LDO('RWE','Start/Stop/Exit', ['Started'],legalValues\
-            = ['Start','Stop', 'Exit'] if self.name == 'server' else ['Start','Stop']\
-            , setter=self.set_run),
+          'run':    LDO('RWE','Start/Stop/Exit', ['Started'],legalValues=
+            ['Start','Stop', 'Exit']
+              if self.name == 'server' else ['Start','Stop'],
+            setter=self.set_run),
           'status': LDO('RWE','Device status', ['']),
+          'clear': LDO('WE','Clear cerain parameters', None,
+            setter=self.set_clear),
         }
         self.PV = requiredParameters
         # Add parameters
@@ -446,6 +449,10 @@ class Device():
         else:
             raise ValueError(f'LS:not accepted setting for "run": {state}') 
         self.PV['run'].value[0] = state
+
+    def set_clear(self):
+        """Override it"""
+        pass
 
     def poll(self):
         """Override this method if device need to react on periodic polling 

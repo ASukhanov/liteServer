@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.2.3 2024-09-02'# noise is gaussian, x is sinusoidal
+__version__ = '3.3.4 2024-09-02'# the clear PV handled
 
 import sys, time, threading
 timer = time.perf_counter
@@ -88,6 +88,15 @@ class Dev(Device):
 
     def stop(self):
         self.stopped = True
+
+    def set_clear(self, *_):
+        #print(f">lear {self.PV['cycle'].value}")        
+        t = time.time()
+        for n,v in {'cycle':0, 'status':''}.items():
+            self.PV[n].value = v
+            self.PV[n].timestamp = t
+        #print(f"<clear {self.PV['cycle'].value}")        
+        return
 
     def update_peaks(self):
         pars = self.PV['background'].value + self.PV['peakPars'].value

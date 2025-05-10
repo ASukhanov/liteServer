@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example of user-defined Lite Data Objects"""
-__version__ = '3.1.3 2024-08-21'# publishingSpeed was not showing 0.
+__version__ = '3.3.4 2025-05-09'# set_clear()
 
 import sys, time, threading
 timer = time.perf_counter
@@ -96,6 +96,12 @@ class Scaler(Device):
         msg = 'Setting text to '+str(self.PV['text'].value)
         print(msg)
         #raise ValueError(msg)
+
+    def set_clear(self, *_):
+        t = time.time()
+        for n,v in {'cycle':0, 'status':''}.items():
+            self.PV[n].value = v
+            self.PV[n].timestamp = t
 
     def get_time(self):
         self.PV['time'].value = time.time()
