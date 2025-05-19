@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.4 2025-05-08'# added 'clear' parameter to every device
+__version__ = '3.3.5 2025-05-15'# Improved ip_address()
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -37,7 +37,7 @@ import cbor2 as encoder # More standard than MsgPack
 encoderDump = encoder.dumps
 encoderLoad = encoder.loads
 
-import selectors
+import selectors# only for TCP
 Selector = selectors.DefaultSelector()
 LastPID = '?'
 UDP = True# If True then it will use UDP protocol, else - TCP.
@@ -81,9 +81,14 @@ def printv(msg):
 def printvv(msg):
     if Server.Dbg >= 2: print(croppedText('DBG2_LS: '+str(msg)))
 
+def ip_choices():
+    from subprocess import check_output
+    s = check_output(['hostname', '--all-ip-addresses'])
+    return s.decode().split()
+
 def ip_address(interface = ''):
-    """Platform-independent way to get local host IP address"""
     def ip_fromGoogle():
+        """Platform-independent way to get local host IP address"""
         try:
             ipaddr = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())\
               for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
@@ -91,19 +96,11 @@ def ip_address(interface = ''):
         except:
             ipaddr = 'localhost'
         return ipaddr
-    if len(interface) > 0:
-        #assume it is linux
-        try:
-            import subprocess
-            r = subprocess.run(f'ip address show dev {interface}'.split()\
-            , capture_output=True)
-            tokens = r.stdout.split()
-            ipaddr = tokens[tokens.index(b'inet')+1].decode().split('/')[0]
-        except Exception as e:
-            #printw(f'Could not get IP address using ip command: {e}')
-            ipaddr = ip_fromGoogle()
-    else: # get it from Google
-        ipaddr = ip_fromGoogle()
+    ipaddr = ip_fromGoogle() if interface=='' else interface
+    ipc = ip_choices()
+    if ipaddr not in ipc+['localhost']:
+        printe(f'Illegal interface {interface}, legal addresses are:{ipc}')
+        sys.exit(1)
     return ipaddr
 
 def accept_TCP(sock, mask):
@@ -273,7 +270,7 @@ class Device():
               if self.name == 'server' else ['Start','Stop'],
             setter=self.set_run),
           'status': LDO('RWE','Device status', ['']),
-          'clear': LDO('WE','Clear cerain parameters', None,
+          'clear': LDO('WE','Clear certain parameters', None,
             setter=self.set_clear),
         }
         self.PV = requiredParameters

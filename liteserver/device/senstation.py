@@ -64,7 +64,7 @@ def init_gpio():
     try:
         import pigpio
     except:
-        print('ERROR. This server should run on Raspberry Pi and have the pipgpio module installed.')
+        print('ERROR. This server should run on Raspberry Pi and have the pigpio module installed.')
         sys.exit(1)
     PiGPIO = pigpio.pi()
 
@@ -394,8 +394,9 @@ if __name__ == "__main__":
     ,epilog=f'senstation: {__version__}')
     parser.add_argument('-H','--dht', choices=['11','22'], help=\
     'Type of connected DHT sensor (humidity and temperature sensor)')
-    parser.add_argument('-i','--interface', default = '', help=\
-    'Network interface. Default is the interface, which connected to internet')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
     #parser.add_argument('-I','--I2C', help=\
     #('Comma separated list of I2C device_address, e.g. MMC5983MA_48,'

@@ -108,8 +108,9 @@ parser = argparse.ArgumentParser(description = __doc__
 ,formatter_class=argparse.ArgumentDefaultsHelpFormatter
 ,epilog=f'liteUSBCam: {__version__}, liteServer: {liteserver.__version__}')
 defaultIP = liteserver.ip_address('')
-parser.add_argument('-i','--interface', default = defaultIP, help=\
-'network interface')
+parser.add_argument('-i','--interface', default = '',
+    choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
 parser.add_argument('-v','--verbose', nargs='*',help=\
 'Print more logging info, (-vv even more)')
 

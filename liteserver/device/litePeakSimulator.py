@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """liteserver, simulating peaks"""
-__version__ = '3.3.4 2024-09-02'# the clear PV handled
+__version__ = '3.3.5 2025-05-18'#pargs.instance updated
 
 import sys, time, threading
 timer = time.perf_counter
@@ -189,8 +189,9 @@ if __name__ == "__main__":
     , help='Encode floats as doubles, use it when you need precision higher than 7 digits')
     parser.add_argument('-F','--frequency', type=float, default=10., help=\
         'Update frequency [Hz]')
-    parser.add_argument('-i','--interface', default = '', help=\
-    'Network interface. Default is the interface, which is connected to internet')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     parser.add_argument('-n','--nPoints', type=int, default=n)
     parser.add_argument('-N','--noise', type=float, default=10.)
     parser.add_argument('-P','--peaks', default=str_of_numbers(pp[3:]), help=

@@ -118,8 +118,9 @@ parser = argparse.ArgumentParser(description = __doc__
 ,epilog=f'liteUvcCam: {__version__}, liteserver: {liteserver.__version__}')
 parser.add_argument('-d','--dbg', action='store_true', help='debugging')
 defaultIP = liteserver.ip_address('')
-parser.add_argument('-i','--interface', default = defaultIP, help=\
-'network interface')
+parser.add_argument('-i','--interface', default = '',
+    choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
 parser.add_argument('camera', default = 'cam1', help=\
 'Selected camera, eg cam1/cam2/...')
 pargs = parser.parse_args()

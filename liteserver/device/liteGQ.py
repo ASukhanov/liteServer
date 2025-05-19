@@ -181,8 +181,9 @@ if __name__ == "__main__":
       'Device readout frequency, (Hz)')
     parser.add_argument('-p','--port',type=int, help='IP port', default=9701)
     defaultIP = liteserver.ip_address('')
-    parser.add_argument('-i','--interface', default = defaultIP, help=\
-    'Network interface.')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     parser.add_argument('-t','--timeout',type=float,default=0.2\
     ,help='serial port timeout')
     parser.add_argument('-v','--verbose', nargs='*', help=\

@@ -541,8 +541,9 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--debug',  action='store_true',
       help='Debug session using pdb')
     defaultIP = liteserver.ip_address('')
-    parser.add_argument('-i','--interface', default = defaultIP, help=\
-    'Network interface. Default is the interface, which connected to internet.')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     n = 1100# to fit LiteMCUFEC volume into one chunk
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving IP port.')

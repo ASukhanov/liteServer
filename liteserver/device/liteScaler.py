@@ -202,8 +202,9 @@ if __name__ == "__main__":
     parser.add_argument('-b','--bigImage', action='store_true', help=\
     'Generate big image >64kB.')
     defaultIP = liteserver.ip_address('')
-    parser.add_argument('-i','--interface', default = defaultIP, help=\
-    'Network interface. Default is the interface, which connected to internet.')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     n = 1100# to fit liteScaler volume into one chunk
     parser.add_argument('-n','--nCounters', type=int, default=n,
       help=f'Number of counters in each scaler, one transmission is 16K.')

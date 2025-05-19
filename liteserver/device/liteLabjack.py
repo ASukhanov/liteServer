@@ -171,8 +171,9 @@ class LLJ(Device):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('-i','--interface', default = '', help=\
-    'Network interface. Default is the interface, which connected to internet')
+    parser.add_argument('-i','--interface', default = '',
+        choices=liteserver.ip_choices() + ['','localhost'], help=\
+'Network address. Default is the addrees, which is connected to internet')
     n = 12000# to fit liteScaler volume into one chunk
     parser.add_argument('-p','--port', type=int, default=9700, help=\
     'Serving port, default: 9700') 
