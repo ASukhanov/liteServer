@@ -42,8 +42,8 @@ class CNS(Device):
     def _query_received(self):
         v = self.PV['query'].value[0]
         try:    reply = self.lookup[v]
-        except:
-            reply = f'ERROR: Device {v} is not registered'
+        except Exception as e:
+            reply = f'ERROR: Device {v} is not registered: {e}'
             self.PV['status'].set_valueAndTimestamp(reply)
         self.PV['query'].set_valueAndTimestamp(reply)
         #self.publish()# Calling publish inside a setter is dangerous
