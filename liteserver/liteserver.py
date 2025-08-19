@@ -18,7 +18,7 @@ Supported commands:
 - subscribe: server will reply when any of requsted readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.5 2025-05-15'# Improved ip_address()
+__version__ = '3.3.7 2025-08-18'# Do not show IP6 addresses in ip_choices().
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
 
 import sys, time, math, traceback
@@ -84,7 +84,10 @@ def printvv(msg):
 def ip_choices():
     from subprocess import check_output
     s = check_output(['hostname', '--all-ip-addresses'])
-    return s.decode().split()
+    s = s.decode().split()
+    # remove IP6 addresses
+    s = [i for i in s if not ':' in i]
+    return s
 
 def ip_address(interface = ''):
     def ip_fromGoogle():
