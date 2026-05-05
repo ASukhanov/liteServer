@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-"""liteserver for Raspberry Pi.
+"""liteserver for sensors at Raspberry Pi.
 Supported:
-  - Two hardware PWMs 1Hz-300 MHz, (GPIO 12,13).
-  - Temperature sensors DS18B20 (0.5'C resolution), (GPIO 4).
+  - 1-wire Temperature sensors DS18B20 (0.5'C resolution), (GPIO 4).
   - Temperature and Humidity sensors DHT11 and DHT22 (GPIO 23).
-  - Digital IOs (GPIO 19,20).
+  - Digital IOs (in: 19,20, out: 25,24).
   - Pulse Counter (GPIO 26).
   - Spark/fire detector (GPIO 26).
   - Buzzer (GPIO 13).
@@ -13,40 +11,50 @@ Supported:
   - I2C mutiplexers TCA9548, PCA9546.
   - OmegaBus serial sensors.
 """
-__version__ = '3.3.3 2025-04-05'# Support for DHT using adafruit_dht, the pigpio_dht is not reliable
+__version__ = '4.1.0 2026-05-04'# using lgpio instead of pigpio, which is more efficient and does not require a daemon.
+# pylint: disable=invalid-name
 
-#TODO: take care of microsecond ticks in callback
 
 print(f'senstation {__version__}')
 
-import sys, time, threading, glob, struct
+import sys, time, threading, glob
 timer = time.perf_counter
 from functools import partial
-import numpy as np
+#import numpy as np
 
 from .. import liteserver
-#````````````````````````````Globals``````````````````````````````````````````
+#`````````````````````````````Immutable Variables`````````````````````````````
+Lock = threading.Lock()# for synchronizing access to shared variables in callbacks and threads
 MgrInstance = None
 LDO = liteserver.LDO
 Device = liteserver.Device
 GPIO = {
-    'Temp0': 4,
-    'PWM0': 12,# 'PWM1':13,
-    'Buzz': 13,
-    'DI0':  19,
-    'DI1':  20,
-    'Counter0': 26,
-    'RGB':  [22,27,17],
-    'DO3':  25,
-    'DO4':  24,
-    'DHT':  23,
+    'Temp0': (4,'in'),# 1-wire temperature sensor
+    'eventOut': [12,'out'],# Generated when Event is detected
+    'buzz': (13,'out'),
+    'DI1':  (19,'in'),
+    'DI0':  (20,'in'),
+    'event': (26,'alert'),
+    'rgb0': (22,'out'),
+    'rgb1': (27,'out'),
+    'rgb2': (17,'out'),
+    'DO0':  (21,'out'),
+    'DO1':  (25,'out'),
+    'DO2':  (24,'out'),
+    'DHT':  (23,'in'),
+    'pulse': (16,'out'),# soft pulse generator
 }
-EventGPIO = {'Counter0':0.} # event-generated GPIOs, store the time when it was last published
+EventGPIO = {'event'} # event-generated GPIOs, store the time when it was last published
 #CallbackMinimalPublishPeiod = 0.01
-MaxPWMRange = 1000000 # for hardware PWM0 and PWM1
+#MaxPWMRange = 1000000 # for hardware PWM0 and PWM1
 Seldom_update_period = 10.# update period for slow-changing parameters like temperature and humidity
 
-#`````````````````````````````Helper methods```````````````````````````````````
+#``````````````````Mutable variables``````````````````````````````````````````
+class _C:
+    sbc = None
+    GPIOchip = None
+    omegaBus = None
+#`````````````````````````````Helper methods``````````````````````````````````
 from . import helpers
 def printi(msg):  helpers.printi(msg)
 def printe(msg):
@@ -60,24 +68,39 @@ def printvv(msg): helpers.printv(msg, pargs.verbose, level=1)
 
 #````````````````````````````Initialization
 def init_gpio():
-    global PiGPIO, pigpio, measure_temperature
+    global measure_temperature
     try:
-        import pigpio
+        import lgpio
+        _C.sbc = lgpio
     except:
-        print('ERROR. This server should run on Raspberry Pi and have the pigpio module installed.')
+        print('ERROR. This server should run on Raspberry Pi and have the lgpio module installed.')
         sys.exit(1)
-    PiGPIO = pigpio.pi()
+    _C.GPIOchip = _C.sbc.gpiochip_open(0) # open GPIO chip 0, which contains GPIOs 0-53
+
+    # claim GPIOs direction
+    for gpio,direction in GPIO.values():
+        if direction == 'out':
+            printi(f'claiming GPIO output for {gpio}')
+            _C.sbc.gpio_claim_output(_C.GPIOchip, gpio)
+        elif direction == 'in':
+            printi(f'claiming GPIO input for {gpio}')
+            _C.sbc.gpio_claim_input(_C.GPIOchip, gpio)
+        elif direction == 'alert':
+            printi(f'claiming GPIO alert for {gpio}')
+            _C.sbc.gpio_claim_alert(_C.GPIOchip, gpio, _C.sbc.RISING_EDGE)
+        else:
+            print(f'Unknown direction {direction} for GPIO {gpio}')
 
     # Configure 1Wire pin
-    try:    PiGPIO.set_mode( GPIO['Temp0'], pigpio.INPUT)
-    except:
-        printe('Did you start the pigpio daemon? E.g. sudo pigpiod')
-        sys.exit()
-    PiGPIO.set_pull_up_down( GPIO['Temp0'], pigpio.PUD_UP)
-    PiGPIO.set_glitch_filter( GPIO['Counter0'], 500)# require it stable for 500 us
+    #try:    _C.sbc.set_mode( GPIO['Temp0'][0], _C.sbc.INPUT)
+    #except:
+    #    printe('Did you start the pigpio daemon? E.g. sudo pigpiod')
+    #    sys.exit()
+    #_C.sbc.set_pull_up_down( GPIO['Temp0'][0], _C.sbc.PUD_UP)
+    #_C.sbc.set_glitch_filter( GPIO['event'][0] , 500)# require it stable for 500 us
 
     #````````````````````````Service for DS18B20 thermometer
-    # Check if DS18B20 is connected
+    # Check if OneWire (DS18B20) is connected
     OneWire_folder = None
     if pargs.oneWire:
         base_dir = '/sys/bus/w1/devices/'
@@ -121,22 +144,21 @@ def init_gpio():
             except Exception as e:
                 printe(f'Exception in measure_temperature: {e}')
             return temp_c
+
 #````````````````````````````Initialization of serial devices
-OmegaBus = None
 def init_serial():
-    global OmegaBus
+    """ Initialize serial devices, e.g. OmegaBus. """
     try:
         if 'OmegaBus' in pargs.serial:
-            OmegaBus = serial.Serial('/dev/ttyUSB0', 300)
-            #OmegaBus.bytesize = 8
-            OmegaBus.timeout = 1
-            OmegaBus.write(b'$1RD\r\n')
-            s = OmegaBus.read(100)
+            _C.omegaBus = serial.Serial('/dev/ttyUSB0', 300)
+            #_C.omegaBus.bytesize = 8
+            _C.omegaBus.timeout = 1
+            _C.omegaBus.write(b'$1RD\r\n')
+            s = _C.omegaBus.read(100)
             print(f'OmegaBus read: "{s}"')
     except Exception as e:
         printe(f'Could not open communication to OmegaBus: {e}')
         sys.exit(1)
-
 
 #````````````````````````````liteserver methods````````````````````````````````
 class SensStation(Device):
@@ -146,6 +168,9 @@ class SensStation(Device):
 
     def __init__(self,name):
         ldos = {}
+        self.pulseArgs = None
+        self.buzzEvent = threading.Event()
+        self.lastPublishedEvFreq = 0
 
         # Add I2C devices
         if pargs.muxAddr is not None:
@@ -155,39 +180,50 @@ class SensStation(Device):
             i2c.init(pargs.muxAddr, pargs.muxMask)
             ldos.update(self.I2C.LDOMap)
 
+        lvDO = ['0','1','10','01','1010101010']
         ldos.update({
           'boardTemp':  LDO('R','Temperature of the Raspberry Pi', 0., units='C'),
           'cycle':      LDO('R', 'Cycle number', 0),
           'cyclePeriod':LDO('RWE', 'Cycle period', pargs.update, units='s'),
-          'period':     LDO('R', 'Measured period', pargs.update, units='s'),
-          'PWM0_Freq':  LDO('RWE', f'Frequency of PWM at GPIO {GPIO["PWM0"]}',
-            10, units='Hz', setter=partial(self.set_PWM_frequency, 'PWM0'),
-            opLimits=[0,125000000]),
-          'PWM0_Duty':  LDO('WE', f'Duty Cycle of PWM at GPIO {GPIO["PWM0"]}',
-            .5, setter=partial(self.set_PWM_dutycycle, 'PWM0'),
-            opLimits=[0.,1.]),
-          'DI0':        LDO('R', f'Digital inputs of GPIOs {GPIO["DI0"]}',
+          'evFreqMean': LDO('R', f'Mean frequency of events, calculated averaged over {Seldom_update_period} s',
+                            0., units='Hz'),
+          #'evFreqStsd': LDO('R', f'Standard deviation of event frequency, calculated over {Seldom_update_period} s',
+          #                  0., units='Hz'),        
+          #'PWM0_Freq':  LDO('RWE', f'Frequency of PWM at GPIO {GPIO['PWM0'][0]}',
+          #  10, units='Hz', setter=partial(self.set_PWM_frequency, 'PWM0'),
+          #  opLimits=[0,125000000]),
+          #'PWM0_Duty':  LDO('WE', f'Duty Cycle of PWM at GPIO {GPIO['PWM0'][0]}',
+          #  .5, setter=partial(self.set_PWM_dutycycle, 'PWM0'),
+          #  opLimits=[0.,1.]),
+          'DI0':        LDO('R', f"Digital input GPIO {GPIO['DI0'][0]}",
             0),# getter=partial(self.getter,'DI0')),
-          'DI1':        LDO('R', f'Digital inputs of GPIOs {GPIO["DI1"]}',
+          'DI1':        LDO('R', f"Digital input GPIO {GPIO['DI1'][0]}",
             0),# getter=partial(self.getter,'DI0')),
-          'Counter0':   LDO('R', f'Digital counter of GPIO {GPIO["Counter0"]}',
-            0),#, getter=partial(self.get_Cnt, 'Cnt0')),
-          'RGB':        LDO('RWE', f'3-bit digital output',
+          'event':      LDO('R', f"Event counter of pulses on GPIO {GPIO['event'][0]}",
+            0),
+          'eventOut':   LDO('WE', f"GPIO to generate a pulse when event changes, currently {GPIO['eventOut'][0]}", 0,),
+          'rgb':        LDO('RWE', f'3-bit digital output',
             0, opLimits=[0,7], setter=self.set_RGB),
-          'RGBControl':    LDO('RWE', 'Mode of RGB',
-            ['RGBCycle'], legalValues=['RGBStatic','RGBCycle']),
-          'DO3':        LDO('RWE', f'Digital outputs of GPIOs {GPIO["DO3"]}',
-            '0', legalValues=['0','1'], setter=partial(self.set_DO, 'DO3')),
-          'DO4':    LDO('RWE', f'Digital outputs of GPIOs {GPIO["DO4"]}',
-            '0', legalValues=['0','1'], setter=partial(self.set_DO, 'DO4')),
-          'Buzz':       LDO('RWE', f'Buzzer at GPIO {GPIO["Buzz"]}, activates when the Counter0 changes',
-            '0', legalValues=['0','1'], setter=self.set_Buzz),
-          'BuzzDuration': LDO('RWE', f'Buzz duration', 5., units='s'),
+          'rgbControl':    LDO('RWE', 'Mode of RGB',
+            ['rgbCycle'], legalValues=['rgbStatic','rgbCycle']),
+          'DO0':        LDO('RWE', f"Digital output GPIO {GPIO['DO0'][0]}, pattern of bits for multiple bits, e.g. 101 for 3 bits",
+            '0', legalValues=lvDO, setter=partial(self.set_DO, 'DO0')),
+          'DO1':    LDO('RWE', f"Digital output GPIO {GPIO['DO1'][0]}, pattern of bits for multiple bits, e.g. 101 for 3 bits",
+            '0', legalValues=lvDO, setter=partial(self.set_DO, 'DO1')),
+          'buzz':       LDO('RWE', f"Buzzer GPIO {GPIO['buzz'][0]}, activates when the event changes",
+            'buzz_Off', legalValues=['buzz_On','buzz_Off'], setter=self.set_buzz),
+          'buzzDuration': LDO('RWE', 'Buzz duration', 5., units='s'),
+          'pulsePattern': LDO('RWE', f"Pattern of pulses at GPIO {GPIO['pulse'][0]}, e.g. [0.5, 0.4, 0.1] for 0.1s delay, 0.5s high, 0.4s low",
+            [0.5, 0.4, 0.1], setter=partial(self.set_PulsePattern)),
+          'nPulses': LDO('RWE', f"Number of pulses at GPIO {GPIO['pulse'][0]}", 1, setter=partial(self.set_PulsePattern)),
+          'pulseTrigger': LDO('RWE', f"Trigger for pulse pattern at GPIO {GPIO['pulse'][0]}",
+                              'OneShot', legalValues=['OneShot','Cyclic'], setter=partial(self.set_PulseTrigger)),
         })
+
         if pargs.oneWire:
             ldos['Temp0'] = LDO('R','Temperature of the DS18B20 sensor', 0.,
                 units='C')
-        if 'OmegaBus' in pargs.serial:
+        if _C.omegaBus is not None:
             ldos['OmegaBus'] = LDO('R','OmegaBus reading', 0., units='V')
 
         if pargs.dht is not None:
@@ -210,8 +246,12 @@ class SensStation(Device):
 
         # connect callback function to a GPIO pulse edge
         for eventParName in EventGPIO:
-            PiGPIO.callback(GPIO[eventParName], pigpio.RISING_EDGE, callback)
+            printi(f'setting callback for {eventParName} at GPIO {GPIO[eventParName][0]}')
+            r = _C.sbc.callback(_C.GPIOchip, GPIO[eventParName][0], _C.sbc.RISING_EDGE, callback)
         self.start()
+
+    #def self.pvv(parName):
+    #    return self.PV[parName].value[0]
 
     #``````````````Overridables```````````````````````````````````````````````
     def start(self):
@@ -220,22 +260,33 @@ class SensStation(Device):
         for par,ldo in self.PV.items():
             setter = ldo._setter
             if setter is not None:
-                if str(par) == 'run':  continue
+                if str(par) == 'run':
+                    continue
                 setter()
         thread = threading.Thread(target=self._threadRun, daemon=False)
         thread.start()
 
     def stop(self):
         printi(f"Senstation stopped {self.PV['cycle'].value[0]}")
-        prev = self.PV['PWM0_Duty'].value[0]
-        self.PV['PWM0_Duty'].value[0] = 0.
-        self.PV['PWM0_Duty']._setter()
-        self.PV['PWM0_Duty'].value[0] = prev
-        self.PV['RGB'].value[0] = 0
-        self.PV['RGB']._setter()
+        # prev = self.PV['PWM0_Duty'].value[0]
+        # self.PV['PWM0_Duty'].value[0] = 0.
+        # self.PV['PWM0_Duty']._setter()
+        # self.PV['PWM0_Duty'].value[0] = prev
+        self.PV['rgb'].value[0] = 0
+        self.PV['rgb']._setter()# turn off RGB
+
+    def set_clear(self):
+        for parName,value in (('status',''), ('cycle',0), ('event',0)):
+            self.PV[parName].value[0] = value
+            self.PV[parName].timestamp = time.time()
+        print('Clearing parameters')
+        #self.publish()# Could deadlock
+        #print('Parameters cleared')
+        
     #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     def publish1(self, parName, value=None):
-        # publish a parameter timestamped with current time
+        """Publish a single parameter with an optional new value. If value is None, then the current value will be published.
+        """
         if value is not None:
             try:
                 self.PV[parName].value[0] = value
@@ -245,47 +296,80 @@ class SensStation(Device):
         self.publish()
 
     def gpiov(self, parName):
+        """ Get GPIO number and value for a parameter name like 'DO0' or 'PWM0_Freq' """
         v = self.PV[parName].value[0]
         key = parName.split('_')[0]
-        gpio = GPIO[key]
+        gpio = GPIO[key][0]
         printv(f'gpiov {gpio,v}')
         return gpio,v
 
-    def set_PWM_frequency(self, pwm):
-        parName = pwm + '_Freq'
-        gpio, v = self.gpiov(parName)
-        #r = PiGPIO.hardware_PWM(gpio, int(v))
-        dutyCycle = int(MaxPWMRange*self.PV[pwm+'_Duty'].value[0])
-        r = PiGPIO.hardware_PWM(gpio, int(v), dutyCycle)
-        r = PiGPIO.get_PWM_frequency(gpio)
-        self.publish1(parName, r)
+    #``````````````Setters````````````````````````````````````````````````````
+    # def set_PWM_frequency(self, pwm):
+    #     parName = pwm + '_Freq'
+    #     gpio, v = self.gpiov(parName)
+    #     #r = _C.sbc.hardware_PWM(gpio, int(v))
+    #     dutyCycle = int(MaxPWMRange*self.PV[pwm+'_Duty'].value[0])
+    #     r = _C.sbc.hardware_PWM(gpio, int(v), dutyCycle)
+    #     r = _C.sbc.get_PWM_frequency(gpio)
+    #     self.publish1(parName, r)
 
-    def set_PWM_dutycycle(self, pwm):
-        parName = pwm + '_Duty'
-        gpio, v = self.gpiov(parName)
-        f = int(self.PV[pwm + '_Freq'].value[0])
-        printv(f'set_PWM_dutycycle: {f, int(v*MaxPWMRange)}')
-        r = PiGPIO.hardware_PWM(gpio, f, int(v*MaxPWMRange))
-        r = PiGPIO.get_PWM_dutycycle(gpio)
-        self.publish1(parName, r/MaxPWMRange)
+    # def set_PWM_dutycycle(self, pwm):
+    #     parName = pwm + '_Duty'
+    #     gpio, v = self.gpiov(parName)
+    #     f = int(self.PV[pwm + '_Freq'].value[0])
+    #     printv(f'set_PWM_dutycycle: {f, int(v*MaxPWMRange)}')
+    #     r = _C.sbc.hardware_PWM(gpio, f, int(v*MaxPWMRange))
+    #     r = _C.sbc.get_PWM_dutycycle(gpio)
+    #     self.publish1(parName, r/MaxPWMRange)
 
     def set_DO(self, parName):
+        """ Set digital output GPIOs according to the parameter value, e.g. '101' for 3 bits. """
         gpio,v = self.gpiov(parName)
-        PiGPIO.write(gpio, int(v))
+        for bit in v:
+            #printv(f'set_DO {gpio,bit}')
+            _C.sbc.gpio_write(_C.GPIOchip,gpio, int(bit))
 
-    def set_Buzz(self):
-        printv('>set_Buss')
-        if self.PV['Buzz'].value == '0':
-            PiGPIO.write(GPIO['Buzz'], 0)
-        else:
-            thread = threading.Thread(target=buzzThread, daemon=False)
+    def set_buzz(self):
+        """ Set the buzzer GPIO according to the parameter value. """
+        printv(f'set_buzz: {self.PV["buzz"].value}')
+        if self.PV['buzz'].value[0] == 'buzz_On':
+            printv(f">set_buss for Buzz: {self.PV['buzzDuration'].value[0]} s")
+            thread = threading.Thread(target=self.buzzThread, daemon=False)
+            self.buzzEvent.clear()
             thread.start()
+        else:
+            self.buzzEvent.set()# in case it is still buzzing, stop it
+    def buzzThread(self):
+        """ Thread for buzzing, so that it does not block the main thread. """
+        duration = self.PV['buzzDuration'].value[0]
+        _C.sbc.gpio_write(_C.GPIOchip, GPIO['buzz'][0], 1)
+        self.buzzEvent.wait(duration)
+        self.publish1('buzz', 'buzz_Off')
+        _C.sbc.gpio_write(_C.GPIOchip, GPIO['buzz'][0], 0)
 
     def set_RGB(self):
-        v = int(self.PV['RGB'].value[0])
+        """ Set RGB GPIOs according to the parameter value, e.g. 5 (0b101) for RGB0 and RGB2 on, RGB1 off. """
+        v = int(self.PV['rgb'].value[0])
         for i in range(3):
-            PiGPIO.write(GPIO['RGB'][i], v&1)
+            _C.sbc.gpio_write(_C.GPIOchip,GPIO[f'rgb{i}'][0], v&1)
             v = v >> 1
+
+    def _trigger_PulsePattern(self):
+        printv(f'>trigger_PulsePattern: {self.pulseArgs}')
+        r = _C.sbc.tx_pulse(*self.pulseArgs)
+        if r < 0:
+            raise ResourceWarning('PWM queue full)')
+    def set_PulseTrigger(self):
+        self._trigger_PulsePattern()
+
+    def set_PulsePattern(self):
+        pattern = [int(i*1.e6) for i in self.PV['pulsePattern'].value]
+        #printi(f'set_PulsePattern: {pattern}')
+        if pattern[0] < 20 or pattern[1] < 20:
+            raise ValueError('pulse pattern intervals should be at least 20 us')
+        self.pulseArgs = [_C.GPIOchip, GPIO['pulse'][0]] + pattern + [self.PV['nPulses'].value[0]]
+        self._trigger_PulsePattern()
+    #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 
     def _threadRun(self):
         printi('threadRun started')
@@ -296,24 +380,25 @@ class SensStation(Device):
         while not Device.EventExit.is_set():
             if self.PV['run'].value[0][:4] == 'Stop':
                 break
-            #printv(f"cycle {self.PV['cycle'].value[0]}")
-            # do a less frequent tasks in a thread
-            dt = timestamp - last_seldom_update
-            if dt > Seldom_update_period:
+
+            # check if it is time for seldom update, e.g. temperature and humidity, which do not need to be updated every cycle
+            if  timestamp - last_seldom_update > Seldom_update_period:
                 last_seldom_update = timestamp
                 thread = threading.Thread(target=self.seldomThread)
                 thread.start()
 
             # wait for next time interval
             curtime = time.time()
-            period = round(curtime - prevcurtime,6)
-            prevcurtime = curtime
             dt = curtime - timestamp
             waitTime = self.PV['cyclePeriod'].value[0] - dt
             Device.EventExit.wait(waitTime)
             timestamp = time.time()
 
-            # collect data
+            # trigger pulse pattern if it is cyclic
+            if self.PV['pulseTrigger'].value[0] == 'Cyclic':
+                self._trigger_PulsePattern()
+
+            # read GPIOs and I2C devices, update cycle counter and publish all fresh parameters
             if pargs.muxAddr is not None:
                 for i2cDev in self.I2C.DeviceMap.values():
                     if True:#try:
@@ -323,18 +408,28 @@ class SensStation(Device):
                         continue
             self.PV['cycle'].value[0] += 1
             self.PV['cycle'].timestamp = timestamp
-            self.PV['period'].set_valueAndTimestamp([period])
-            if self.PV['RGBControl'].value[0] == 'RGBCycle':
-                self.PV['RGB'].set_valueAndTimestamp(\
+            if self.PV['rgbControl'].value[0] == 'rgbCycle':
+                self.PV['rgb'].set_valueAndTimestamp(\
                     [self.PV['cycle'].value[0] & 0x7], timestamp)
                 self.set_RGB()
-            self.publish()# publish all fresh parameters
+
+            # publish all fresh parameters
+            self.publish()
 
         printi('threadRun stopped')
         self.stop()
 
     def seldomThread(self):
-        #print(f'>seldomThread: {timestamp}')
+        """ Thread for less frequent updates, e.g. temperature and humidity. """
+        timestamp = time.time()
+
+        # calculate mean frequency of events
+        #print(f'>seldomThread: event count {self.PV["event"].value[0]}, lastPublishedEvFreq {self.lastPublishedEvFreq}')
+        self.PV['evFreqMean'].value[0] = (self.PV['event'].value[0] - self.lastPublishedEvFreq) / Seldom_update_period
+        self.PV['evFreqMean'].timestamp = timestamp
+        self.lastPublishedEvFreq = self.PV['event'].value[0]
+
+        # read CPU temperature, DHT sensor, OmegaBus, etc. and publish them
         try:
             with open(r"/sys/class/thermal/thermal_zone0/temp") as f:
                 r = f.readline()
@@ -346,13 +441,17 @@ class SensStation(Device):
         #print(f'Temp0 time: {round(timer()-ts,6)}')
         if temp is not None:
             self.PV['Temp0'].set_valueAndTimestamp([temp])
-        if 'OmegaBus' in pargs.serial:
-            OmegaBus.write(b'$1RD\r\n')
-            r = OmegaBus.read(100)
+
+        # read OmegaBus if it is present
+        if _C.omegaBus is not None:
+            _C.omegaBus.write(b'$1RD\r\n')
+            r = _C.omegaBus.read(100)
             #print(f'OmegaBus read: {r}')
             if len(r) != 0:
                 self.PV['OmegaBus'].set_valueAndTimestamp([float(r.decode()[2:])/1000.])
         #print(f'<seldomThread time: {round(timer()-ts,6)}')
+
+        # read DHT sensor if it is present
         if pargs.dht is not None:
             try:
                 self.PV['Temperature'].set_valueAndTimestamp(pargs.dht.temperature)
@@ -362,28 +461,28 @@ class SensStation(Device):
                 printw(f'in reading DHT: {e}')
 
     def set_status(self, msg):
+        """ Set status message. """
         self.PV['status'].set_valueAndTimestamp(msg)
 
-def callback(gpio, level, tick):
-    #print(f'callback: {gpio, level, tick}')
-    timestamp = time.time()
-    for gName in ['Counter0']:
-        if gpio == GPIO[gName]:
-            # increment Counter0
-            MgrInstance.PV[gName].value[0] += 1
-            MgrInstance.PV[gName].timestamp = timestamp
-            # start buzzer
-            MgrInstance.PV['Buzz'].set_valueAndTimestamp(['1'], timestamp)
-            MgrInstance.set_Buzz()
-    MgrInstance.publish()
+def write_eventOut(value):
+    gpio = GPIO['eventOut'][0]
+    if gpio >= 0:
+        _C.sbc.gpio_write(_C.GPIOchip, gpio, value)
 
-def buzzThread():
-    # buzzing for a duration
-    duration = MgrInstance.PV['BuzzDuration'].value[0]
-    PiGPIO.write(GPIO['Buzz'], 1)
-    time.sleep(duration)
-    MgrInstance.publish1('Buzz', '0')
-    PiGPIO.write(GPIO['Buzz'], 0)
+def callback(handle, gpio, level, tick):
+    """ Callback function for GPIO events, e.g. pulse counter. """
+    if True:#with Lock:
+        write_eventOut(1)# generate a short pulse at eventOut GPIO to indicate that event was detected
+        #print(f'callback: {gpio, level, tick}')
+        timestamp = time.time()
+        for gName in ['event']:
+            if gpio == GPIO[gName][0]:
+                # increment event counter and publish it
+                MgrInstance.PV[gName].value[0] += 1
+                MgrInstance.PV[gName].timestamp = timestamp
+        MgrInstance.publish()
+        write_eventOut(0)# generate a short pulse at eventOut GPIO to indicate that event was detected
+
 #,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 #``````````````````Main````````````````````````````````````````````````````````
 if __name__ == "__main__":
@@ -418,7 +517,7 @@ if __name__ == "__main__":
       'Show more log messages (-vv: show even more).')
     pargs = parser.parse_args()
     pargs.muxMask = int(pargs.muxMask,2)
-    liteserver.Server.Dbg = pargs.verbose
+    liteserver.Server.Dbg = pargs.verbose-1
     init_gpio()
 
     if pargs.serial != '':
