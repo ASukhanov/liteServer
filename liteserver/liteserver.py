@@ -15,11 +15,12 @@ Supported commands:
 - read:     reply only with values of readable LDOs, with changed timestamp, 
 - set:      set values of LDOs
 - ACK:      internal, response from a client on server reply
-- subscribe: server will reply when any of requsted readable parameters have changed
+- subscribe: server will reply when any of requested readable parameters have changed
 - unsubscribe: cancel all subscriptions.
 """
-__version__ = '3.3.7 2025-08-18'# Do not show IP6 addresses in ip_choices().
+__version__ = '3.3.8 2026-04-19'# Do not exit if exception in ip_choices. It will be thrown in Windows.
 #TODO: WARN.LS and ERROR.LS messages should be published in server:status
+#TODO: Windows throws  [WinError 10054] An existing connection in line 981, dead client is not detected
 
 import sys, time, math, traceback
 timer = time.perf_counter
@@ -100,10 +101,13 @@ def ip_address(interface = ''):
             ipaddr = 'localhost'
         return ipaddr
     ipaddr = ip_fromGoogle() if interface=='' else interface
-    ipc = ip_choices()
-    if ipaddr not in ipc+['localhost']:
-        printe(f'Illegal interface {interface}, legal addresses are:{ipc}')
-        sys.exit(1)
+    try:
+        ipc = ip_choices()
+        if ipaddr not in ipc+['localhost']:
+            printe(f'Illegal interface {interface}, legal addresses are:{ipc}')
+            sys.exit(1)
+    except:
+        pass
     return ipaddr
 
 def accept_TCP(sock, mask):
