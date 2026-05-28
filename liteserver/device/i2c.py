@@ -2,7 +2,7 @@
 For installation: https://www.instructables.com/Raspberry-Pi-I2C-Python/
 I2C speed: https://www.raspberrypi-spy.co.uk/2018/02/change-raspberry-pi-i2c-bus-speed/
 """
-__version__ = 'v3.2.6 2024-05-09'# MMC5983 more efficient sampling, PSD added, continuous mode
+__version__ = 'v3.2.7 2026-04-26'# device name includes I2C address
 print(f'i2c: {__version__}')
 #TODO: display errors and warnings in device status
 #TODO: the DevClassMap should be incorporated into I2C class
@@ -101,7 +101,7 @@ class I2CDev():
     def __init__(self, addr:tuple, sensorType:str, model):
         # addr is (mux channel, address on mux channel) 
         #self.name = self.__class__.__name__+'_'+'.'.join([str(i) for i in addr])
-        self.name = f'I2C{addr[0]}'
+        self.name = f'I2C{addr[0]}.{addr[1]}'
         self.addr = addr
         self.model = model
         self.lastSeldomUpdate = 0.
