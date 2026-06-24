@@ -2,7 +2,7 @@
 """liteserver for Labjack U3, supports 5 ADCs, 2 DACs, 2 Counter/Timers, 
 1 Digital IOs"""
 # pylint: disable=invalid-name
-__version__ = '3.4.0 2026-06-24'# PWM added with 1MHz clock
+__version__ = '3.3.7 2026-06-24'# Major upgrade. More ADCs, Pulse, PWM and more
 
 import sys, time, threading
 from timeit import default_timer as timer
